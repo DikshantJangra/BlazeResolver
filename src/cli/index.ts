@@ -7,11 +7,13 @@ import { runFixCommand, type ProjectConfig } from './fix.js';
 import { runInit } from './init.js';
 import { runNotifyCommand } from './notify.js';
 import { runRemove } from './remove.js';
+import { describeProviders } from '../triage/providers.js';
 
 const HELP = `blazeresolver: turn customer bug reports into reviewed GitHub pull requests
 
-  npx blazeresolver init      set up this repo (finds your frontend and backend, adds the workflow, endpoint and widget)
+  npx blazeresolver init      set up this repo (finds your frontend and backend, adds the workflow, endpoint, widget and .env)
   npx blazeresolver remove    undo init: delete what it created, clean the lines it added, uninstall the package
+  npx blazeresolver providers show which AI providers your keys were recognized as, in failover order
   blazeresolver fix           run by the workflow: fix the issue that triggered it
   blazeresolver notify        run by the workflow: tell customers a merged fix shipped
 
@@ -59,6 +61,10 @@ try {
       noUninstall: values['no-uninstall'],
       confirm: interactive ? async (q) => /^y/i.test(await prompt(`${q} (y/N)`, 'n')) : undefined
     });
+  } else if (command === 'providers') {
+    (await import('dotenv')).config({ quiet: true });
+    const lines = describeProviders();
+    console.log(lines.length ? lines.map((l, i) => `${i + 1}. ${l}`).join('\n') : 'No AI keys found. Put any provider key in .env as API_KEYS=...');
   } else if (command === 'fix') {
     console.log(await runFixCommand({ env: process.env, config: config() }));
   } else if (command === 'notify') {

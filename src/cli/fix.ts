@@ -4,7 +4,7 @@ import { parseIssueBody } from '../handler/issue.js';
 import { runFix } from '../jobs/fix.js';
 import type { AIProvider } from '../resolver/ai-provider.js';
 import { ClaudeProvider } from '../resolver/claude-provider.js';
-import { anthropicComplete } from '../triage/index.js';
+import { resolveComplete } from '../triage/index.js';
 
 export interface ProjectConfig {
   repo: string;
@@ -51,8 +51,10 @@ export async function runFixCommand(opts: FixCommandOptions): Promise<string> {
   const ai =
     opts.ai ??
     (() => {
-      const complete = anthropicComplete({ apiKey: env.ANTHROPIC_API_KEY, maxTokens: 4096 });
-      if (!complete) throw new Error('ANTHROPIC_API_KEY secret is not set');
+      const complete = resolveComplete({ env, maxTokens: 4096 });
+      if (!complete) {
+        throw new Error('No AI key is set. Add any provider\'s key as the API_KEYS repo secret (several, comma-separated, for failover); the provider is recognized automatically.');
+      }
       return new ClaudeProvider(complete);
     })();
 

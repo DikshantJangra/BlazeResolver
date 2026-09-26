@@ -153,11 +153,29 @@ npx blazeresolver remove    # take it all back out
 | The report endpoint | Next.js (App or Pages Router): an API route in that app. Express: a small `blazeresolver.js/.ts` next to the file that creates your app, plus one `app.all('/api/blaze', ...)` line there, in your module system (ESM, CommonJS or TypeScript). Any other framework: a printed snippet, and no guesses. |
 | The widget | One `<script>` in your `index.html` or Next.js `layout`. It points at your backend, or at `/api/blaze` when both share an origin or your dev server proxies `/api`. |
 | `blazeresolver.config.json` | Repo, default branch, and the test and build commands for each package that has tests. Also records exactly what `init` changed. |
+| `.env` | Created if missing, or appended to (never overwritten) in the folder that hosts the endpoint: `API_KEYS` and `BLAZE_GITHUB_TOKEN`. `remove` deletes it only if you never filled it in. |
 | The `blazeresolver` package | Installed in the package that hosts the endpoint (npm, pnpm, yarn and npm workspaces). |
 
-`remove` undoes exactly that: it deletes the files `init` created (a file you have since rewritten is kept), takes its marked lines back out of the files it edited, uninstalls the package, and removes the config. Your other code is never touched.
+`remove` undoes exactly that: it deletes the files `init` created (a file you have since rewritten is kept), takes its marked lines back out of the files it edited, uninstalls the package, and removes the config. Values you typed into `.env` are never deleted. Your other code is never touched.
 
-Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo) and `ANTHROPIC_API_KEY`, run `gh secret set ANTHROPIC_API_KEY`, allow Actions to create pull requests, protect your default branch. A human always reviews and merges the PR.
+Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo), paste any AI key into `.env` as `API_KEYS`, run `gh secret set API_KEYS`, allow Actions to create pull requests, protect your default branch. A human always reviews and merges the PR.
+
+### AI providers
+
+Paste keys; most need no naming. Each key's provider is recognized from the key itself, so one line works across providers, several at once:
+
+```bash
+API_KEYS=sk-ant-...,gsk_...,nvapi-...     # Anthropic, Groq and NVIDIA NIM, in one line
+```
+
+- **Recognized by format**: Anthropic (`sk-ant-`), OpenAI (`sk-proj-`, ...), Gemini (`AIza`), Groq (`gsk_`), NVIDIA NIM (`nvapi-`), DeepSeek, xAI (`xai-`), Cerebras (`csk-`), Fireworks (`fw_`), Perplexity (`pplx-`), OpenRouter (`sk-or-`), Hugging Face (`hf_`), Zhipu / GLM, and GitHub Models (a GitHub token).
+- **Keys whose format says nothing** (Mistral, Together AI, DeepInfra, SambaNova, Hyperbolic, Novita, Moonshot / Kimi, Cohere) go in their named variable, e.g. `MISTRAL_API_KEY=...`; in `API_KEYS` they're skipped with a warning. Opt in with `BLAZE_KEY_PROBE=on` to have them identified on first use instead: the likely providers are asked once whether the key is theirs (a model-list request, no tokens spent) and the answer is cached. It's off by default because it shows the key to providers it may not belong to.
+- **Picked up from their settings**: Azure OpenAI once `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT` are set (its key goes in `API_KEYS`), and a local Ollama once `OLLAMA_BASE_URL` or `OLLAMA_MODEL` is set.
+- **Named variables work too**: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`, `HF_TOKEN`, ..., and the few that can't be detected at all (`AI21_API_KEY`, `BASETEN_API_KEY`). Each also takes `{NAME}_API_KEYS=a,b` or `{NAME}_API_KEY_1`, `_2`, ...
+
+With several keys, the first provider in priority order answers and the others take over automatically when it fails (outage, rate limit, bad key); a provider that just failed sits out for a minute. Several keys for one provider rotate round-robin. `BLAZE_MODEL` goes only to providers that serve that model (a Claude model name never reaches Groq), and the provider that owns it goes first. `BLAZE_PROVIDER` pins a single provider.
+
+See what was recognized, in failover order, keys masked: `npx blazeresolver providers`. The server prints the same at startup. Without any key, triage falls back to keyword rules and the fix engine stays off.
 
 Updates are automatic: the widget loads from a CDN and the workflow runs `blazeresolver@latest`.
 

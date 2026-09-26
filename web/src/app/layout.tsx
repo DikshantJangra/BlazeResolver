@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Script from 'next/script'; // blazeresolver:managed
 
 export const metadata: Metadata = {
   title:
@@ -33,6 +34,7 @@ export default function RootLayout({
       </head>
       <body className="bg-[#0a0b0e] text-[#e6e8ea] antialiased selection:bg-[#FF6B00] selection:text-white">
         {children}
+        <Script src="/widget.js" data-endpoint="/api/blaze" strategy="afterInteractive" /> {/* blazeresolver:managed */}
       </body>
     </html>
   );

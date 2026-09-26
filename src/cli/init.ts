@@ -17,6 +17,8 @@ export interface Manifest {
   /** Existing files where init inserted marked lines. */
   edits: string[];
   dependency?: { dir: string; pm: PackageManager; workspace?: string };
+  /** The exact text init put in a .env file, so remove can take back precisely that and never a value you typed. */
+  env?: { file: string; created: boolean; added: string };
 }
 
 export const CONFIG_FILE = 'blazeresolver.config.json';
@@ -49,6 +51,43 @@ export interface InitResult {
   manual: string[];
 }
 
+interface EnvVar { key: string; comment?: string }
+interface EnvSection { header: string; vars: EnvVar[] }
+
+const ENV_SECTIONS: EnvSection[] = [
+  {
+    header:
+      '# --- BlazeResolver: AI (triage & the fix engine) ------------------------------\n' +
+      '# Paste any AI provider key; the provider is recognized from the key itself.\n' +
+      '# Several keys, even from different providers, give automatic failover and rotation:\n' +
+      '#   API_KEYS=sk-ant-...,gsk_...,nvapi-...\n' +
+      '# Recognized: Anthropic, OpenAI, Gemini, Groq, NVIDIA NIM, DeepSeek, xAI, Cerebras, Fireworks,\n' +
+      '# Perplexity, OpenRouter, Hugging Face, Zhipu, GitHub Models. Keys that look like nothing in particular\n' +
+      '# (Mistral, Together, Cohere, ...) go in a named variable instead, e.g. MISTRAL_API_KEY=...\n' +
+      '# Check what was recognized: npx blazeresolver providers\n' +
+      '# Optional: BLAZE_MODEL=<model>, BLAZE_PROVIDER=<name> to pin one, OLLAMA_BASE_URL for a local\n' +
+      '# Ollama, AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_DEPLOYMENT for Azure OpenAI.',
+    vars: [{ key: 'API_KEYS' }]
+  },
+  {
+    header: '# --- BlazeResolver: GitHub -----------------------------------------------------',
+    vars: [{ key: 'BLAZE_GITHUB_TOKEN', comment: '# Fine-grained token: Issues read and write on this repo only.' }]
+  }
+];
+
+/**
+ * What to add to a .env so it has BlazeResolver's variables: only the ones it is missing, never touching a line that is
+ * already there. Returns undefined when nothing is missing.
+ */
+export function envAddition(existing: string | undefined): string | undefined {
+  const existingKeys = new Set((existing ?? '').split('\n').map((l) => l.match(/^([A-Z0-9_]+)=/)?.[1]).filter((k): k is string => !!k));
+  const blocks = ENV_SECTIONS.map(({ header, vars }) => {
+    const missing = vars.filter((v) => !existingKeys.has(v.key));
+    return missing.length ? [header, ...missing.map((v) => (v.comment ? `${v.comment}\n${v.key}=` : `${v.key}=`))].join('\n') : undefined;
+  }).filter((b): b is string => !!b);
+  return blocks.length ? blocks.join('\n\n') + '\n' : undefined;
+}
+
 export async function runInit(opts: InitOptions): Promise<InitResult> {
   const log = opts.log ?? console.log;
   const root = repoRoot(opts.cwd);
@@ -77,7 +116,7 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     if (be === 'none' && layout.handler !== 'next') layout = { ...layout, backend: undefined, handler: 'none', handlerPkg: undefined };
   }
 
-  const manifest: Manifest = { files: [], edits: [] };
+  const manifest: Manifest = existing?.installed ? structuredClone(existing.installed) : { files: [], edits: [] };
   const manual: string[] = [];
   const cmds = buildCommands(root, packages, [layout.backend, layout.frontend].filter((p): p is Pkg => !!p));
   let installTarget: Pkg | undefined;
@@ -121,6 +160,33 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     };
     writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
   };
+
+  function ensureEnv(dir: string) {
+    const rel = posix.join(dir, '.env');
+    const path = join(root, rel);
+    const existingText = existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+    const addition = envAddition(existingText);
+    if (!addition) {
+      if (existingText !== undefined) say("  kept   .env (already has BlazeResolver's variables)");
+      return;
+    }
+    if (existingText === undefined) {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, addition);
+      manifest.env = { file: rel, created: true, added: addition };
+      say('  wrote  .env');
+    } else {
+      const sep = existingText.endsWith('\n\n') ? '' : existingText.endsWith('\n') ? '\n' : '\n\n';
+      writeFileSync(path, existingText + sep + addition);
+      manifest.env = { file: rel, created: false, added: sep + addition };
+      say('  edited .env (appended missing BlazeResolver variables)');
+    }
+    try {
+      execFileSync('git', ['check-ignore', '-q', rel], { cwd: root, stdio: 'ignore' });
+    } catch {
+      manual.push(`${rel} holds secrets but is not in .gitignore. Add it before you commit.`);
+    }
+  }
 
   // --- the report endpoint --------------------------------------------------------------------------------------
 
@@ -300,13 +366,15 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     say('\nNext steps:');
     let step = 1;
     for (const m of manual) say(`  ${step++}. ${m}`);
-    say(`  ${step++}. Create a fine-grained GitHub token with Issues: read and write on ${repo} only. Give it to your backend as BLAZE_GITHUB_TOKEN`);
-    say('     (plus ANTHROPIC_API_KEY, optional: without it triage uses keyword rules).');
-    say(`  ${step++}. Add the repo secret the fix workflow needs:   gh secret set ANTHROPIC_API_KEY`);
+    say(`  ${step++}. Create a fine-grained GitHub token with Issues: read and write on ${repo} only.`);
+    say('     Give it to your backend as BLAZE_GITHUB_TOKEN in .env (just created/updated for you).');
+    say(`  ${step++}. Paste any AI key into .env as API_KEYS= (any provider; it's recognized automatically; several = failover).`);
+    say('     Optional: without one, triage uses keyword rules. Check with: npx blazeresolver providers');
+    say(`  ${step++}. Give the fix workflow the same keys:   gh secret set API_KEYS`);
     say(`  ${step++}. GitHub, Settings, Actions, General: turn on "Allow GitHub Actions to create and approve pull requests".`);
     say(`  ${step++}. Protect ${branch} (Settings, Branches) so every fix needs a human review.`);
     if (!layout.frontend) say(`  ${step++}. Widget tag for your page: ${widgetTag(endpoint)}`);
-    say('\nThen commit the new files. Undo everything with `npx blazeresolver remove`.');
+    say('\nThen commit the new files (not .env). Undo everything with `npx blazeresolver remove`.');
     say('Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest.');
   }
 
@@ -318,6 +386,7 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
 
   try {
     placeHandler();
+    ensureEnv((installTarget ?? layout.handlerPkg)?.dir ?? '');
     const endpoint = placeWidget();
     createFile('.github/workflows/blazeresolver.yml', WORKFLOW);
     installDependency();

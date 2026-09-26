@@ -1,6 +1,6 @@
 {
   "name": "blazeresolver",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Open-source AI harness that turns customer bug reports into reviewed GitHub pull requests",
   "main": "dist/server/src/index.js",
   "type": "module",
@@ -72,7 +72,8 @@
     "dist/cjs",
     "!dist/server/src/tests",
     "!dist/**/*.map",
-    "widget"
+    "widget",
+    "assets/blazyy.svg"
   ],
   "engines": {
     "node": ">=20"
@@ -93,6 +94,7 @@
       }
     },
     "./widget.js": "./widget/widget.js",
+    "./assets/blazyy.svg": "./assets/blazyy.svg",
     "./package.json": "./package.json"
   },
   "types": "dist/server/src/index.d.ts",

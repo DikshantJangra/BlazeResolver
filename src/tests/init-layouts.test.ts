@@ -329,3 +329,83 @@ describe('remove', () => {
     assert.ok(!existsSync(join(dir, 'src/app')), 'folders init created are removed once empty');
   });
 });
+
+describe('.env handling', () => {
+  it('creates .env with one universal API_KEYS line and the GitHub token when none exists', async () => {
+    const dir = repo({ 'package.json': '{}' });
+    await runInit({ cwd: dir, ...quiet });
+    const env = read(dir, '.env');
+    assert.match(env, /^API_KEYS=$/m);
+    assert.match(env, /^BLAZE_GITHUB_TOKEN=$/m);
+    assert.doesNotMatch(env, /^OPENAI_API_KEY=/m, 'no per-provider variables to fill in');
+  });
+
+  it('appends only the missing variables to an existing .env, leaving the rest untouched', async () => {
+    const original = 'API_KEYS=sk-ant-mine\nMY_OWN_VAR=keep-me\n';
+    const dir = repo({ 'package.json': '{}', '.env': original });
+    const out: string[] = [];
+    await runInit({ cwd: dir, noInstall: true, log: (l) => out.push(l) });
+    const env = read(dir, '.env');
+    assert.match(env, /^API_KEYS=sk-ant-mine$/m);
+    assert.match(env, /MY_OWN_VAR=keep-me/);
+    assert.match(env, /^BLAZE_GITHUB_TOKEN=$/m);
+    assert.equal((env.match(/^API_KEYS=/gm) ?? []).length, 1, 'does not duplicate an existing key');
+    assert.match(out.join('\n'), /edited .env/);
+
+    await runRemove({ cwd: dir, yes: true, noUninstall: true, log: () => {} });
+    assert.equal(read(dir, '.env'), original, 'remove takes back exactly what was appended');
+  });
+
+  it('leaves .env alone when it already has every variable, and says so', async () => {
+    const dir = repo({ 'package.json': '{}' });
+    await runInit({ cwd: dir, ...quiet });
+    const before = read(dir, '.env');
+    const out: string[] = [];
+    await runInit({ cwd: dir, force: true, noInstall: true, log: (l) => out.push(l) });
+    assert.equal(read(dir, '.env'), before);
+    assert.match(out.join('\n'), /kept   \.env/);
+  });
+
+  it('puts .env next to the backend that reads it, not at the repo root', async () => {
+    const dir = repo({
+      'api/package.json': pj({ dependencies: { express: '4' } }), 'api/index.js': EXPRESS_CJS,
+      'ui/package.json': pj({ dependencies: { vite: '6' } }), 'ui/index.html': '<body></body>\n'
+    });
+    await runInit({ cwd: dir, ...quiet });
+    assert.ok(existsSync(join(dir, 'api/.env')));
+    assert.ok(!existsSync(join(dir, '.env')));
+  });
+
+  it('warns when the new .env is not gitignored, and stays quiet when it is', async () => {
+    const loose = repo({ 'package.json': '{}' });
+    assert.ok((await runInit({ cwd: loose, ...quiet })).manual.some((m) => m.includes('not in .gitignore')));
+    const safe = repo({ 'package.json': '{}', '.gitignore': '.env\n' });
+    assert.ok(!(await runInit({ cwd: safe, ...quiet })).manual.some((m) => m.includes('not in .gitignore')));
+  });
+
+  it('remove deletes an untouched .env, but never a value you typed', async () => {
+    const untouched = repo({ 'package.json': '{}' });
+    await runInit({ cwd: untouched, ...quiet });
+    assert.equal((await runRemove({ cwd: untouched, yes: true, noUninstall: true, log: () => {} })).env, 'deleted');
+    assert.ok(!existsSync(join(untouched, '.env')));
+
+    const filled = repo({ 'package.json': '{}' });
+    await runInit({ cwd: filled, ...quiet });
+    writeFileSync(join(filled, '.env'), read(filled, '.env').replace('API_KEYS=', 'API_KEYS=sk-ant-secret'));
+    const r = await runRemove({ cwd: filled, yes: true, noUninstall: true, log: () => {} });
+    assert.equal(r.env, 'kept');
+    assert.match(read(filled, '.env'), /API_KEYS=sk-ant-secret/);
+  });
+
+  it('remove still restores everything after a --force re-run (earlier edits are not forgotten)', async () => {
+    const dir = repo({
+      'api/package.json': pj({ type: 'module', dependencies: { express: '4' } }), 'api/server.js': EXPRESS_ESM,
+      'ui/package.json': pj({ dependencies: { vite: '6' } }), 'ui/index.html': '<html>\n<body>\n</body>\n</html>\n'
+    });
+    const before = snapshot(dir);
+    await runInit({ cwd: dir, ...quiet });
+    await runInit({ cwd: dir, ...quiet, force: true });
+    await runRemove({ cwd: dir, yes: true, noUninstall: true, log: () => {} });
+    assert.deepEqual(snapshot(dir), before);
+  });
+});

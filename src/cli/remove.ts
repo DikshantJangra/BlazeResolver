@@ -22,6 +22,8 @@ export interface RemoveResult {
   stripped: string[];
   /** Files init created that were changed by hand since, so they were left alone. */
   kept: string[];
+  /** .env handling: what happened to the variables init added. */
+  env?: 'deleted' | 'cleaned' | 'kept';
   uninstalled: boolean;
 }
 
@@ -61,7 +63,7 @@ export async function runRemove(opts: RemoveOptions): Promise<RemoveResult> {
   const files = manifest.files.filter((f) => f !== CONFIG_FILE);
 
   if (!opts.yes && opts.confirm) {
-    const what = [...files, ...manifest.edits.map((f) => `${f} (marked lines only)`), ...(manifest.dependency && !opts.noUninstall ? ['the blazeresolver package'] : []), CONFIG_FILE];
+    const what = [...files, ...(manifest.env ? [`${manifest.env.file} (only the variables init added)`] : []), ...manifest.edits.map((f) => `${f} (marked lines only)`), ...(manifest.dependency && !opts.noUninstall ? ['the blazeresolver package'] : []), CONFIG_FILE];
     if (!(await opts.confirm(`Remove BlazeResolver? This deletes:\n  ${what.join('\n  ')}\nContinue?`))) {
       log('Cancelled. Nothing was changed.');
       return { cancelled: true, removed: [], stripped: [], kept: [], uninstalled: false };
@@ -98,6 +100,27 @@ export async function runRemove(opts: RemoveOptions): Promise<RemoveResult> {
       writeFileSync(path, stripped);
       result.stripped.push(rel);
       log(`  cleaned  ${rel}`);
+    }
+  }
+
+  // .env: take back exactly the text init added. If you have filled in a value since, leave the file and say so.
+  if (manifest.env) {
+    const { file, created, added } = manifest.env;
+    const path = join(root, file);
+    if (existsSync(path)) {
+      const text = readFileSync(path, 'utf8');
+      if (created && text === added) {
+        rmSync(path);
+        result.env = 'deleted';
+        log(`  removed  ${file}`);
+      } else if (text.includes(added)) {
+        writeFileSync(path, text.replace(added, ''));
+        result.env = 'cleaned';
+        log(`  cleaned  ${file}`);
+      } else {
+        result.env = 'kept';
+        log(`  kept     ${file} (you have edited the variables init added; delete API_KEYS and BLAZE_GITHUB_TOKEN by hand if you no longer need them)`);
+      }
     }
   }
 
