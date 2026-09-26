@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { FaGithub } from "react-icons/fa6";
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -59,16 +60,8 @@ export default function Header() {
             </span>
           </a>
 
-          {/* Desktop Right navigation */}
-          <div className="hidden md:flex items-center gap-ds-4">
-            <a
-              href="https://github.com/DikshantJangra/BlazeResolver"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
-            >
-              GitHub
-            </a>
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-ds-5">
             <a
               href="https://github.com/DikshantJangra/BlazeResolver#readme"
               target="_blank"
@@ -77,22 +70,31 @@ export default function Header() {
             >
               Docs
             </a>
-            <div className="ml-ds-1">
-              <div className="ds-locale-toggle">
-                <button
-                  type="button"
-                  className="ds-locale-toggle-item cursor-pointer"
-                >
-                  中文
-                </button>
-                <button
-                  type="button"
-                  className="ds-locale-toggle-item is-active cursor-pointer"
-                >
-                  EN
-                </button>
-              </div>
-            </div>
+            <a
+              href="https://github.com/DikshantJangra/BlazeResolver"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+            >
+              Plugins
+            </a>
+            <a
+              href="https://github.com/DikshantJangra/BlazeResolver/discussions"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+            >
+              Community
+            </a>
+            <a
+              href="https://github.com/DikshantJangra/BlazeResolver"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ds-btn-secondary ds-btn-xs ml-2 flex items-center gap-1.5"
+            >
+              <FaGithub className="w-3.5 h-3.5" />
+              <span>GitHub</span>
+            </a>
           </div>
 
           {/* Mobile hamburger */}
@@ -168,17 +170,15 @@ export default function Header() {
           >
             Community plugins
           </a>
+          <a
+            href="https://github.com/DikshantJangra/BlazeResolver/discussions"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ds-mobile-menu-item"
+          >
+            Community discussions
+          </a>
         </nav>
-        <div className="flex py-ds-4 pl-ds-5">
-          <div className="ds-locale-toggle">
-            <button type="button" className="ds-locale-toggle-item">
-              中文
-            </button>
-            <button type="button" className="ds-locale-toggle-item is-active">
-              EN
-            </button>
-          </div>
-        </div>
       </div>
     </>
   );

@@ -20,6 +20,9 @@ export default function ArchitectureFlow() {
           </span>
         </span>
         <h2 className="ds-text-heading1 text-ds-primary">
+          <span className="font-bold text-white font-ds-display">
+            Blaze<span className="text-[#FF6B00]">Resolver</span>{" "}
+          </span>
           <span className="ds-font-harness text-ds-brand !text-[34px] md:!text-[50px] inline-block align-middle -translate-y-[0.08em]">
             Harness
           </span>
