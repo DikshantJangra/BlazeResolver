@@ -20,7 +20,6 @@ import { REPO_PATTERN } from './github/index.js';
 import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
 
 const app = express();
 app.set('trust proxy', 1); // behind a host's proxy, req.ip is the real client
