@@ -328,9 +328,11 @@ export default function App() {
       {/* Top Navigation */}
       <header className="border-b border-slate-800/80 bg-[#0f172a]/80 backdrop-blur-md sticky top-0 z-40 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-white font-black text-lg shadow-sm">
-            🔥
-          </div>
+          <img
+            src="/blazyy.png"
+            alt="Blazyy"
+            className="h-10 w-10 rounded-xl object-cover border border-orange-500/30 shadow-md"
+          />
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-extrabold text-lg tracking-tight text-white">BlazeResolver</h1>

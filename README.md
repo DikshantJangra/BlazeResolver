@@ -1,12 +1,20 @@
-# 🔥 BlazeResolver
+<p align="center">
+  <img src="assets/blazyy.png" alt="BlazeResolver — Blazyy" width="220" style="border-radius: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.3);" />
+</p>
 
-> **Open-Source, Business-Agnostic AI Harness for Customer Service**
-> *It doesn't just chat — it closes the loop with operational intelligence and policy-gated action.*
+<h1 align="center">🔥 BlazeResolver</h1>
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-6.2-purple.svg)](https://vitejs.dev/)
-[![Tests](<https://img.shields.io/badge/Tests-5%20Passing-brightgreen.svg>)]()
+<p align="center">
+  <strong>Open-Source, Business-Agnostic AI Harness for Customer Service</strong><br />
+  <em>It doesn't just chat — it closes the loop with operational intelligence and policy-gated action.</em>
+</p>
+
+<p align="center">
+  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.8-blue.svg" alt="TypeScript" /></a>
+  <a href="https://vitejs.dev/"><img src="https://img.shields.io/badge/Vite-6.2-purple.svg" alt="Vite" /></a>
+  <img src="https://img.shields.io/badge/Tests-5%20Passing-brightgreen.svg" alt="Tests" />
+</p>
 
 ---
 
