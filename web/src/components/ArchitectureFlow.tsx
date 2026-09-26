@@ -86,18 +86,16 @@ export default function ArchitectureFlow() {
           </span>
         </div>
 
-        {/* Main Title */}
-        <h2 className="text-3xl sm:text-5xl md:text-6xl font-bold font-ds-display text-white tracking-tight leading-[1.15]">
-          <span className="font-bold text-white font-ds-display">
-            Blaze<span className="text-[#FF6B00]">Resolver</span>{" "}
-          </span>
-          <span className="ds-font-harness text-ds-brand !text-[32px] sm:!text-[46px] md:!text-[56px] inline-block align-middle -translate-y-[0.06em]">
-            Harness
-          </span>
-          <br />
-          <span className="text-white/85 text-2xl sm:text-4xl md:text-5xl font-medium">
-            closes customer support issues in real-world environments
-          </span>
+        {/* Main Title (Moderately scaled) */}
+        <h2
+          className="text-2xl sm:text-4xl md:text-5xl font-bold font-ds-display text-white tracking-tight max-w-[840px]"
+          style={{
+            fontSize: "clamp(1.75rem, 3.8vw, 3.25rem)",
+            lineHeight: 1.2,
+            letterSpacing: "-0.025em",
+          }}
+        >
+          Closing customer support issues in real-world environments
         </h2>
 
         {/* Contextual Description */}
@@ -139,23 +137,6 @@ export default function ArchitectureFlow() {
               className="group rounded-2xl border border-white/[0.08] bg-[#0c0d12]/70 backdrop-blur-xl p-6 flex flex-col justify-between transition-all duration-300 hover:border-white/20 hover:bg-[#11131a] hover:-translate-y-1 shadow-lg"
             >
               <div>
-                {/* Card Header with Step, Badge, and Icon */}
-                <div className="flex items-center justify-between mb-4">
-                  <span className="font-mono text-[11px] font-bold text-white/40 tracking-wider">
-                    {stage.step}
-                  </span>
-                  <span
-                    className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium border"
-                    style={{
-                      backgroundColor: `${stage.accentColor}15`,
-                      borderColor: `${stage.accentColor}30`,
-                      color: stage.accentColor,
-                    }}
-                  >
-                    {stage.badge}
-                  </span>
-                </div>
-
                 <div className="flex items-center gap-3 mb-3.5">
                   <div
                     className="p-2.5 rounded-xl border flex items-center justify-center shrink-0"
@@ -167,17 +148,12 @@ export default function ArchitectureFlow() {
                   >
                     {stage.icon}
                   </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white tracking-tight">
-                      {stage.title}
-                    </h3>
-                    <span className="font-mono text-[11px] text-white/40 block">
-                      {stage.subtitle}
-                    </span>
-                  </div>
+                  <h3 className="text-base font-bold text-white tracking-tight">
+                    {stage.title}
+                  </h3>
                 </div>
 
-                <p className="text-xs text-white/65 leading-relaxed mt-2">
+                <p className="text-xs text-white/65 leading-relaxed">
                   {stage.description}
                 </p>
               </div>

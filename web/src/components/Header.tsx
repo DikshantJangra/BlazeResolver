@@ -53,7 +53,7 @@ export default function Header() {
                       "0 0 16px rgba(255,255,255,0.08), 0 0 32px rgba(255,255,255,0.04)",
                   }}
                 >
-                  <span className="min-w-0 truncate pt-[4px] pb-[3px] rounded-[7px] font-mono text-[11px] font-medium leading-none px-[9px] bg-black/25 text-white/95">
+                  <span className="min-w-0 truncate pt-[4px] pb-[3px] rounded-[7px] ds-font-harness text-xs tracking-wider leading-none px-[9px] bg-black/40 text-[#FF6B00]">
                     Harness
                   </span>
                 </span>

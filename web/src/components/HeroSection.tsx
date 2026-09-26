@@ -102,17 +102,39 @@ export default function HeroSection() {
       </div>
 
       {/* Main Centered Content */}
-      <div className="relative z-10 ds-container flex flex-col items-center text-center max-w-[960px] mx-auto px-4 sm:px-6">
+      <div className="relative z-10 ds-container flex flex-col items-center text-center max-w-[1200px] mx-auto px-4 sm:px-6">
+        {/* BlazeResolver Harness in signature font (Refined, proportional) */}
+        <div className="mb-4 sm:mb-5">
+          <h2
+            className="hero-brand-title text-white tracking-wider inline-block"
+            style={{
+              fontSize: "clamp(1.25rem, 2.5vw, 1.85rem)",
+              lineHeight: 1.2,
+              fontWeight: 700,
+            }}
+          >
+            BlazeResolver <span className="text-[#FF6B00]">Harness</span>
+          </h2>
+        </div>
+
         {/* Badge */}
-        <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.12] backdrop-blur-xl mb-6 shadow-sm">
-          <span className="w-2 h-2 rounded-full bg-[#28c840] animate-pulse" />
-          <span className="font-mono text-xs font-medium text-white/90 tracking-wide">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.1] backdrop-blur-xl mb-6 sm:mb-7 shadow-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#28c840] animate-pulse" />
+          <span className="font-mono text-[11px] sm:text-xs font-normal text-white/75 tracking-normal">
             Open-Source Customer Service Resolution Harness
           </span>
         </div>
 
-        {/* Headline */}
-        <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-[86px] font-extrabold font-ds-display text-white tracking-[-0.035em] leading-[1.04] mb-8">
+        {/* Headline (Punchy, balanced typography) */}
+        <h1
+          className="hero-main-headline font-ds-display text-white max-w-[980px] mb-6 sm:mb-8"
+          style={{
+            fontSize: "clamp(2.5rem, 5.2vw, 4.5rem)",
+            lineHeight: 1.08,
+            letterSpacing: "-0.03em",
+            fontWeight: 800,
+          }}
+        >
           It doesn&apos;t just chat.{" "}
           <span className="bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FFA066] bg-clip-text text-transparent">
             It resolves.
@@ -120,12 +142,11 @@ export default function HeroSection() {
         </h1>
 
         {/* Descriptions with comfortable breathing space */}
-        <div className="max-w-[740px] flex flex-col items-center gap-3.5 mb-10">
+        <div className="max-w-[760px] flex flex-col items-center gap-3.5 mb-10">
           <p className="text-base sm:text-lg md:text-xl text-white/80 leading-relaxed font-normal">
-            BlazeResolver is an open-source, business-agnostic AI resolution
-            harness. Drop it into any product&apos;s support flow to triage
-            inquiries, correlate operational telemetry, and autonomously close
-            out customer issues across voice and chat.
+            BlazeResolver is an open-source, business-agnostic AI resolution harness.
+            Drop it into any product&apos;s support flow to triage inquiries, correlate operational telemetry,
+            and autonomously close out customer issues across voice and chat.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2 text-xs sm:text-sm font-mono text-white/45">
             <span>LLMs decide intent</span>
@@ -175,9 +196,9 @@ export default function HeroSection() {
         {/* Interactive Install & Clone Terminal Component */}
         <div className="w-full max-w-[640px] mx-auto text-left">
           <div className="rounded-2xl border border-white/[0.12] bg-[#0c0d12]/90 backdrop-blur-2xl overflow-hidden shadow-2xl transition-all duration-300 hover:border-white/20">
-            {/* Top Bar: Selector Tabs + Source / License Tag */}
-            <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 border-b border-white/[0.08] bg-white/[0.02]">
-              {/* Package Manager & Git Tabs */}
+            {/* Top Bar: Selector Tabs + Status */}
+            <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-white/[0.08] bg-white/[0.015]">
+              {/* Package Manager Tabs */}
               <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar">
                 {(["npm", "pnpm", "bun", "git"] as InstallTab[]).map((tab) => {
                   const isActive = activeTab === tab;
@@ -186,10 +207,10 @@ export default function HeroSection() {
                       key={tab}
                       type="button"
                       onClick={() => setActiveTab(tab)}
-                      className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 text-xs font-mono rounded-lg transition-all cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md transition-all cursor-pointer outline-none ${
                         isActive
-                          ? "text-white bg-white/[0.12] border border-white/[0.15] font-semibold"
-                          : "text-white/50 hover:text-white/80 hover:bg-white/[0.04] border border-transparent font-normal"
+                          ? "bg-white/10 text-white font-medium"
+                          : "text-white/40 hover:text-white/80 hover:bg-white/[0.03]"
                       }`}
                     >
                       {tabConfigs[tab].icon}
@@ -199,10 +220,10 @@ export default function HeroSection() {
                 })}
               </div>
 
-              {/* Status / Quick info */}
-              <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono text-white/40">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80" />
-                <span>v0.1.0-preview</span>
+              {/* Status Tag */}
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono text-white/40">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#28c840]" />
+                <span>v0.1.0</span>
               </div>
             </div>
 

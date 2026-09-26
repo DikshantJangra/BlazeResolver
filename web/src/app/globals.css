@@ -685,6 +685,22 @@ video {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+.hero-brand-title {
+  font-family:
+    "Edit Undo",
+    monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: clamp(1.25rem, 2.5vw, 1.85rem) !important;
+  line-height: 1.2 !important;
+  font-weight: 700 !important;
+}
+.hero-main-headline {
+  font-size: clamp(2.5rem, 5.2vw, 4.5rem) !important;
+  line-height: 1.08 !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em !important;
+}
 @keyframes arrow-sweep {
   0% {
     stroke-dashoffset: 20;
