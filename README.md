@@ -2,7 +2,7 @@
   <img src="assets/blazyy.png" alt="BlazeResolver — Blazyy" width="220" style="border-radius: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.3);" />
 </p>
 
-<h1 align="center">🔥 BlazeResolver</h1>
+<h1 align="center">BlazeResolver</h1>
 
 <p align="center">
   <strong>Open-Source, Business-Agnostic AI Harness for Customer Service</strong><br />
@@ -13,12 +13,12 @@
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.8-blue.svg" alt="TypeScript" /></a>
   <a href="https://vitejs.dev/"><img src="https://img.shields.io/badge/Vite-6.2-purple.svg" alt="Vite" /></a>
-  <img src="https://img.shields.io/badge/Tests-5%20Passing-brightgreen.svg" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-Passing-brightgreen.svg" alt="Tests" />
 </p>
 
 ---
 
-## ⚡ 1. Vision & Core Architecture
+## 1. Vision & Core Architecture
 
 Traditional customer service bots either hallucinate responses or hand off simple text templates. **BlazeResolver** introduces an end-to-end operational harness:
 
@@ -52,9 +52,9 @@ Customer Input (Text / Voice, any channel)
 
 ---
 
-## 🔌 2. The 4-Adapter Architecture (Business-Agnostic Core)
+## 2. The 4-Adapter Architecture (Business-Agnostic Core)
 
-The core engine is business-agnostic. It only knows 4 typed interface contracts in [`src/adapters/contracts.ts`](file:///Users/dikshantjangra/Documents/projects/BlazeResolver/src/adapters/contracts.ts):
+The core engine is business-agnostic. It only knows 4 typed interface contracts in [src/adapters/contracts.ts](src/adapters/contracts.ts):
 
 | Adapter Contract | Responsibility | Reference Implementation (`examples/restaurant`) |
 | :--- | :--- | :--- |
@@ -67,7 +67,7 @@ The core engine is business-agnostic. It only knows 4 typed interface contracts 
 
 ---
 
-## 🧠 3. The Correlate Engine — The Novel Feature
+## 3. The Correlate Engine — The Novel Feature
 
 1. **Sliding Buffer Window**: Ingests triaged complaints into a sliding 24-48h buffer.
 2. **Multi-Dimensional Clustering**: Groups complaints sharing $\ge 2$ dimensions of `{category, dishId, branchId}`.
@@ -76,7 +76,7 @@ The core engine is business-agnostic. It only knows 4 typed interface contracts 
 
 ---
 
-## 🛡️ 4. Guardrails & Money-Gate Policy
+## 4. Guardrails & Money-Gate Policy
 
 - **Prompt Injection Defense**: Intercepts adversarial jailbreaks, system prompt overrides, and unauthorized administrative commands.
 - **Tool Execution Guard**: Validates that refund amounts never exceed the original order total and only target valid orders.
@@ -87,9 +87,9 @@ The core engine is business-agnostic. It only knows 4 typed interface contracts 
 
 ---
 
-## 🤖 5. Bring Your Own Agent (BYO-Agent)
+## 5. Bring Your Own Agent (BYO-Agent)
 
-BlazeResolver exposes its 4 pipeline stages as standardized JSON tools in [`src/channels/byo-agent.ts`](file:///Users/dikshantjangra/Documents/projects/BlazeResolver/src/channels/byo-agent.ts). Compatible with:
+BlazeResolver exposes its 4 pipeline stages as standardized JSON tools in [src/channels/byo-agent.ts](src/channels/byo-agent.ts). Compatible with:
 
 - **LangGraph**
 - **OpenAI Agents SDK / Function Calling**
@@ -98,7 +98,7 @@ BlazeResolver exposes its 4 pipeline stages as standardized JSON tools in [`src/
 
 ---
 
-## 🚀 6. Quick Start Guide
+## 6. Quick Start Guide
 
 ### Prerequisites
 
@@ -113,7 +113,7 @@ cd BlazeResolver
 npm install
 ```
 
-### Run All 5 Unit & Integration Tests
+### Run All Unit & Integration Tests
 
 ```bash
 npm test
@@ -131,12 +131,12 @@ npm run demo
 npm run dev
 ```
 
-- **Web Dashboard**: [http://localhost:5173](http://localhost:5173)
-- **REST API & Voice WebSocket**: [http://localhost:3001](http://localhost:3001)
+- **Web Dashboard**: http://localhost:5173
+- **REST API & Voice WebSocket**: http://localhost:3001
 
 ---
 
-## 🎭 7. Demo Script for Judges
+## 7. Demo Script for Judges
 
 1. **Ingest 20-Messy Claims**: Click **"Run 20-Demo Script"** on the dashboard.
 2. **The Correlate Moment**: Watch the system cluster 5 separate cold biryani complaints at Branch 2, query real KDS prep times (12.4m vs 4.0m baseline), and emit **1 unified Incident card** routed to the Branch Manager!
@@ -146,6 +146,6 @@ npm run dev
 
 ---
 
-## 📄 License
+## License
 
-Licensed under the [Apache-2.0 License](file:///Users/dikshantjangra/Documents/projects/BlazeResolver/LICENSE).
+Licensed under the [Apache-2.0 License](LICENSE).

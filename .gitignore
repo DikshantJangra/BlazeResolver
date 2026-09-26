@@ -71,3 +71,7 @@ out/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Cloned references
+references/
+

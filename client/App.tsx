@@ -23,6 +23,7 @@ import {
 } from 'react-icons/fi';
 import { RiRestaurantLine, RiMoneyDollarCircleLine } from 'react-icons/ri';
 import { TbGitFork, TbArrowsExchange } from 'react-icons/tb';
+import { VoiceAgentConsole } from './components/VoiceAgentConsole.js';
 
 interface PipelineResult {
   complaintId: string;
@@ -145,7 +146,7 @@ export default function App() {
   const [incidents, setIncidents] = useState<CorrelatedIncident[]>([]);
   const [hitlQueue, setHitlQueue] = useState<HitlAction[]>([]);
   const [adaptersData, setAdaptersData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'feed' | 'incidents' | 'hitl' | 'adapters' | 'byo'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'incidents' | 'hitl' | 'adapters' | 'byo' | 'voice'>('voice');
   const [adapterSubTab, setAdapterSubTab] = useState<'orderSource' | 'refundGateway' | 'ticketSink' | 'menuControl'>('orderSource');
 
   const [inputText, setInputText] = useState('');
@@ -288,30 +289,8 @@ export default function App() {
     }
   };
 
-  const handleSimulateVoice = async () => {
-    setIsRecordingVoice(true);
-    const sampleVoiceTranscript =
-      'Hey BlazeResolver, I just got order ord-1024 from Connaught Place Branch 2. The Hyderabadi biryani is completely cold and greasy. Please refund my ₹280 immediately!';
-    setVoiceTranscript(sampleVoiceTranscript);
-
-    setTimeout(async () => {
-      try {
-        const res = await fetch('/api/pipeline/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rawText: sampleVoiceTranscript,
-            orderId: 'ord-1024',
-            branchId: 'branch_cp_02',
-            channel: 'voice',
-          }),
-        });
-        await res.json();
-        await fetchState();
-      } finally {
-        setIsRecordingVoice(false);
-      }
-    }, 1200);
+  const handleSimulateVoice = () => {
+    setActiveTab('voice');
   };
 
   // Metrics
@@ -704,13 +683,23 @@ export default function App() {
 
         {/* Right Column (5 cols): Correlate Incident Center, HITL Queue, & 4-Adapter Explorer */}
         <section className="lg:col-span-5 flex flex-col gap-5">
-          {/* Sub-Tabs: Incidents / HITL / Adapters / BYO Agent */}
-          <div className="flex bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs font-medium">
+          {/* Sub-Tabs: Incidents / HITL / Adapters / BYO Agent / Live Voice */}
+          <div className="flex bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs font-medium overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('voice')}
+              className={`flex-1 min-w-[120px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                activeTab === 'voice'
+                  ? 'bg-orange-600 text-white font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <FiMic className="text-orange-300" /> Voice Agent
+            </button>
             <button
               onClick={() => setActiveTab('incidents')}
-              className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 min-w-[100px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'incidents'
-                  ? 'bg-purple-600 text-white font-semibold'
+                  ? 'bg-purple-600 text-white font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -718,19 +707,19 @@ export default function App() {
             </button>
             <button
               onClick={() => setActiveTab('hitl')}
-              className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 min-w-[100px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'hitl'
-                  ? 'bg-amber-600 text-white font-semibold'
+                  ? 'bg-amber-600 text-white font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <FiUserCheck /> HITL Queue ({hitlQueue.length})
+              <FiUserCheck /> HITL ({hitlQueue.length})
             </button>
             <button
               onClick={() => setActiveTab('adapters')}
-              className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 min-w-[80px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'adapters'
-                  ? 'bg-slate-700 text-white font-semibold'
+                  ? 'bg-slate-700 text-white font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -738,15 +727,25 @@ export default function App() {
             </button>
             <button
               onClick={() => setActiveTab('byo')}
-              className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 min-w-[90px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'byo'
-                  ? 'bg-orange-600 text-white font-semibold'
+                  ? 'bg-cyan-600 text-white font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <FiCpu /> BYO Agent
+              <FiCpu /> BYO
             </button>
           </div>
+
+          {/* TAB 0: Live Voice Agent Console */}
+          {activeTab === 'voice' && (
+            <div className="h-[640px]">
+              <VoiceAgentConsole
+                onIncidentDetected={fetchIncidents}
+                onHitlUpdated={fetchHitlQueue}
+              />
+            </div>
+          )}
 
           {/* TAB 1: Correlate Incident Hub (The Star Feature) */}
           {activeTab === 'incidents' && (

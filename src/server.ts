@@ -23,11 +23,27 @@ let pipeline = new BlazeResolverPipeline(adapters, {
 });
 
 const server = createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
-const voiceBridge = new VoiceChannelBridge(pipeline);
+const wss = new WebSocketServer({ noServer: true });
+let voiceBridge = new VoiceChannelBridge(pipeline);
 
-wss.on('connection', (ws) => {
-  voiceBridge.handleConnection(ws);
+server.on('upgrade', (request, socket, head) => {
+  try {
+    const url = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
+    const pathname = url.pathname;
+    if (pathname === '/ws' || pathname === '/ws/voice' || pathname === '/') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request, url.searchParams);
+      });
+    } else {
+      socket.destroy();
+    }
+  } catch {
+    socket.destroy();
+  }
+});
+
+wss.on('connection', (ws: any, _request: any, searchParams?: any) => {
+  voiceBridge.handleConnection(ws, searchParams);
 });
 
 // Broadcast live events to WebSocket clients
@@ -100,6 +116,7 @@ app.post('/api/pipeline/reset', (req, res) => {
     autoRefundThresholdINR: 300,
     correlationSlidingWindowHours: 24
   });
+  voiceBridge = new VoiceChannelBridge(pipeline);
   broadcastLiveEvent('pipeline_reset', { timestamp: new Date() });
   return res.json({ success: true, message: 'BlazeResolver pipeline and adapter stores reset to fresh state' });
 });
