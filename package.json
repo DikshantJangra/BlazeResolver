@@ -1,6 +1,6 @@
 {
   "name": "blazeresolver",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Open-source AI harness that turns customer bug reports into reviewed GitHub pull requests",
   "main": "dist/server/src/index.js",
   "type": "module",
@@ -10,13 +10,14 @@
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm run dev:server\" \"npm run dev:client\"",
     "build:server": "tsc -p tsconfig.server.json",
     "build:client": "vite build",
-    "build": "npm run build:server && npm run build:client",
+    "build": "npm run build:server && npm run build:cjs && npm run build:client",
     "start": "node dist/server/src/server.js",
     "demo": "tsx src/cli/demo.ts",
     "demo:fix": "tsx src/cli/fix-demo.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "test": "tsx --test src/**/*.test.ts",
-    "prepublishOnly": "npm run build:server"
+    "prepublishOnly": "npm run build:server && npm run build:cjs",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/cjs-marker.mjs"
   },
   "keywords": [
     "ai-agent",
@@ -68,6 +69,7 @@
   },
   "files": [
     "dist/server/src",
+    "dist/cjs",
     "!dist/server/src/tests",
     "!dist/**/*.map",
     "widget"
@@ -81,10 +83,24 @@
       "default": "./dist/server/src/index.js"
     },
     "./handler": {
-      "types": "./dist/server/src/handler/index.d.ts",
-      "default": "./dist/server/src/handler/index.js"
+      "import": {
+        "types": "./dist/server/src/handler/index.d.ts",
+        "default": "./dist/server/src/handler/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/src/handler/index.d.ts",
+        "default": "./dist/cjs/src/handler/index.js"
+      }
     },
     "./widget.js": "./widget/widget.js",
     "./package.json": "./package.json"
+  },
+  "types": "dist/server/src/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "handler": [
+        "dist/cjs/src/handler/index.d.ts"
+      ]
+    }
   }
 }

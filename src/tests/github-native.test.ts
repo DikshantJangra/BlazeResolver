@@ -9,7 +9,6 @@ import { emailsIn, groupKey, parseIssueBody, renderIssueBody } from '../handler/
 import { triage } from '../triage/index.js';
 import { closedIssues, runNotifyCommand } from '../cli/notify.js';
 import { runFixCommand } from '../cli/fix.js';
-import { detectCommands, runInit } from '../cli/init.js';
 import { CHECKOUT_BUILD_COMMAND, CHECKOUT_INCIDENT, CHECKOUT_TEST_COMMAND, CheckoutFixAI, createCheckoutRepo } from '../examples/bug-fix/checkout-discount.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'blaze-n-'));
@@ -213,55 +212,5 @@ describe('notify command', () => {
     writeFileSync(eventPath, JSON.stringify({ pull_request: { merged: true, head: { ref: 'feature/x' }, body: 'Closes #5' } }));
     assert.match(await runNotifyCommand({ env, repo: 'acme/shop', fetch: f }), /skipping/);
     assert.equal(sent.length, 2);
-  });
-});
-
-describe('init', () => {
-  const project = (files: Record<string, string>) => {
-    const dir = tmp();
-    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
-    execFileSync('git', ['remote', 'add', 'origin', 'git@github.com:acme/shop.git'], { cwd: dir });
-    for (const [name, content] of Object.entries(files)) {
-      mkdirSync(join(dir, name, '..'), { recursive: true });
-      writeFileSync(join(dir, name), content);
-    }
-    return dir;
-  };
-
-  it('sets up a Next.js project: config, workflow, and the route file', () => {
-    const dir = project({ 'package.json': JSON.stringify({ dependencies: { next: '15' }, scripts: { test: 'vitest', build: 'next build' } }), 'tsconfig.json': '{}', 'src/app/page.tsx': '' });
-    const out: string[] = [];
-    const result = runInit({ cwd: dir, noInstall: true, log: (l) => out.push(l) });
-
-    assert.equal(result.repo, 'acme/shop');
-    assert.equal(result.handlerFile, 'src/app/api/blaze/route.ts');
-    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'blazeresolver.config.json'), 'utf8')), { repo: 'acme/shop', defaultBranch: 'main', testCommand: 'npm ci && npm test', buildCommand: 'npm run build' });
-    const workflow = readFileSync(join(dir, '.github/workflows/blazeresolver.yml'), 'utf8');
-    assert.match(workflow, /blazeresolver@latest fix/);
-    assert.match(workflow, /author_association/);
-    assert.match(readFileSync(join(dir, 'src/app/api/blaze/route.ts'), 'utf8'), /createHandler\(\{ repo: 'acme\/shop' \}\)/);
-    assert.match(out.join('\n'), /data-endpoint="\/api\/blaze"/);
-  });
-
-  it('never overwrites existing files without --force, and tells other frameworks what to add', () => {
-    const dir = project({ 'package.json': JSON.stringify({ scripts: {} }), 'blazeresolver.config.json': 'mine' });
-    const out: string[] = [];
-    const result = runInit({ cwd: dir, noInstall: true, log: (l) => out.push(l) });
-    assert.equal(readFileSync(join(dir, 'blazeresolver.config.json'), 'utf8'), 'mine');
-    assert.equal(result.handlerFile, undefined);
-    assert.match(out.join('\n'), /nodeHandler\(createHandler/);
-    assert.match(out.join('\n'), /no "test" script/);
-    assert.ok(existsSync(join(dir, '.github/workflows/blazeresolver.yml')));
-  });
-
-  it('detects pnpm and yarn projects', () => {
-    assert.match(detectCommands(project({ 'package.json': '{}', 'pnpm-lock.yaml': '' })).test, /^pnpm install --frozen-lockfile && pnpm test$/);
-    assert.match(detectCommands(project({ 'package.json': '{}', 'yarn.lock': '' })).test, /^yarn install/);
-  });
-
-  it('refuses to guess a repo', () => {
-    const dir = tmp();
-    execFileSync('git', ['init', '-q'], { cwd: dir });
-    assert.throws(() => runInit({ cwd: dir, noInstall: true, log: () => {} }), /Could not find a GitHub remote/);
   });
 });

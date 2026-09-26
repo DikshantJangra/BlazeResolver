@@ -49,5 +49,7 @@
       msg.textContent = 'Thanks, we are on it.';
     }).catch(function () { msg.textContent = 'Could not send. Try again.'; });
   };
-  document.body.appendChild(host);
+  // A script in <head> can run before <body> exists.
+  if (document.body) document.body.appendChild(host);
+  else document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(host); });
 })();

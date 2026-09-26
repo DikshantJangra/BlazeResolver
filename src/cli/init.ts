@@ -1,8 +1,25 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, extname, join, posix } from 'node:path';
 import { REPO_PATTERN } from '../github/index.js';
-import { WORKFLOW, routeFile, widgetTag } from './templates.js';
+import {
+  type Entry, type Layout, type Pkg, type PackageManager,
+  buildCommands, detectPm, detectPort, detectRepo, findExpressEntry, findHtmlEntry, findNext, findPackages, frontendProxiesApi,
+  git, isNext, needsJsExtension, pickLayout, repoRoot, usesTypeScript
+} from './detect.js';
+import { MARK, hasManaged, indentOf, insertAfter, insertBefore, insertInline, lastImportLine } from './edit.js';
+import { WORKFLOW, expressRouterFile, pagesFile, routeFile, widgetTag, type ModuleStyle } from './templates.js';
+
+/** Everything `init` changed, so `remove` can undo exactly that and nothing else. */
+export interface Manifest {
+  /** Files init created. Relative to the repo root, posix separators. */
+  files: string[];
+  /** Existing files where init inserted marked lines. */
+  edits: string[];
+  dependency?: { dir: string; pm: PackageManager; workspace?: string };
+}
+
+export const CONFIG_FILE = 'blazeresolver.config.json';
 
 export interface InitOptions {
   cwd: string;
@@ -10,106 +27,321 @@ export interface InitOptions {
   branch?: string;
   test?: string;
   build?: string;
+  /** Folder of the backend / frontend, relative to the repo root. Detected when omitted. */
+  backend?: string;
+  frontend?: string;
   /** Overwrite files that already exist. */
   force?: boolean;
-  /** Skip `npm install blazeresolver`. */
+  /** Skip installing the blazeresolver dependency. */
   noInstall?: boolean;
   log?: (line: string) => void;
+  /** Confirms or corrects what was detected. Omit to accept the detection (scripts, CI). */
+  ask?: (question: string, fallback: string) => Promise<string>;
 }
 
-const git = (cwd: string, ...args: string[]) => {
-  try {
-    return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch {
-    return '';
-  }
-};
-
-/** The package manager and the commands that install, test and build this project. */
-export function detectCommands(cwd: string): { install: string; test: string; build: string; hasTests: boolean } {
-  const pkg = existsSync(join(cwd, 'package.json')) ? JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) : {};
-  const scripts = pkg.scripts ?? {};
-  const [pm, install] = existsSync(join(cwd, 'pnpm-lock.yaml'))
-    ? ['pnpm', 'pnpm install --frozen-lockfile']
-    : existsSync(join(cwd, 'yarn.lock'))
-      ? ['yarn', 'yarn install --frozen-lockfile']
-      : ['npm', 'npm ci'];
-  return {
-    install,
-    test: `${install} && ${pm} test`,
-    build: scripts.build ? `${pm} run build` : 'true',
-    hasTests: !!scripts.test
-  };
+export interface InitResult {
+  root: string;
+  repo: string;
+  layout: { frontend?: string; backend?: string; handler: Layout['handler'] };
+  manifest: Manifest;
+  endpoint: string;
+  /** Steps init could not do safely and printed for the user instead. */
+  manual: string[];
 }
 
-/** Where a Next.js App Router project keeps its routes, or undefined for any other project. */
-function nextRouteDir(cwd: string): string | undefined {
-  const pkgFile = join(cwd, 'package.json');
-  if (!existsSync(pkgFile)) return undefined;
-  const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'));
-  if (!{ ...pkg.dependencies, ...pkg.devDependencies }.next) return undefined;
-  return ['src/app', 'app'].find((d) => existsSync(join(cwd, d)));
-}
-
-function write(cwd: string, file: string, content: string, force: boolean | undefined, log: (l: string) => void): boolean {
-  const path = join(cwd, file);
-  if (existsSync(path) && !force) {
-    log(`  kept   ${file} (already exists, use --force to overwrite)`);
-    return false;
-  }
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content);
-  log(`  wrote  ${file}`);
-  return true;
-}
-
-/**
- * Sets a project up: config, the GitHub workflow that fixes bugs, and the handler that receives widget reports.
- * Everything lands in the user's own repo. Nothing is registered anywhere and nothing is hosted by us.
- */
-export function runInit(opts: InitOptions): { repo: string; handlerFile?: string } {
-  const { cwd } = opts;
+export async function runInit(opts: InitOptions): Promise<InitResult> {
   const log = opts.log ?? console.log;
+  const root = repoRoot(opts.cwd);
+  const repo = opts.repo ?? detectRepo(root);
+  if (!repo || !REPO_PATTERN.test(repo)) {
+    throw new Error('Could not find a GitHub remote (looked at every remote in this repo). Add one with `git remote add origin https://github.com/OWNER/NAME.git`, or pass --repo OWNER/NAME.');
+  }
+  const branch = opts.branch ?? (git(root, 'symbolic-ref', '--short', 'HEAD') || 'main');
 
-  const repo = opts.repo ?? git(cwd, 'remote', 'get-url', 'origin').match(/([\w.-]+\/[\w.-]+?)(?:\.git)?$/)?.[1];
-  if (!repo || !REPO_PATTERN.test(repo)) throw new Error('Could not find a GitHub remote. Run inside your repo, or pass --repo owner/name.');
-  const branch = opts.branch ?? (git(cwd, 'symbolic-ref', '--short', 'HEAD') || 'main');
-  const cmds = detectCommands(cwd);
+  const configPath = join(root, CONFIG_FILE);
+  const existing = existsSync(configPath) ? (JSON.parse(readFileSync(configPath, 'utf8')) as { installed?: Manifest }) : undefined;
+  if (existing?.installed && !opts.force) {
+    throw new Error('BlazeResolver is already set up in this repo. Run `npx blazeresolver remove` first, or use --force to set it up again.');
+  }
+  // A config from an older init has no record of what was written; those files are ours, so redo them.
+  const force = opts.force || (!!existing && !existing.installed);
 
-  log(`\nBlazeResolver for ${repo} (default branch ${branch})\n`);
-  write(cwd, 'blazeresolver.config.json', JSON.stringify({ repo, defaultBranch: branch, testCommand: opts.test ?? cmds.test, buildCommand: opts.build ?? cmds.build }, null, 2) + '\n', opts.force, log);
-  write(cwd, '.github/workflows/blazeresolver.yml', WORKFLOW, opts.force, log);
+  const packages = findPackages(root);
+  let layout = pickLayout(packages, { backend: opts.backend, frontend: opts.frontend });
 
-  let handlerFile: string | undefined;
-  const routeDir = nextRouteDir(cwd);
-  if (routeDir) {
-    handlerFile = `${routeDir}/api/blaze/route.${existsSync(join(cwd, 'tsconfig.json')) ? 'ts' : 'js'}`;
-    write(cwd, handlerFile, routeFile(repo), opts.force, log);
+  if (opts.ask) {
+    const fe = await opts.ask('Frontend folder, where the widget goes ("none" to skip)', layout.frontend?.dir || 'none');
+    const be = layout.handler === 'next' ? undefined : await opts.ask('Backend folder, where the report endpoint goes ("none" to skip)', layout.backend?.dir || 'none');
+    layout = pickLayout(packages, { frontend: fe && fe !== 'none' ? fe : undefined, backend: be && be !== 'none' ? be : undefined });
+    if (fe === 'none') layout = { ...layout, frontend: undefined };
+    if (be === 'none' && layout.handler !== 'next') layout = { ...layout, backend: undefined, handler: 'none', handlerPkg: undefined };
   }
 
-  if (existsSync(join(cwd, 'package.json')) && !opts.noInstall) {
-    log('  running npm install blazeresolver ...');
+  const manifest: Manifest = { files: [], edits: [] };
+  const manual: string[] = [];
+  const cmds = buildCommands(root, packages, [layout.backend, layout.frontend].filter((p): p is Pkg => !!p));
+  let installTarget: Pkg | undefined;
+  const say = (l: string) => log(l);
+
+  const createFile = (rel: string, content: string): boolean => {
+    const path = join(root, rel);
+    if (existsSync(path) && !force) {
+      say(`  kept    ${rel} (already exists, use --force to overwrite)`);
+      return false;
+    }
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, content);
+    if (!manifest.files.includes(rel)) manifest.files.push(rel);
+    say(`  wrote   ${rel}`);
+    return true;
+  };
+  const editFile = (rel: string, change: (text: string) => string | undefined): boolean => {
+    const path = join(root, rel);
+    const text = readFileSync(path, 'utf8');
+    if (hasManaged(text)) {
+      say(`  kept    ${rel} (already wired)`);
+      return false;
+    }
+    const next = change(text);
+    if (next === undefined) return false;
+    writeFileSync(path, next);
+    if (!manifest.edits.includes(rel)) manifest.edits.push(rel);
+    say(`  edited  ${rel}`);
+    return true;
+  };
+  const writeConfig = () => {
+    if (!manifest.files.includes(CONFIG_FILE)) manifest.files.push(CONFIG_FILE);
+    const config = {
+      repo,
+      defaultBranch: branch,
+      testCommand: opts.test ?? cmds.test,
+      buildCommand: opts.build ?? cmds.build,
+      layout: { frontend: layout.frontend?.dir, backend: layout.backend?.dir, handler: layout.handler },
+      installed: manifest
+    };
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+  };
+
+  // --- the report endpoint --------------------------------------------------------------------------------------
+
+  function placeHandler() {
+    const pkg = layout.handlerPkg;
+    if (layout.handler === 'next' && pkg) {
+      const next = findNext(root, pkg);
+      if (!next) {
+        manual.push(`Your Next.js app in ${pkg.dir || '.'} has no app/ or pages/ folder, so add an API route for blazeresolver/handler by hand.`);
+        return;
+      }
+      const ext = usesTypeScript(root, pkg) ? 'ts' : 'js';
+      if (next.kind === 'app') createFile(`${next.dir}/api/blaze/route.${ext}`, routeFile(repo!));
+      else createFile(`${next.dir}/api/blaze.${ext}`, pagesFile(repo!));
+      addEnvExample(pkg);
+      return;
+    }
+
+    if (layout.handler === 'express' && pkg) {
+      const entry = findExpressEntry(root, pkg);
+      if (entry && wireExpress(pkg, entry)) {
+        addEnvExample(pkg);
+        return;
+      }
+      const dir = existsSync(join(root, pkg.dir, 'src')) ? posix.join(pkg.dir, 'src') : pkg.dir;
+      const ts = usesTypeScript(root, pkg);
+      createFile(posix.join(dir, ts ? 'blazeresolver.ts' : 'blazeresolver.js'), expressRouterFile(repo!, pkg.esm || ts ? 'esm' : 'cjs'));
+      manual.push(`Could not tell where your Express app is created in ${pkg.dir || '.'}, so nothing there was edited. Add two lines where the app is created: import the file above and \`app.all('/api/blaze', blazeresolver)\`.`);
+      addEnvExample(pkg);
+      return;
+    }
+
+    if (layout.handler === 'other' && pkg) {
+      manual.push(
+        `Your backend in ${pkg.dir || '.'} does not use Express, so add the endpoint by hand. The handler takes a standard Request and returns a Response:\n\n` +
+          `       import { createHandler } from 'blazeresolver/handler';\n       const blaze = createHandler({ repo: '${repo}', allowOrigin: '*' });\n       // route POST and OPTIONS /api/blaze to blaze(request)   (Node req/res? use nodeHandler(blaze))`
+      );
+      installTarget = pkg;
+      return;
+    }
+
+    manual.push("No Node backend or Next.js app found. BlazeResolver needs an endpoint that receives the widget's reports: add a Next.js API route, or deploy the handler as a serverless function (blazeresolver/handler works on Cloudflare, Vercel, Deno and Bun).");
+  }
+
+  function wireExpress(pkg: Pkg, entry: Entry): boolean {
+    const ext = extname(entry.file);
+    const ts = /^\.[cm]?tsx?$/.test(ext);
+    const style: ModuleStyle = ts || ext === '.mjs' || (ext === '.js' && pkg.esm) ? 'esm' : 'cjs';
+    const routerExt = ts ? '.ts' : ext;
+    const routerRel = posix.join(posix.dirname(entry.file), `blazeresolver${routerExt}`);
+    const text = readFileSync(join(root, entry.file), 'utf8');
+    if (hasManaged(text)) return true;
+
+    // A chained statement (`express()` then `.use(...)` on the next line) can't take a line after it safely.
+    const all = text.split('\n');
+    const appLine = all[entry.line];
+    if (!/express\s*\(\s*\)\s*;?\s*(\/\/.*)?\r?$/.test(appLine) || /^\s*\??\./.test(all[entry.line + 1] ?? '')) return false;
+
+    const spec = ts
+      ? needsJsExtension(root, pkg) ? './blazeresolver.js' : './blazeresolver'
+      : style === 'esm' || ext === '.cjs' ? `./blazeresolver${routerExt}` : './blazeresolver';
+    const importLine = style === 'esm' ? `import blazeresolver from '${spec}'; // ${MARK}` : `const blazeresolver = require('${spec}'); // ${MARK}`;
+    const indent = indentOf(appLine);
+
+    createFile(routerRel, expressRouterFile(repo!, style));
+    editFile(entry.file, (t) => {
+      let next = t;
+      let app = entry.line;
+      const last = lastImportLine(next);
+      if (last !== -1 && last < app) {
+        next = insertAfter(next, last, importLine);
+        app += 1;
+      } else if (style === 'cjs' || last === -1) {
+        next = insertBefore(next, app, importLine); // a require must come before its use
+        app += 1;
+      } else {
+        next = insertAfter(next, last, importLine); // ESM imports are hoisted, so one after the app line is fine
+      }
+      return insertAfter(next, app, `${indent}${entry.appVar}.all('/api/blaze', blazeresolver); // ${MARK}`);
+    });
+    installTarget = pkg;
+    return true;
+  }
+
+  function addEnvExample(pkg: Pkg) {
+    installTarget = pkg;
+    const rel = [posix.join(pkg.dir, '.env.example'), '.env.example'].find((f) => existsSync(join(root, f)));
+    if (!rel) return;
+    editFile(rel, (text) => {
+      const parts = text.split('\n');
+      let last = parts.length - 1;
+      while (last > 0 && parts[last].trim() === '') last--;
+      const add = ['BLAZE_GITHUB_TOKEN=', ...(/^ANTHROPIC_API_KEY=/m.test(text) ? [] : ['ANTHROPIC_API_KEY='])].map((l) => `${l} # ${MARK}`);
+      return add.reduceRight((acc, l) => insertAfter(acc, last, l), text);
+    });
+  }
+
+  // --- the widget -----------------------------------------------------------------------------------------------
+
+  function placeWidget(): string {
+    const fe = layout.frontend;
+    const be = layout.backend;
+    const sameOrigin = !!fe && (fe === layout.handlerPkg || (!!be && fe.dir === be.dir) || frontendProxiesApi(root, fe));
+    let endpoint = '/api/blaze';
+    if (!sameOrigin) {
+      const port = be ? detectPort(root, be, findExpressEntry(root, be)) : 3000;
+      endpoint = `http://localhost:${port}/api/blaze`;
+      manual.push(`The widget points at ${endpoint}, your backend in development. Before you deploy, change data-endpoint to your production API URL (or proxy /api from your frontend host).`);
+    }
+    if (!fe) return endpoint;
+
+    if (isNext(fe)) {
+      const next = findNext(root, fe);
+      if (next?.layout && wireNextLayout(next.layout, endpoint)) return endpoint;
+    } else {
+      const html = findHtmlEntry(root, fe);
+      if (html) {
+        editFile(html, (text) => {
+          const parts = text.split('\n');
+          const i = parts.findIndex((l) => /<\/body>/i.test(l));
+          // </body> alone on its line: add a line before it. Sharing a line with other markup: insert inline.
+          return /^\s*<\/body>\s*\r?$/i.test(parts[i])
+            ? insertBefore(text, i, `${indentOf(parts[i])}${widgetTag(endpoint)}<!-- ${MARK} -->`)
+            : insertInline(text, i, parts[i].match(/<\/body>/i)![0], widgetTag(endpoint), 'html');
+        });
+        return endpoint;
+      }
+    }
+    manual.push(`Could not find where your page HTML ends in ${fe.dir || '.'}. Paste this before </body>:\n\n       ${widgetTag(endpoint)}`);
+    return endpoint;
+  }
+
+  function wireNextLayout(rel: string, endpoint: string): boolean {
+    const text = readFileSync(join(root, rel), 'utf8');
+    if (text.split('\n').filter((l) => /<\/body>/.test(l)).length !== 1) return false;
+    const bound = text.match(/import\s+(\w+)\s+from\s+['"]next\/script['"]/)?.[1];
+    if (!bound && /\bScript\b/.test(text)) return false; // the name is taken by something else
+    const name = bound ?? 'Script';
+    if (hasManaged(text)) return true;
+    return editFile(rel, (t) => {
+      const parts = t.split('\n');
+      const body = parts.findIndex((l) => /<\/body>/.test(l));
+      const element = `<${name} src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js" data-endpoint="${endpoint}" strategy="afterInteractive" />`;
+      let next = /^\s*<\/body>\s*\r?$/.test(parts[body])
+        ? insertBefore(t, body, `${indentOf(parts[body])}  ${element} {/* ${MARK} */}`)
+        : insertInline(t, body, '</body>', element, 'jsx'); // <body>{children}</body> on one line
+      if (!bound) {
+        const last = lastImportLine(next);
+        const importLine = `import Script from 'next/script'; // ${MARK}`;
+        next = last === -1 ? insertBefore(next, 0, importLine) : insertAfter(next, last, importLine);
+      }
+      return next;
+    });
+  }
+
+  // --- the dependency -------------------------------------------------------------------------------------------
+
+  function installDependency() {
+    const pkg = installTarget;
+    if (!pkg) return;
+    const { pm } = detectPm(root, pkg);
+    const rootPkg = packages.find((p) => p.dir === '');
+    const workspace = !!rootPkg?.workspaces && pkg.dir !== '' && pm === 'npm';
+    manifest.dependency = { dir: pkg.dir, pm, ...(workspace ? { workspace: pkg.dir } : {}) };
+    if (opts.noInstall) return;
+
+    const [cmd, args, cwd] = installArgs(pm, pkg, workspace, root);
+    say(`  running ${cmd} ${args.join(' ')} in ${pkg.dir || '.'} ...`);
     try {
-      execFileSync('npm', ['install', 'blazeresolver'], { cwd, stdio: 'ignore' });
+      execFileSync(cmd, args, { cwd, stdio: 'ignore' });
     } catch {
-      log('  could not install blazeresolver; run `npm install blazeresolver` yourself');
+      manual.push(`Could not install blazeresolver automatically. Run \`${cmd} ${args.join(' ')}\` in ${pkg.dir || 'the repo root'}.`);
     }
   }
 
-  log('\nNext steps:');
-  let step = 1;
-  if (!cmds.hasTests) log(`  ${step++}. This project has no "test" script. BlazeResolver verifies every fix with your tests, so add some or fixes will go to a human.`);
-  if (!handlerFile) {
-    log(`  ${step++}. Add the report endpoint to your backend (Express shown; any Request/Response runtime can use createHandler directly):\n`);
-    log(`       import { createHandler, nodeHandler } from 'blazeresolver/handler';`);
-    log(`       app.post('/api/blaze', nodeHandler(createHandler({ repo: '${repo}' })));\n`);
+  function printNextSteps(endpoint: string) {
+    say('\nNext steps:');
+    let step = 1;
+    for (const m of manual) say(`  ${step++}. ${m}`);
+    say(`  ${step++}. Create a fine-grained GitHub token with Issues: read and write on ${repo} only. Give it to your backend as BLAZE_GITHUB_TOKEN`);
+    say('     (plus ANTHROPIC_API_KEY, optional: without it triage uses keyword rules).');
+    say(`  ${step++}. Add the repo secret the fix workflow needs:   gh secret set ANTHROPIC_API_KEY`);
+    say(`  ${step++}. GitHub, Settings, Actions, General: turn on "Allow GitHub Actions to create and approve pull requests".`);
+    say(`  ${step++}. Protect ${branch} (Settings, Branches) so every fix needs a human review.`);
+    if (!layout.frontend) say(`  ${step++}. Widget tag for your page: ${widgetTag(endpoint)}`);
+    say('\nThen commit the new files. Undo everything with `npx blazeresolver remove`.');
+    say('Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest.');
   }
-  log(`  ${step++}. Create a fine-grained GitHub token with Issues: read and write on ${repo} only.`);
-  log(`     Give it to your backend as BLAZE_GITHUB_TOKEN, along with ANTHROPIC_API_KEY (optional; without it triage uses keyword rules).`);
-  log(`  ${step++}. Add the repo secret the fix workflow needs:   gh secret set ANTHROPIC_API_KEY`);
-  log(`  ${step++}. GitHub, Settings, Actions, General: turn on "Allow GitHub Actions to create and approve pull requests".`);
-  log(`  ${step++}. Protect ${branch} (Settings, Branches) so every fix needs a human review.`);
-  log(`  ${step++}. Paste this before </body> in your app:\n\n       ${widgetTag('/api/blaze')}\n`);
-  log('Then commit the new files. Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest.');
-  return { repo, handlerFile };
+
+  say(`\nBlazeResolver for ${repo} (default branch ${branch})`);
+  if (root !== opts.cwd) say(`Using the repo root ${root}, because GitHub only reads workflows from there.`);
+  say('Detected:');
+  say(`  frontend  ${layout.frontend ? `${layout.frontend.dir || '.'} (${isNext(layout.frontend) ? 'Next.js' : 'web app'})` : 'none found'}`);
+  say(`  backend   ${layout.handler === 'next' ? 'the Next.js app itself' : layout.backend ? layout.backend.dir || '.' : 'none found'}\n`);
+
+  try {
+    placeHandler();
+    const endpoint = placeWidget();
+    createFile('.github/workflows/blazeresolver.yml', WORKFLOW);
+    installDependency();
+    if (!cmds.hasTests && !opts.test) {
+      manual.push('No "test" script found. BlazeResolver only opens a fix that passes your tests, so add tests (or pass --test "<command>"), or every fix will go to a human.');
+    }
+    writeConfig();
+    say(`  wrote   ${CONFIG_FILE}`);
+    printNextSteps(endpoint);
+    return { root, repo, layout: { frontend: layout.frontend?.dir, backend: layout.backend?.dir, handler: layout.handler }, manifest, endpoint, manual };
+  } catch (err) {
+    writeConfig(); // so `remove` can still clean up whatever was written before the failure
+    throw err;
+  }
+}
+
+export function installArgs(pm: PackageManager, pkg: Pkg, workspace: boolean, root: string): [string, string[], string] {
+  if (pm === 'npm') return workspace ? ['npm', ['install', 'blazeresolver', '--workspace', pkg.dir], root] : ['npm', ['install', 'blazeresolver'], join(root, pkg.dir)];
+  if (pm === 'pnpm') return ['pnpm', pkg.dir === '' && existsSync(join(root, 'pnpm-workspace.yaml')) ? ['add', '-w', 'blazeresolver'] : ['add', 'blazeresolver'], join(root, pkg.dir)];
+  return ['yarn', ['add', 'blazeresolver'], join(root, pkg.dir)];
+}
+
+export function uninstallArgs(pm: PackageManager, dir: string, workspace: string | undefined, root: string): [string, string[], string] {
+  if (pm === 'npm') return workspace ? ['npm', ['uninstall', 'blazeresolver', '--workspace', workspace], root] : ['npm', ['uninstall', 'blazeresolver'], join(root, dir)];
+  if (pm === 'pnpm') return ['pnpm', dir === '' && existsSync(join(root, 'pnpm-workspace.yaml')) ? ['remove', '-w', 'blazeresolver'] : ['remove', 'blazeresolver'], join(root, dir)];
+  return ['yarn', ['remove', 'blazeresolver'], join(root, dir)];
 }

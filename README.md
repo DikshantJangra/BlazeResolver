@@ -141,18 +141,23 @@ npm run dev
 No server to host. Everything runs in your repo and on GitHub.
 
 ```bash
-npx blazeresolver init
+npx blazeresolver init      # set it up
+npx blazeresolver remove    # take it all back out
 ```
 
-`init` reads your repo from git and adds three things:
+`init` finds your frontend and backend by what they depend on, not by what the folders are called (`client`/`server`, `web`/`api`, `frontend`/`backend`, `apps/*`, a single Next.js app, and so on), and runs from anywhere inside the repo. It asks you to confirm what it found, or you can pass `--backend <folder> --frontend <folder> --yes`.
 
-| File | What it does |
+| It adds | Where |
 | :--- | :--- |
-| `src/app/api/blaze/route.ts` (Next.js; other backends get a 2-line snippet) | Receives reports from the widget, triages them, files a GitHub issue. Same bug reported again = a comment, not a new issue. |
-| `.github/workflows/blazeresolver.yml` | On a `blazeresolver` issue, runs the fix engine on GitHub's runner, opens a PR that closes the issue. On merge, emails customers who opted in. |
-| `blazeresolver.config.json` | Repo, default branch, test and build commands. |
+| `.github/workflows/blazeresolver.yml` | The repo root, the only place GitHub reads workflows from. On a `blazeresolver` issue it runs the fix engine on GitHub's runner and opens a PR that closes the issue. On merge it emails customers who opted in. |
+| The report endpoint | Next.js (App or Pages Router): an API route in that app. Express: a small `blazeresolver.js/.ts` next to the file that creates your app, plus one `app.all('/api/blaze', ...)` line there, in your module system (ESM, CommonJS or TypeScript). Any other framework: a printed snippet, and no guesses. |
+| The widget | One `<script>` in your `index.html` or Next.js `layout`. It points at your backend, or at `/api/blaze` when both share an origin or your dev server proxies `/api`. |
+| `blazeresolver.config.json` | Repo, default branch, and the test and build commands for each package that has tests. Also records exactly what `init` changed. |
+| The `blazeresolver` package | Installed in the package that hosts the endpoint (npm, pnpm, yarn and npm workspaces). |
 
-Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo) and `ANTHROPIC_API_KEY`, run `gh secret set ANTHROPIC_API_KEY`, allow Actions to create pull requests, protect your default branch, and paste the widget tag `init` prints. A human always reviews and merges the PR.
+`remove` undoes exactly that: it deletes the files `init` created (a file you have since rewritten is kept), takes its marked lines back out of the files it edited, uninstalls the package, and removes the config. Your other code is never touched.
+
+Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo) and `ANTHROPIC_API_KEY`, run `gh secret set ANTHROPIC_API_KEY`, allow Actions to create pull requests, protect your default branch. A human always reviews and merges the PR.
 
 Updates are automatic: the widget loads from a CDN and the workflow runs `blazeresolver@latest`.
 

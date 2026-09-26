@@ -54,15 +54,46 @@ jobs:
           BLAZE_FROM_EMAIL: \${{ secrets.BLAZE_FROM_EMAIL }}
 `;
 
-/** Works as a Next.js route handler (App Router) and any other runtime that speaks Request/Response. */
+/** Next.js App Router route handler. Same origin as the page, so no CORS. */
 export const routeFile = (repo: string) => `import { createHandler } from 'blazeresolver/handler';
 
 // Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
+// Added by \`npx blazeresolver init\`; remove with \`npx blazeresolver remove\`.
 const handler = createHandler({ repo: '${repo}' });
 
 export const POST = handler;
 export const OPTIONS = handler;
 `;
 
+/** Next.js Pages Router API route (Node req/res). */
+export const pagesFile = (repo: string) => `import { createHandler, nodeHandler } from 'blazeresolver/handler';
+
+// Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
+// Added by \`npx blazeresolver init\`; remove with \`npx blazeresolver remove\`.
+export default nodeHandler(createHandler({ repo: '${repo}' }));
+`;
+
+export type ModuleStyle = 'esm' | 'cjs';
+
+/**
+ * A plain (req, res) function for an Express app, in the module system the backend already uses.
+ * The frontend may live on another origin, so it answers CORS (any origin: it takes no cookies, only a report).
+ */
+export const expressRouterFile = (repo: string, style: ModuleStyle) => {
+  const config = `createHandler({ repo: '${repo}', allowOrigin: process.env.BLAZE_ALLOW_ORIGIN || '*' })`;
+  const head = `// Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
+// Added by \`npx blazeresolver init\`; remove with \`npx blazeresolver remove\`.
+`;
+  return style === 'esm'
+    ? `${head}import { createHandler, nodeHandler } from 'blazeresolver/handler';
+
+export default nodeHandler(${config});
+`
+    : `${head}const { createHandler, nodeHandler } = require('blazeresolver/handler');
+
+module.exports = nodeHandler(${config});
+`;
+};
+
 export const widgetTag = (endpoint: string) =>
-  `<script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js" data-endpoint="${endpoint}" data-app-version="YOUR_VERSION"></script>`;
+  `<script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js" data-endpoint="${endpoint}"></script>`;
