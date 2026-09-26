@@ -21,7 +21,6 @@ import {
   FiInbox,
   FiTrendingUp
 } from 'react-icons/fi';
-import { RiRestaurantLine, RiMoneyDollarCircleLine } from 'react-icons/ri';
 import { TbGitFork, TbArrowsExchange } from 'react-icons/tb';
 import { VoiceAgentConsole } from './components/VoiceAgentConsole.js';
 
@@ -33,7 +32,7 @@ interface PipelineResult {
     rawText: string;
     orderId?: string;
     customerId?: string;
-    branchId?: string;
+    resourceId?: string;
     timestamp: string;
   };
   triage: {
@@ -42,8 +41,8 @@ interface PipelineResult {
     category: string;
     severity: string;
     sentiment: string;
-    dish?: string;
-    branchId?: string;
+    itemName?: string;
+    resourceId?: string;
     orderId?: string;
     claimedAmount?: number;
     urgencyScore: number;
@@ -55,12 +54,11 @@ interface PipelineResult {
     isSystemic: boolean;
     cluster?: {
       clusterKey: string;
-      branchId: string;
+      resourceId: string;
       category: string;
-      dishName?: string;
+      itemName?: string;
       count: number;
-      avgKitchenPrepMinutes: number;
-      baselinePrepMinutes: number;
+      signal?: SignalSummary;
       isAnomalous: boolean;
       rootCauseHypothesis?: string;
     };
@@ -68,14 +66,12 @@ interface PipelineResult {
       incidentId: string;
       title: string;
       summary: string;
-      branchId: string;
+      resourceId: string;
       category: string;
       complaintCount: number;
-      avgTicketTimeMinutes: number;
-      baselineTimeMinutes: number;
-      delayRatio: number;
+      signal?: SignalSummary;
       managerNotified: boolean;
-      dishDisabled: boolean;
+      itemDisabled: boolean;
       recommendedAction: string;
     };
   };
@@ -110,22 +106,47 @@ interface PipelineResult {
   timestamp: string;
 }
 
+interface SignalSummary {
+  metric: string;
+  label: string;
+  unit: string;
+  average: number;
+  baseline: number;
+  ratio: number;
+}
+
 interface CorrelatedIncident {
   incidentId: string;
   title: string;
   summary: string;
-  branchId: string;
+  resourceId: string;
   category: string;
-  dishName?: string;
+  itemName?: string;
   complaintCount: number;
-  avgTicketTimeMinutes: number;
-  baselineTimeMinutes: number;
-  delayRatio: number;
+  signal?: SignalSummary;
   status: string;
   recommendedAction: string;
   managerNotified: boolean;
-  dishDisabled: boolean;
+  itemDisabled: boolean;
   createdAt: string;
+}
+
+/** Subset of the server's DomainProfile served by GET /api/profile. */
+export interface ProfileInfo {
+  id: string;
+  name: string;
+  labels: { business: string; item: string; resource: string };
+  currency: { code: string; symbol: string };
+  moneyPolicy: { autoApproveThreshold: number; maxCreditAmount: number };
+  categories: Array<{ id: string; label: string }>;
+  items: Array<{ id: string; name: string }>;
+  resources: Array<{ id: string; name: string }>;
+  demo: {
+    defaultCustomerId: string;
+    sampleOrders: Array<{ id: string; label: string }>;
+    samplePrompts: Array<{ label: string; text: string; tone?: 'warning' | 'danger' }>;
+    complaintPlaceholder: string;
+  };
 }
 
 interface HitlAction {
@@ -147,11 +168,12 @@ export default function App() {
   const [hitlQueue, setHitlQueue] = useState<HitlAction[]>([]);
   const [adaptersData, setAdaptersData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'feed' | 'incidents' | 'hitl' | 'adapters' | 'byo' | 'voice'>('voice');
-  const [adapterSubTab, setAdapterSubTab] = useState<'orderSource' | 'refundGateway' | 'ticketSink' | 'menuControl'>('orderSource');
+  const [adapterSubTab, setAdapterSubTab] = useState<'orderSource' | 'refundGateway' | 'ticketSink' | 'availabilityControl'>('orderSource');
+  const [profile, setProfile] = useState<ProfileInfo | null>(null);
 
   const [inputText, setInputText] = useState('');
-  const [inputOrderId, setInputOrderId] = useState('ord-1021');
-  const [inputBranch, setInputBranch] = useState('branch_cp_02');
+  const [inputOrderId, setInputOrderId] = useState('');
+  const [inputResource, setInputResource] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
@@ -163,6 +185,7 @@ export default function App() {
   // Fetch state on mount & set up WebSocket
   useEffect(() => {
     fetchState();
+    fetchProfile();
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -221,6 +244,23 @@ export default function App() {
     }
   };
 
+  const fetchProfile = async () => {
+    try {
+      const data: ProfileInfo = await fetch('/api/profile').then((r) => r.json());
+      setProfile(data);
+      setInputOrderId(data.demo.sampleOrders[0]?.id ?? '');
+      setInputResource(data.resources[0]?.id ?? '');
+    } catch (err) {
+      console.error('Error fetching domain profile:', err);
+    }
+  };
+
+  const money = (amount: number | undefined) => `${profile?.currency.symbol ?? ''}${amount ?? 0}`;
+  const resourceName = (id: string) => profile?.resources.find((r) => r.id === id)?.name ?? id;
+  const itemLabel = profile?.labels.item ?? 'Item';
+  const resourceLabel = profile?.labels.resource ?? 'Location';
+  const approvalThreshold = profile?.moneyPolicy.autoApproveThreshold ?? 0;
+
   const handleRunSeedDemo = async () => {
     setIsSeeding(true);
     try {
@@ -260,7 +300,7 @@ export default function App() {
         body: JSON.stringify({
           rawText: inputText,
           orderId: inputOrderId || undefined,
-          branchId: inputBranch || undefined,
+          resourceId: inputResource || undefined,
           channel: 'text',
         }),
       });
@@ -316,7 +356,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <h1 className="font-extrabold text-lg tracking-tight text-white">BlazeResolver</h1>
               <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                v1.0 • KDS Correlate Engine
+                v1.0 • Correlate Engine{profile ? ` • ${profile.name}` : ''}
               </span>
             </div>
             <p className="text-xs text-slate-400 hidden sm:block">
@@ -363,7 +403,7 @@ export default function App() {
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold transition-all disabled:opacity-50 border border-orange-400/30"
           >
             <FiPlay className={isSeeding ? 'animate-spin' : ''} />
-            {isSeeding ? 'Processing 20 Claims...' : 'Run 20-Demo Script'}
+            {isSeeding ? 'Processing Claims...' : 'Run Demo Script'}
           </button>
 
           <button
@@ -403,7 +443,7 @@ export default function App() {
             <FiActivity className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-xs text-slate-400 font-medium">KDS Systemic Incidents</div>
+            <div className="text-xs text-slate-400 font-medium">Systemic Incidents</div>
             <div className="text-xl font-bold text-purple-400 font-mono">{incidents.length}</div>
           </div>
         </div>
@@ -451,17 +491,20 @@ export default function App() {
               </span>
               <div className="flex items-center gap-2">
                 <select
-                  value={inputBranch}
-                  onChange={(e) => setInputBranch(e.target.value)}
+                  value={inputResource}
+                  onChange={(e) => setInputResource(e.target.value)}
                   className="bg-slate-900 border border-slate-700 text-[11px] rounded-lg px-2 py-1 text-slate-300 focus:outline-none focus:border-orange-500"
                 >
-                  <option value="branch_cp_02">Connaught Place (Branch 2 - Bottlenecked)</option>
-                  <option value="branch_ind_01">Indiranagar (Branch 1 - Normal)</option>
-                  <option value="branch_kor_03">Koramangala (Branch 3 - Normal)</option>
+                  <option value="">Any {resourceLabel.toLowerCase()}</option>
+                  {profile?.resources.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
                 </select>
                 <input
                   type="text"
-                  placeholder="Order ID (e.g. ord-1021)"
+                  placeholder={`Order ID${profile?.demo.sampleOrders[0] ? ` (e.g. ${profile.demo.sampleOrders[0].id})` : ''}`}
                   value={inputOrderId}
                   onChange={(e) => setInputOrderId(e.target.value)}
                   className="bg-slate-900 border border-slate-700 text-[11px] rounded-lg px-2 py-1 text-slate-300 w-28 focus:outline-none focus:border-orange-500 font-mono"
@@ -474,7 +517,7 @@ export default function App() {
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="E.g. 'My Hyderabadi biryani in ord-1021 arrived ice cold from Branch 2! Need ₹280 refund.'"
+                placeholder={profile?.demo.complaintPlaceholder ?? 'Describe a customer complaint...'}
                 className="flex-1 bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500"
               />
               <button
@@ -509,13 +552,13 @@ export default function App() {
                 </div>
                 <h3 className="text-sm font-bold text-slate-200">No Complaints Ingested Yet</h3>
                 <p className="text-xs text-slate-400 max-w-sm mt-1 mb-4">
-                  Click "Run 20-Demo Script" above to benchmark the entire harness with 20 real-world customer complaints!
+                  Click "Run Demo Script" above to benchmark the entire harness with the example's real-world customer complaints!
                 </p>
                 <button
                   onClick={handleRunSeedDemo}
                   className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-semibold transition-all"
                 >
-                  Run 20-Complaint Benchmark
+                  Run Complaint Benchmark
                 </button>
               </div>
             ) : (
@@ -551,14 +594,8 @@ export default function App() {
                         </span>
                       )}
 
-                      {item.triage.branchId && (
-                        <span className="text-[11px] text-slate-400">
-                          {item.triage.branchId === 'branch_cp_02'
-                            ? 'Branch 2 (CP)'
-                            : item.triage.branchId === 'branch_ind_01'
-                            ? 'Branch 1 (Indiranagar)'
-                            : 'Branch 3 (Koramangala)'}
-                        </span>
+                      {item.triage.resourceId && (
+                        <span className="text-[11px] text-slate-400">{resourceName(item.triage.resourceId)}</span>
                       )}
                     </div>
 
@@ -583,10 +620,10 @@ export default function App() {
                         <span className="text-slate-500 font-mono">{Math.round(item.triage.urgencyScore * 100)}%</span>
                       </div>
                       <div className="font-semibold text-slate-200 truncate">
-                        {item.triage.category.replace('_', ' ')}
+                        {profile?.categories.find((c) => c.id === item.triage.category)?.label ?? item.triage.category.replace(/_/g, ' ')}
                       </div>
                       <div className="text-[10px] text-slate-400 truncate">
-                        {item.triage.dish || item.triage.intent}
+                        {item.triage.itemName || item.triage.intent}
                       </div>
                     </div>
 
@@ -606,10 +643,14 @@ export default function App() {
                       </div>
                       {item.correlation.isSystemic ? (
                         <div>
-                          <div className="font-bold text-purple-300">KDS Bottleneck</div>
-                          <div className="text-[10px] text-purple-400 font-mono">
-                            {item.correlation.incident?.avgTicketTimeMinutes}m vs {item.correlation.incident?.baselineTimeMinutes}m base
-                          </div>
+                          <div className="font-bold text-purple-300">Systemic Incident</div>
+                          {item.correlation.incident?.signal && (
+                            <div className="text-[10px] text-purple-400 font-mono">
+                              {item.correlation.incident.signal.average}
+                              {item.correlation.incident.signal.unit} vs {item.correlation.incident.signal.baseline}
+                              {item.correlation.incident.signal.unit} base
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div>
@@ -647,13 +688,13 @@ export default function App() {
                       ) : item.resolution.hitlRequired ? (
                         <div>
                           <div className="text-amber-300 font-bold">HITL Gated</div>
-                          <div className="text-[10px] text-amber-400">Claim &gt; ₹300</div>
+                          <div className="text-[10px] text-amber-400">Claim &gt; {money(approvalThreshold)}</div>
                         </div>
                       ) : (
                         <div>
                           <div className="text-emerald-300 font-bold truncate">
-                            {item.resolution.actions[0]?.actionType.toUpperCase() || 'SAFE'} (₹
-                            {item.resolution.actions[0]?.amount || 0})
+                            {item.resolution.actions[0]?.actionType.toUpperCase() || 'SAFE'} (
+                            {money(item.resolution.actions[0]?.amount)})
                           </div>
                           <div className="text-[9px] text-emerald-400/80 font-mono truncate">
                             Idem: {item.resolution.actions[0]?.idempotencyKey.substring(0, 14)}...
@@ -741,8 +782,9 @@ export default function App() {
           {activeTab === 'voice' && (
             <div className="h-[640px]">
               <VoiceAgentConsole
-                onIncidentDetected={fetchIncidents}
-                onHitlUpdated={fetchHitlQueue}
+                profile={profile}
+                onIncidentDetected={fetchState}
+                onHitlUpdated={fetchState}
               />
             </div>
           )}
@@ -756,7 +798,7 @@ export default function App() {
                     <FiActivity className="text-purple-400" /> Correlate Operational Intelligence
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Cross-referencing customer complaints with live KDS prep times
+                    Cross-referencing customer complaints with live operational signals
                   </p>
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 text-xs font-mono font-bold border border-purple-500/30">
@@ -769,7 +811,7 @@ export default function App() {
                   <FiCheckCircle className="h-8 w-8 text-slate-600 mx-auto mb-2" />
                   <p className="text-xs text-slate-400">No operational bottlenecks detected in the buffer window.</p>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    Feed 3+ cold food complaints from Branch 2 to trigger anomaly detection.
+                    Feed 3+ similar complaints from the same {resourceLabel.toLowerCase()} to trigger anomaly detection.
                   </p>
                 </div>
               ) : (
@@ -781,30 +823,36 @@ export default function App() {
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="text-[10px] font-mono text-purple-400 font-bold uppercase tracking-wider">
-                          SYSTEMIC INCIDENT • {inc.branchId.toUpperCase()}
+                          SYSTEMIC INCIDENT • {resourceName(inc.resourceId).toUpperCase()}
                         </div>
                         <h4 className="text-sm font-bold text-white mt-0.5">{inc.title}</h4>
                       </div>
-                      <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px] font-bold border border-red-500/30">
-                        {inc.delayRatio}x Delay Ratio
-                      </span>
+                      {inc.signal && (
+                        <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px] font-bold border border-red-500/30">
+                          {inc.signal.ratio}x {inc.signal.label}
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-xs text-slate-300">{inc.summary}</p>
 
-                    {/* KDS Timing Telemetry */}
+                    {/* Operational Signal Telemetry */}
                     <div className="grid grid-cols-3 gap-2 bg-purple-950/30 p-2.5 rounded-lg border border-purple-900/40 font-mono text-center">
                       <div>
                         <div className="text-[10px] text-slate-400">Clustered Tickets</div>
                         <div className="text-base font-bold text-white">{inc.complaintCount}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400">KDS Avg Prep</div>
-                        <div className="text-base font-bold text-red-400">{inc.avgTicketTimeMinutes}m</div>
+                        <div className="text-[10px] text-slate-400">{inc.signal ? `Avg ${inc.signal.label}` : 'Signal'}</div>
+                        <div className="text-base font-bold text-red-400">
+                          {inc.signal ? `${inc.signal.average}${inc.signal.unit}` : 'n/a'}
+                        </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400">Branch Base</div>
-                        <div className="text-base font-bold text-emerald-400">{inc.baselineTimeMinutes}m</div>
+                        <div className="text-[10px] text-slate-400">{resourceLabel} Baseline</div>
+                        <div className="text-base font-bold text-emerald-400">
+                          {inc.signal ? `${inc.signal.baseline}${inc.signal.unit}` : 'n/a'}
+                        </div>
                       </div>
                     </div>
 
@@ -812,8 +860,16 @@ export default function App() {
                     <div className="space-y-1.5 text-[11px]">
                       <div className="flex items-center gap-2 text-slate-300">
                         <span className="text-emerald-400 font-bold">✓ TicketSink:</span>
-                        <span>Single root incident routed to Branch 2 Shift Supervisor</span>
+                        <span>Single root incident routed to the {resourceName(inc.resourceId)} manager</span>
                       </div>
+                      {inc.itemDisabled && (
+                        <div className="flex items-center gap-2 text-slate-300">
+                          <span className="text-amber-400 font-bold">✓ AvailabilityControl:</span>
+                          <span>
+                            {itemLabel} {inc.itemName ?? ''} paused at {resourceName(inc.resourceId)}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 text-slate-300">
                         <span className="text-emerald-400 font-bold">✓ Policy:</span>
                         <span>{inc.recommendedAction}</span>
@@ -834,7 +890,7 @@ export default function App() {
                     <FiUserCheck className="text-amber-400" /> Human-In-The-Loop Approval Queue
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Policy Money-Gate: Auto-resolves ≤ ₹300, gates &gt; ₹300 for human signoff
+                    Policy Money-Gate: Auto-resolves ≤ {money(approvalThreshold)}, gates &gt; {money(approvalThreshold)} for human signoff
                   </p>
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-mono font-bold border border-amber-500/30">
@@ -859,7 +915,7 @@ export default function App() {
                           HIGH-VALUE FINANCIAL MUTATION
                         </span>
                         <h4 className="text-xs font-bold text-white mt-0.5">
-                          Claimed Refund: ₹{item.amount} ({item.orderId || 'Order'})
+                          Claimed Refund: {money(item.amount)} ({item.orderId || 'Order'})
                         </h4>
                       </div>
                       <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
@@ -878,7 +934,7 @@ export default function App() {
                         onClick={() => handleHitlDecision(item.id, 'approve')}
                         className="flex-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all"
                       >
-                        Approve ₹{item.amount} Refund
+                        Approve {money(item.amount)} Refund
                       </button>
                       <button
                         onClick={() => handleHitlDecision(item.id, 'reject')}
@@ -898,10 +954,10 @@ export default function App() {
             <div className="glass-panel p-5 rounded-2xl flex flex-col gap-4">
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <TbGitFork className="text-sky-400" /> 4-Adapter Architecture Explorer
+                  <TbGitFork className="text-sky-400" /> Adapter Architecture Explorer
                 </h3>
                 <p className="text-xs text-slate-400">
-                  The core engine never touches a DB directly; it only talks to these 4 interfaces
+                  The core engine never touches a DB directly; it only talks to these adapter interfaces
                 </p>
               </div>
 
@@ -932,12 +988,12 @@ export default function App() {
                   TicketSink
                 </button>
                 <button
-                  onClick={() => setAdapterSubTab('menuControl')}
+                  onClick={() => setAdapterSubTab('availabilityControl')}
                   className={`py-1 rounded-lg ${
-                    adapterSubTab === 'menuControl' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'
+                    adapterSubTab === 'availabilityControl' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'
                   }`}
                 >
-                  MenuControl
+                  Availability
                 </button>
               </div>
 
@@ -945,7 +1001,7 @@ export default function App() {
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300 max-h-64 overflow-y-auto">
                 {adapterSubTab === 'orderSource' && (
                   <div>
-                    <div className="text-sky-400 font-bold mb-2">// OrderSource (Real KDS & Order Data)</div>
+                    <div className="text-sky-400 font-bold mb-2">// OrderSource (Live Order Data)</div>
                     <pre className="text-[10px] text-slate-400 whitespace-pre-wrap">
                       {JSON.stringify(adaptersData?.orders?.slice(0, 4) || [], null, 2)}
                     </pre>
@@ -967,11 +1023,11 @@ export default function App() {
                     </pre>
                   </div>
                 )}
-                {adapterSubTab === 'menuControl' && (
+                {adapterSubTab === 'availabilityControl' && (
                   <div>
-                    <div className="text-amber-400 font-bold mb-2">// MenuControl (86'd Dishes & Safeguards)</div>
+                    <div className="text-amber-400 font-bold mb-2">// AvailabilityControl (Paused {itemLabel}s & Safeguards)</div>
                     <pre className="text-[10px] text-slate-400 whitespace-pre-wrap">
-                      {JSON.stringify(adaptersData?.disabledDishes || [], null, 2)}
+                      {JSON.stringify(adaptersData?.disabledItems || [], null, 2)}
                     </pre>
                   </div>
                 )}
@@ -1000,9 +1056,9 @@ export default function App() {
                 </div>
 
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                  <div className="font-bold text-purple-400 font-mono">blaze_correlate(complaintId, branchId)</div>
+                  <div className="font-bold text-purple-400 font-mono">blaze_correlate(complaintId, resourceId)</div>
                   <div className="text-slate-400 text-[11px] mt-0.5">
-                    Cross-references with live KDS operational timings to identify systemic bottlenecks.
+                    Cross-references with live operational signals to identify systemic bottlenecks.
                   </div>
                 </div>
 

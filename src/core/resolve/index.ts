@@ -2,21 +2,35 @@ import {
   TriagedComplaint,
   ResolutionAction,
   ResolutionActionType,
-  PolicyDecision,
-  ApprovalStatus
+  PolicyDecision
 } from '../types.js';
 import { ResolverAdapters } from '../../adapters/contracts.js';
-import { MoneyGate, ToolExecutionGuard, IdempotencyManager } from '../guardrails/index.js';
+import { MoneyGate, ToolExecutionGuard, IdempotencyManager, ToolExecutionLimits } from '../guardrails/index.js';
+import { CategoryPolicy, DomainProfile, findCategory } from '../domain.js';
+
+export interface ResolutionEngineOptions {
+  autoApproveThreshold: number;
+  maxCreditAmount: number;
+}
 
 export class ResolutionEngine {
   private moneyGate: MoneyGate;
+  private limits: ToolExecutionLimits;
   private idempotencyManager: IdempotencyManager;
   private hitlQueue: ResolutionAction[] = [];
   private executionHistory: ResolutionAction[] = [];
 
-  constructor(autoRefundThresholdINR: number = 300) {
-    this.moneyGate = new MoneyGate(autoRefundThresholdINR);
+  constructor(
+    private profile: DomainProfile,
+    options: ResolutionEngineOptions
+  ) {
+    this.moneyGate = new MoneyGate(options.autoApproveThreshold, profile.currency);
+    this.limits = { maxCreditAmount: options.maxCreditAmount, currency: profile.currency };
     this.idempotencyManager = new IdempotencyManager();
+  }
+
+  public getAutoApproveThreshold(): number {
+    return this.moneyGate.getThreshold();
   }
 
   public getHitlQueue(): ResolutionAction[] {
@@ -25,6 +39,14 @@ export class ResolutionEngine {
 
   public getExecutionHistory(): ResolutionAction[] {
     return [...this.executionHistory];
+  }
+
+  /** Puts an action proposed outside the pipeline (e.g. by the voice agent) in the supervisor queue. */
+  public queueForHumanApproval(action: ResolutionAction): void {
+    action.requiresApproval = true;
+    action.approvalStatus = 'pending_human';
+    this.hitlQueue.unshift(action);
+    this.executionHistory.push(action);
   }
 
   public async resolve(
@@ -61,11 +83,7 @@ export class ResolutionEngine {
       return { policyDecision: decision, actions: [action], hitlRequired: false };
     }
 
-    // 2. Determine appropriate resolution action & amount
-    let actionType: ResolutionActionType = 'create_ticket';
-    let targetAmount: number | undefined;
-
-    // Fetch order details if available
+    // 2. Determine the action and amount from the category's policy in the domain profile
     let orderTotal = 0;
     if (triage.orderId) {
       const order = await adapters.orderSource.getOrder(triage.orderId);
@@ -74,24 +92,9 @@ export class ResolutionEngine {
       }
     }
 
-    if (triage.category === 'cold_food') {
-      actionType = 'refund';
-      targetAmount = triage.claimedAmount || (orderTotal > 0 ? orderTotal : 280);
-    } else if (triage.category === 'missing_item' || triage.category === 'wrong_item') {
-      actionType = 'refund';
-      targetAmount = triage.claimedAmount || (orderTotal > 0 ? Math.min(orderTotal, 220) : 180);
-    } else if (triage.category === 'spill_leak') {
-      actionType = 'credit';
-      targetAmount = triage.claimedAmount || (orderTotal > 0 ? Math.min(orderTotal, 200) : 150);
-    } else if (triage.category === 'quality_issue') {
-      actionType = 'refund';
-      targetAmount = triage.claimedAmount || (orderTotal > 0 ? orderTotal : 350);
-    } else if (triage.category === 'delivery_delay') {
-      actionType = 'credit';
-      targetAmount = 100; // Apology credit
-    } else {
-      actionType = 'create_ticket';
-    }
+    const policy: CategoryPolicy = findCategory(this.profile, triage.category)?.policy ?? { action: 'create_ticket' };
+    const actionType: ResolutionActionType = policy.action;
+    const targetAmount = this.proposeAmount(policy, triage.claimedAmount, orderTotal);
 
     // 3. Create proposed action with stable idempotency key
     const idempotencyKey = `idem_${actionType}_${triage.orderId || triage.customerId || triage.id}_${targetAmount || 0}`;
@@ -105,6 +108,7 @@ export class ResolutionEngine {
         actionType,
         idempotencyKey,
         amount: targetAmount,
+        currency: this.profile.currency.code,
         orderId: triage.orderId,
         customerId: triage.customerId,
         reason: 'Duplicate request detected — returned existing idempotency receipt',
@@ -133,18 +137,19 @@ export class ResolutionEngine {
       actionType,
       idempotencyKey,
       amount: targetAmount,
+      currency: this.profile.currency.code,
       orderId: triage.orderId,
       customerId: triage.customerId,
-      dishId: triage.dishId,
-      branchId: triage.branchId,
-      reason: `Automated policy resolution for ${triage.category.replace('_', ' ')} (${triage.intent})`,
+      itemId: triage.itemId,
+      resourceId: triage.resourceId,
+      reason: `Automated policy resolution for ${triage.category.replace(/_/g, ' ')} (${triage.intent})`,
       requiresApproval: false,
       approvalStatus: 'auto_approved',
       createdAt: new Date()
     };
 
     // 4. Validate through Tool Execution Guard
-    const toolValidation = await ToolExecutionGuard.validateAction(proposedAction, triage, adapters);
+    const toolValidation = await ToolExecutionGuard.validateAction(proposedAction, triage, adapters, this.limits);
     if (!toolValidation.valid) {
       proposedAction.approvalStatus = 'failed';
       proposedAction.reason = `Blocked by Tool Execution Guard: ${toolValidation.reason}`;
@@ -238,32 +243,38 @@ export class ResolutionEngine {
     return action;
   }
 
+  private proposeAmount(policy: CategoryPolicy, claimedAmount: number | undefined, orderTotal: number): number | undefined {
+    if (policy.action === 'create_ticket') return undefined;
+    if (policy.fixedAmount !== undefined) return policy.fixedAmount;
+    if (claimedAmount) return claimedAmount;
+    if (policy.useOrderTotal && orderTotal > 0) {
+      return policy.maxAmount !== undefined ? Math.min(orderTotal, policy.maxAmount) : orderTotal;
+    }
+    return policy.defaultAmount;
+  }
+
   private async executeAction(action: ResolutionAction, adapters: ResolverAdapters): Promise<Record<string, unknown>> {
     switch (action.actionType) {
-      case 'refund':
-        const resolvedOrderId = action.orderId || 'ord-1021';
+      case 'refund': {
+        if (!action.orderId) throw new Error('Missing orderId for refund');
         if (!action.amount) throw new Error('Missing amount for refund');
-        const refundReceipt = await adapters.refundGateway.issueRefund(
-          resolvedOrderId,
-          action.amount,
-          action.idempotencyKey
-        );
+        const refundReceipt = await adapters.refundGateway.issueRefund(action.orderId, action.amount, action.idempotencyKey);
         return refundReceipt as unknown as Record<string, unknown>;
+      }
 
-      case 'credit':
-        const resolvedCustomerId = action.customerId || 'cust_registered_user';
+      case 'credit': {
+        if (!action.customerId) throw new Error('Missing customerId for credit');
         if (!action.amount) throw new Error('Missing amount for credit');
-        const creditReceipt = await adapters.refundGateway.issueCredit(
-          resolvedCustomerId,
-          action.amount,
-          action.idempotencyKey
-        );
+        const creditReceipt = await adapters.refundGateway.issueCredit(action.customerId, action.amount, action.idempotencyKey);
         return creditReceipt as unknown as Record<string, unknown>;
+      }
 
-      case 'disable_dish':
-        if (!action.dishId || !action.branchId) throw new Error('Missing dishId or branchId');
-        await adapters.menuControl.disableDish(action.dishId, action.branchId, action.reason);
-        return { dishDisabled: true, dishId: action.dishId, branchId: action.branchId };
+      case 'disable_item': {
+        if (!action.itemId || !action.resourceId) throw new Error('Missing itemId or resourceId');
+        if (!adapters.availabilityControl) throw new Error('No AvailabilityControl adapter configured');
+        await adapters.availabilityControl.disableItem(action.itemId, action.resourceId, action.reason);
+        return { itemDisabled: true, itemId: action.itemId, resourceId: action.resourceId };
+      }
 
       default:
         return { status: 'acknowledged', actionType: action.actionType };

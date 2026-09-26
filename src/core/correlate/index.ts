@@ -1,15 +1,25 @@
-import { TriagedComplaint, CorrelateCluster, CorrelatedIncident } from '../types.js';
-import { ResolverAdapters } from '../../adapters/contracts.js';
+import { TriagedComplaint, CorrelateCluster, CorrelatedIncident, SignalSummary } from '../types.js';
+import { ResolverAdapters, OperationalSignal, ResourceBaseline } from '../../adapters/contracts.js';
+import { DomainProfile, GENERAL_INQUIRY, categoryLabel, findCategory } from '../domain.js';
+
+/** Complaints without a resource are grouped here instead of being guessed onto a real one. */
+export const UNASSIGNED_RESOURCE = 'unassigned';
+
+/** Clusters at least this size become a systemic incident. */
+const SYSTEMIC_COMPLAINT_COUNT = 3;
+
+/** A signal this many times above its baseline confirms an operational bottleneck. */
+const SIGNAL_ANOMALY_RATIO = 1.8;
 
 export class CorrelateEngine {
   private buffer: TriagedComplaint[] = [];
   private clusters: Map<string, CorrelateCluster> = new Map();
   private incidents: Map<string, CorrelatedIncident> = new Map();
-  private slidingWindowHours: number;
 
-  constructor(slidingWindowHours: number = 24) {
-    this.slidingWindowHours = slidingWindowHours;
-  }
+  constructor(
+    private profile: DomainProfile,
+    private slidingWindowHours: number = 24
+  ) {}
 
   public getBuffer(): TriagedComplaint[] {
     this.pruneOldComplaints();
@@ -33,7 +43,7 @@ export class CorrelateEngine {
     incident?: CorrelatedIncident;
   }> {
     // Exclude prompt injections or non-actionable complaints from correlation buffer
-    if (complaint.isPromptInjection || complaint.category === 'general_inquiry') {
+    if (complaint.isPromptInjection || complaint.category === GENERAL_INQUIRY) {
       return { isSystemic: false };
     }
 
@@ -41,58 +51,35 @@ export class CorrelateEngine {
     this.buffer.push(complaint);
     this.pruneOldComplaints();
 
-    // 2. Identify cluster key (e.g. branchId + category, or branchId + category + dishId)
-    const branch = complaint.branchId || 'branch_cp_02';
-    const dish = complaint.dishId || 'general';
-    const clusterKey = `${branch}::${complaint.category}::${dish}`;
+    // 2. Identify cluster key (resource + category + item)
+    const resource = complaint.resourceId || UNASSIGNED_RESOURCE;
+    const item = complaint.itemId || 'general';
+    const clusterKey = `${resource}::${complaint.category}::${item}`;
 
-    // Find all complaints matching this cluster in the active window
-    const matchingComplaints = this.buffer.filter(c => {
-      const cBranch = c.branchId || 'branch_cp_02';
-      const cDish = c.dishId || 'general';
-      const sameBranch = cBranch === branch;
+    // Find all complaints in the active window sharing at least 2 of {resource, category, item}
+    const matchingComplaints = this.buffer.filter((c) => {
+      const sameResource = (c.resourceId || UNASSIGNED_RESOURCE) === resource;
       const sameCategory = c.category === complaint.category;
-      const sameDish = cDish === dish;
-
-      // Match >= 2 shared dimensions (or exact cluster)
-      return (sameBranch && sameCategory) || (sameBranch && sameDish) || (sameCategory && sameDish);
+      const sameItem = (c.itemId || 'general') === item;
+      return (sameResource && sameCategory) || (sameResource && sameItem) || (sameCategory && sameItem);
     });
+    const ticketIds = matchingComplaints.map((c) => c.id);
 
-    // 3. Cross-reference with real Operational Data (KDS Timings from OrderSource)
-    let totalPrepMinutes = 0;
-    let timingCount = 0;
-    const ticketIds: string[] = [];
-
-    for (const c of matchingComplaints) {
-      ticketIds.push(c.id);
-      if (c.orderId) {
-        try {
-          const timing = await adapters.orderSource.getKitchenTiming(c.orderId);
-          if (timing) {
-            totalPrepMinutes += timing.prepMinutes;
-            timingCount++;
-          }
-        } catch {
-          // ignore timing fetch errors for resilience
-        }
-      }
-    }
-
-    const branchStats = await adapters.orderSource.getBranchAveragePrepTime(branch);
-    const baselinePrep = branchStats.baselineMinutes || 4.0;
-    const avgKitchenPrep = timingCount > 0 ? Number((totalPrepMinutes / timingCount).toFixed(1)) : branchStats.avgMinutes || 8.5;
-    const isAnomalous = matchingComplaints.length >= 3 || (avgKitchenPrep >= baselinePrep * 1.8 && matchingComplaints.length >= 2);
+    // 3. Cross-reference with live operational data from the SignalSource adapter, if any
+    const signal = await this.measureSignal(matchingComplaints, resource, adapters);
+    const signalConfirmed = signal !== undefined && signal.average >= signal.baseline * SIGNAL_ANOMALY_RATIO;
+    const isAnomalous =
+      matchingComplaints.length >= SYSTEMIC_COMPLAINT_COUNT || (signalConfirmed && matchingComplaints.length >= 2);
 
     const cluster: CorrelateCluster = {
       clusterKey,
-      branchId: branch,
+      resourceId: resource,
       category: complaint.category,
-      dishId: complaint.dishId,
-      dishName: complaint.dish,
-      complaintIds: matchingComplaints.map(c => c.id),
+      itemId: complaint.itemId,
+      itemName: complaint.itemName,
+      complaintIds: ticketIds,
       count: matchingComplaints.length,
-      avgKitchenPrepMinutes: avgKitchenPrep,
-      baselinePrepMinutes: baselinePrep,
+      signal,
       isAnomalous,
       firstSeen: matchingComplaints[0].timestamp,
       lastSeen: new Date()
@@ -100,60 +87,56 @@ export class CorrelateEngine {
 
     this.clusters.set(clusterKey, cluster);
 
-    // 4. If systemic threshold is breached (>= 3 complaints or significant delay ratio) -> Emit an Incident!
-    if (isAnomalous && matchingComplaints.length >= 3) {
-      cluster.rootCauseHypothesis = `KDS kitchen bottleneck detected at ${branch}. Average ticket time ${avgKitchenPrep}m vs ${baselinePrep}m standard baseline (${(avgKitchenPrep / baselinePrep).toFixed(1)}x delay).`;
+    // 4. If the systemic threshold is breached -> emit (or grow) one incident
+    if (isAnomalous && matchingComplaints.length >= SYSTEMIC_COMPLAINT_COUNT) {
+      const definition = findCategory(this.profile, complaint.category);
+      const label = categoryLabel(this.profile, complaint.category);
+      cluster.rootCauseHypothesis = this.describeRootCause(label, resource, matchingComplaints.length, signal, signalConfirmed);
+      const summary = this.describeIncident(resource, matchingComplaints.length, signal, signalConfirmed);
 
       let incident = Array.from(this.incidents.values()).find(
-        inc => inc.branchId === branch && inc.category === complaint.category && inc.status !== 'resolved'
+        (inc) => inc.resourceId === resource && inc.category === complaint.category && inc.status !== 'resolved'
       );
 
-      const title = `🚨 Systemic ${complaint.category.replace('_', ' ').toUpperCase()} at ${branch.toUpperCase()}`;
-      const summary = `${matchingComplaints.length} customer complaints clustered. KDS avg prep time is ${avgKitchenPrep} min vs ${baselinePrep} min baseline. Kitchen station delay confirmed.`;
-
       if (!incident) {
-        // Create new incident via TicketSink adapter
         incident = await adapters.ticketSink.linkTicketsToIncident(ticketIds, summary, {
-          title,
-          branchId: branch,
+          title: `🚨 Systemic ${label.toUpperCase()} at ${resource.toUpperCase()}`,
+          resourceId: resource,
           category: complaint.category,
-          dishId: complaint.dishId,
-          dishName: complaint.dish,
+          itemId: complaint.itemId,
+          itemName: complaint.itemName,
           complaintCount: matchingComplaints.length,
-          avgTicketTimeMinutes: avgKitchenPrep,
-          baselineTimeMinutes: baselinePrep,
-          delayRatio: Number((avgKitchenPrep / baselinePrep).toFixed(2)),
-          recommendedAction: `Inspect KDS fry/expedite station at ${branch}, dispatch shift manager, and prioritize hot thermal packaging.`
+          signal,
+          recommendedAction:
+            definition?.incidentPlaybook?.replace(/\{resource\}/g, resource) ||
+            `Investigate ${label.toLowerCase()} reports at ${resource} and notify the responsible manager.`
         });
 
-        // Automatically notify branch manager
-        await adapters.ticketSink.routeToManager(incident.incidentId, branch);
+        // Automatically notify the resource manager
+        await adapters.ticketSink.routeToManager(incident.incidentId, resource);
         incident.managerNotified = true;
 
-        // If quality issue is severe (spoiled/bad batch), automatically 86/disable the dish
-        if (complaint.category === 'quality_issue' && complaint.dishId) {
-          await adapters.menuControl.disableDish(
-            complaint.dishId,
-            branch,
-            `Automated safeguard: Clustered quality complaints (${matchingComplaints.length}) with anomalous food defect reports.`
+        // Categories marked as a safety risk pull the affected item until someone reviews it
+        if (definition?.disableItemOnIncident && complaint.itemId && adapters.availabilityControl) {
+          await adapters.availabilityControl.disableItem(
+            complaint.itemId,
+            resource,
+            `Automated safeguard: ${matchingComplaints.length} clustered ${label.toLowerCase()} reports.`
           );
-          incident.dishDisabled = true;
+          incident.itemDisabled = true;
         }
 
         this.incidents.set(incident.incidentId, incident);
       } else {
-        // Update existing incident count and tickets
         incident.complaintCount = matchingComplaints.length;
         incident.ticketIds = Array.from(new Set([...incident.ticketIds, ...ticketIds]));
-        incident.avgTicketTimeMinutes = avgKitchenPrep;
-        incident.delayRatio = Number((avgKitchenPrep / baselinePrep).toFixed(2));
+        incident.signal = signal;
+        incident.summary = summary;
         incident.updatedAt = new Date();
       }
 
       cluster.incidentId = incident.incidentId;
-
-      // Mark matching complaints in buffer as incident linked
-      matchingComplaints.forEach(c => {
+      matchingComplaints.forEach((c) => {
         c.incidentLinked = true;
       });
       complaint.incidentLinked = true;
@@ -171,8 +154,80 @@ export class CorrelateEngine {
     };
   }
 
+  private async measureSignal(
+    complaints: TriagedComplaint[],
+    resourceId: string,
+    adapters: ResolverAdapters
+  ): Promise<SignalSummary | undefined> {
+    const source = adapters.signalSource;
+    if (!source) return undefined;
+
+    const readings: OperationalSignal[] = [];
+    for (const c of complaints) {
+      if (!c.orderId) continue;
+      try {
+        const reading = await source.getOrderSignal(c.orderId);
+        if (reading) readings.push(reading);
+      } catch {
+        // One failed lookup must not block correlation
+      }
+    }
+
+    let resourceBaseline: ResourceBaseline | null = null;
+    try {
+      resourceBaseline = await source.getResourceBaseline(resourceId, this.slidingWindowHours);
+    } catch {
+      // Fall back to per-order baselines below
+    }
+
+    const reference = readings[0] ?? resourceBaseline;
+    const baseline = resourceBaseline?.baseline ?? readings[0]?.baseline;
+    const average =
+      readings.length > 0 ? readings.reduce((sum, r) => sum + r.value, 0) / readings.length : resourceBaseline?.current;
+    if (!reference || baseline === undefined || average === undefined || baseline <= 0) {
+      return undefined;
+    }
+
+    const roundedAverage = Number(average.toFixed(1));
+    return {
+      metric: reference.metric,
+      label: reference.label,
+      unit: reference.unit,
+      average: roundedAverage,
+      baseline,
+      ratio: Number((roundedAverage / baseline).toFixed(2))
+    };
+  }
+
+  private describeRootCause(
+    label: string,
+    resource: string,
+    count: number,
+    signal: SignalSummary | undefined,
+    signalConfirmed: boolean
+  ): string {
+    if (signal && signalConfirmed) {
+      return `Operational bottleneck detected at ${resource}. Average ${signal.label.toLowerCase()} ${signal.average} ${signal.unit} vs ${signal.baseline} ${signal.unit} baseline (${signal.ratio.toFixed(1)}x).`;
+    }
+    return `${count} similar ${label.toLowerCase()} reports at ${resource} within ${this.slidingWindowHours}h. Operational signals do not show a bottleneck; investigate the item or process.`;
+  }
+
+  private describeIncident(
+    resource: string,
+    count: number,
+    signal: SignalSummary | undefined,
+    signalConfirmed: boolean
+  ): string {
+    const base = `${count} customer complaints clustered at ${resource}.`;
+    if (!signal) return base;
+    const comparison = `Average ${signal.label.toLowerCase()} is ${signal.average} ${signal.unit} vs ${signal.baseline} ${signal.unit} baseline`;
+    return signalConfirmed
+      ? `${base} ${comparison} (${signal.ratio.toFixed(1)}x): operational delay confirmed.`
+      : `${base} ${comparison}: no operational delay detected.`;
+  }
+
   private pruneOldComplaints(): void {
     const cutoff = Date.now() - this.slidingWindowHours * 60 * 60 * 1000;
-    this.buffer = this.buffer.filter(c => new Date(c.timestamp).getTime() > cutoff);
+    this.buffer = this.buffer.filter((c) => new Date(c.timestamp).getTime() > cutoff);
   }
 }

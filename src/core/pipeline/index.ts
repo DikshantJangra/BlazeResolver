@@ -1,16 +1,23 @@
-import { CustomerInput, PipelineResult, TriagedComplaint, ResolutionAction } from '../types.js';
+import { CustomerInput, PipelineResult, TriagedComplaint } from '../types.js';
 import { ResolverAdapters } from '../../adapters/contracts.js';
+import { DomainProfile, GENERIC_PROFILE } from '../domain.js';
 import { TriageEngine } from '../triage/index.js';
 import { CorrelateEngine } from '../correlate/index.js';
 import { ResolutionEngine } from '../resolve/index.js';
 import { ResponseEngine } from '../respond/index.js';
 
 export interface BlazeResolverConfig {
-  autoRefundThresholdINR?: number;
+  /** Business vocabulary and policy. Defaults to GENERIC_PROFILE. */
+  profile?: DomainProfile;
+  /** Overrides profile.moneyPolicy.autoApproveThreshold. */
+  autoApproveThreshold?: number;
+  /** Overrides profile.moneyPolicy.maxCreditAmount. */
+  maxCreditAmount?: number;
   correlationSlidingWindowHours?: number;
 }
 
 export class BlazeResolverPipeline {
+  private profile: DomainProfile;
   private triageEngine: TriageEngine;
   private correlateEngine: CorrelateEngine;
   private resolutionEngine: ResolutionEngine;
@@ -21,14 +28,26 @@ export class BlazeResolverPipeline {
 
   constructor(adapters: ResolverAdapters, config: BlazeResolverConfig = {}) {
     this.adapters = adapters;
-    this.triageEngine = new TriageEngine();
-    this.correlateEngine = new CorrelateEngine(config.correlationSlidingWindowHours || 24);
-    this.resolutionEngine = new ResolutionEngine(config.autoRefundThresholdINR || 300);
-    this.responseEngine = new ResponseEngine();
+    this.profile = config.profile ?? GENERIC_PROFILE;
+    this.triageEngine = new TriageEngine(this.profile);
+    this.correlateEngine = new CorrelateEngine(this.profile, config.correlationSlidingWindowHours || 24);
+    this.resolutionEngine = new ResolutionEngine(this.profile, {
+      autoApproveThreshold: config.autoApproveThreshold ?? this.profile.moneyPolicy.autoApproveThreshold,
+      maxCreditAmount: config.maxCreditAmount ?? this.profile.moneyPolicy.maxCreditAmount
+    });
+    this.responseEngine = new ResponseEngine(this.profile);
+  }
+
+  public getProfile(): DomainProfile {
+    return this.profile;
   }
 
   public getAdapters(): ResolverAdapters {
     return this.adapters;
+  }
+
+  public getTriageEngine(): TriageEngine {
+    return this.triageEngine;
   }
 
   public getCorrelateEngine(): CorrelateEngine {

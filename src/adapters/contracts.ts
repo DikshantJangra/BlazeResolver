@@ -6,37 +6,59 @@ export interface OrderItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-  customizations?: string[];
+  /** Variant details such as size, colour or add-ons. */
+  options?: string[];
 }
+
+export type OrderStatus = 'pending' | 'processing' | 'in_transit' | 'delivered' | 'cancelled' | 'refunded';
 
 export interface Order {
   id: string;
   customerId: string;
   customerName: string;
   customerPhone?: string;
-  branchId: string;
-  branchName: string;
+  /** Location or operational unit that fulfilled the order (store, warehouse, branch). */
+  resourceId: string;
+  resourceName: string;
   items: OrderItem[];
   totalAmount: number;
-  deliveryFee: number;
-  tax: number;
-  status: 'pending' | 'preparing' | 'out_for_delivery' | 'delivered' | 'cancelled';
+  /** ISO 4217 code. */
+  currency: string;
+  deliveryFee?: number;
+  tax?: number;
+  status: OrderStatus;
   orderedAt: Date;
   deliveredAt?: Date;
-  paymentMethod: 'upi' | 'card' | 'wallet' | 'cod';
+  paymentMethod?: string;
   paymentId?: string;
+  metadata?: Record<string, unknown>;
 }
 
-export interface KitchenTiming {
+/** One measurement of an operational metric for an order, e.g. kitchen prep time or warehouse dispatch time. */
+export interface OperationalSignal {
   orderId: string;
-  branchId: string;
-  prepStart: Date;
-  prepEnd: Date;
-  prepMinutes: number;
-  baselineMinutes: number;
-  isBottleneck: boolean;
-  station?: string;
-  chefNotes?: string;
+  resourceId: string;
+  metric: string;
+  label: string;
+  unit: string;
+  value: number;
+  baseline: number;
+  isAnomalous: boolean;
+  /** Where in the operation it was measured, e.g. a station or packing line. */
+  stage?: string;
+  notes?: string;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface ResourceBaseline {
+  metric: string;
+  label: string;
+  unit: string;
+  /** Current average for the resource over the requested window. */
+  current: number;
+  /** Normal value for the resource. */
+  baseline: number;
 }
 
 export interface RefundReceipt {
@@ -68,7 +90,7 @@ export interface Ticket {
   complaintId: string;
   customerId?: string;
   orderId?: string;
-  branchId?: string;
+  resourceId?: string;
   title: string;
   description: string;
   category: string;
@@ -79,17 +101,24 @@ export interface Ticket {
   assignedManager?: string;
 }
 
+export interface DisabledItem {
+  itemId: string;
+  itemName: string;
+  resourceId: string;
+  disabledAt: Date;
+  reason: string;
+}
+
 /**
- * The 4 Core Adapter Interfaces of BlazeResolver.
- * The core engine never touches a database or payment gateway directly;
- * it only communicates through these 4 typed contracts.
+ * The adapter interfaces of BlazeResolver.
+ * The core engine never touches a database, payment provider or ops system directly;
+ * it only communicates through these typed contracts. Implement them for your business
+ * and the core runs unchanged.
  */
 
 export interface OrderSource {
   getOrder(orderId: string): Promise<Order | null>;
   getOrdersByCustomer(customerId: string, since?: Date): Promise<Order[]>;
-  getKitchenTiming(orderId: string): Promise<KitchenTiming | null>;
-  getBranchAveragePrepTime(branchId: string, shiftWindowHours?: number): Promise<{ avgMinutes: number; baselineMinutes: number }>;
 }
 
 export interface RefundGateway {
@@ -101,20 +130,28 @@ export interface RefundGateway {
 export interface TicketSink {
   createTicket(complaint: TriagedComplaint): Promise<Ticket>;
   linkTicketsToIncident(ticketIds: string[], incidentSummary: string, incidentData?: Partial<CorrelatedIncident>): Promise<CorrelatedIncident>;
-  routeToManager(ticketId: string, branchId: string, notes?: string): Promise<void>;
-  getTickets(filter?: { branchId?: string; incidentId?: string; status?: string }): Promise<Ticket[]>;
+  routeToManager(ticketId: string, resourceId: string, notes?: string): Promise<void>;
+  getTickets(filter?: { resourceId?: string; incidentId?: string; status?: string }): Promise<Ticket[]>;
 }
 
-export interface MenuControl {
-  disableDish(dishId: string, branchId: string, reason: string): Promise<void>;
-  enableDish(dishId: string, branchId: string): Promise<void>;
-  getDishAvailability(dishId: string, branchId: string): Promise<boolean>;
-  getDisabledDishes(branchId?: string): Promise<Array<{ dishId: string; dishName: string; branchId: string; disabledAt: Date; reason: string }>>;
+/** Optional. Lets the Correlate stage confirm a systemic issue with real operational data. */
+export interface SignalSource {
+  getOrderSignal(orderId: string): Promise<OperationalSignal | null>;
+  getResourceBaseline(resourceId: string, windowHours?: number): Promise<ResourceBaseline | null>;
+}
+
+/** Optional. Lets BlazeResolver temporarily pull an item (a dish, SKU, plan or feature) at a resource. */
+export interface AvailabilityControl {
+  disableItem(itemId: string, resourceId: string, reason: string): Promise<void>;
+  enableItem(itemId: string, resourceId: string): Promise<void>;
+  isItemAvailable(itemId: string, resourceId: string): Promise<boolean>;
+  getDisabledItems(resourceId?: string): Promise<DisabledItem[]>;
 }
 
 export interface ResolverAdapters {
   orderSource: OrderSource;
   refundGateway: RefundGateway;
   ticketSink: TicketSink;
-  menuControl: MenuControl;
+  signalSource?: SignalSource;
+  availabilityControl?: AvailabilityControl;
 }

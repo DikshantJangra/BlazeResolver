@@ -5,7 +5,7 @@ export function getAgentToolSchemas() {
   return [
     {
       name: 'blaze_triage',
-      description: 'Classify customer support complaint into structured intent, category, severity, and extracted entities (dish, branch, orderId, claimedAmount). Enforces prompt-injection security guardrail.',
+      description: 'Classify customer support complaint into structured intent, category, severity, and extracted entities (item, resource, orderId, claimedAmount). Enforces prompt-injection security guardrail.',
       parameters: {
         type: 'object',
         properties: {
@@ -13,24 +13,24 @@ export function getAgentToolSchemas() {
           channel: { type: 'string', enum: ['text', 'voice', 'webhook', 'email'], default: 'text' },
           orderId: { type: 'string', description: 'Optional known order identifier' },
           customerId: { type: 'string', description: 'Optional customer identifier' },
-          branchId: { type: 'string', description: 'Optional branch identifier' }
+          resourceId: { type: 'string', description: 'Optional location or operational unit identifier (store, warehouse, branch)' }
         },
         required: ['rawText']
       }
     },
     {
       name: 'blaze_correlate',
-      description: 'Cross-reference customer complaint with live operational KDS kitchen prep timestamps across sliding buffer window. Detects systemic bottlenecks and emits linked Incidents instead of isolated tickets.',
+      description: 'Cross-reference customer complaint with live operational signals (e.g. prep time, dispatch delay) across a sliding buffer window. Detects systemic bottlenecks and emits linked Incidents instead of isolated tickets.',
       parameters: {
         type: 'object',
         properties: {
           complaintId: { type: 'string', description: 'The triaged complaint ID' },
-          category: { type: 'string', description: 'Triage category (e.g. cold_food, delivery_delay)' },
-          branchId: { type: 'string', description: 'Restaurant branch ID' },
-          dishId: { type: 'string', description: 'Optional dish ID' },
+          category: { type: 'string', description: 'Triage category from the active domain profile (e.g. damaged_item, delivery_delay)' },
+          resourceId: { type: 'string', description: 'Resource ID (store, warehouse, branch)' },
+          itemId: { type: 'string', description: 'Optional item ID' },
           orderId: { type: 'string', description: 'Associated order ID' }
         },
-        required: ['complaintId', 'category', 'branchId']
+        required: ['complaintId', 'category', 'resourceId']
       }
     },
     {
@@ -42,7 +42,7 @@ export function getAgentToolSchemas() {
           triageId: { type: 'string', description: 'Triaged complaint ID' },
           category: { type: 'string', description: 'Complaint category' },
           orderId: { type: 'string', description: 'Order ID to resolve' },
-          claimedAmount: { type: 'number', description: 'Claimed refund amount in INR' }
+          claimedAmount: { type: 'number', description: 'Claimed refund amount in the profile currency' }
         },
         required: ['triageId', 'category']
       }
@@ -69,7 +69,7 @@ export function getAgentToolSchemas() {
           channel: { type: 'string', enum: ['text', 'voice', 'webhook'], default: 'text' },
           orderId: { type: 'string', description: 'Associated order ID if known' },
           customerId: { type: 'string', description: 'Customer ID' },
-          branchId: { type: 'string', description: 'Branch ID' }
+          resourceId: { type: 'string', description: 'Resource ID (store, warehouse, branch)' }
         },
         required: ['rawText']
       }
@@ -88,7 +88,7 @@ export function createAgentToolExecutor(pipeline: BlazeResolverPipeline) {
             rawText: String(args.rawText || ''),
             orderId: args.orderId as string | undefined,
             customerId: args.customerId as string | undefined,
-            branchId: args.branchId as string | undefined,
+            resourceId: args.resourceId as string | undefined,
             timestamp: new Date()
           };
           return await pipeline.processComplaint(input);
@@ -101,10 +101,10 @@ export function createAgentToolExecutor(pipeline: BlazeResolverPipeline) {
             rawText: String(args.rawText || ''),
             orderId: args.orderId as string | undefined,
             customerId: args.customerId as string | undefined,
-            branchId: args.branchId as string | undefined,
+            resourceId: args.resourceId as string | undefined,
             timestamp: new Date()
           };
-          const triaged = await pipeline['triageEngine'].triage(input);
+          const triaged = await pipeline.getTriageEngine().triage(input);
           return triaged;
         }
 

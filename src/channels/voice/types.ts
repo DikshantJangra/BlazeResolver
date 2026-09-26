@@ -4,7 +4,7 @@ export interface VoiceSessionConfig {
   systemInstruction?: string;
   orderId?: string;
   customerId?: string;
-  branchId?: string;
+  resourceId?: string;
   apiKey?: string;
 }
 

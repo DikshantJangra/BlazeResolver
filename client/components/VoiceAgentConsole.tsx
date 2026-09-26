@@ -18,7 +18,8 @@ import {
   FiSliders,
   FiLayers
 } from 'react-icons/fi';
-import { RiRestaurantLine, RiCustomerService2Fill, RiRobot2Line } from 'react-icons/ri';
+import { RiCustomerService2Fill, RiRobot2Line } from 'react-icons/ri';
+import type { ProfileInfo } from '../App.js';
 import { TbWaveSine } from 'react-icons/tb';
 
 interface VoiceMessage {
@@ -39,11 +40,13 @@ interface ToolCallEvent {
 }
 
 interface VoiceAgentConsoleProps {
+  profile?: ProfileInfo | null;
   onIncidentDetected?: () => void;
   onHitlUpdated?: () => void;
 }
 
 export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
+  profile,
   onIncidentDetected,
   onHitlUpdated
 }) => {
@@ -52,8 +55,15 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [activeVoice, setActiveVoice] = useState('Kore');
-  const [activeUserId, setActiveUserId] = useState('cust_amit_01');
-  const [activeOrderId, setActiveOrderId] = useState('ord-1021');
+  const [activeUserId, setActiveUserId] = useState('');
+  const [activeOrderId, setActiveOrderId] = useState('');
+
+  // Default the demo customer and order to the active example business once its profile loads
+  useEffect(() => {
+    if (!profile) return;
+    setActiveUserId((current) => current || profile.demo.defaultCustomerId);
+    setActiveOrderId((current) => current || (profile.demo.sampleOrders[0]?.id ?? ''));
+  }, [profile]);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [messages, setMessages] = useState<VoiceMessage[]>([
     {
@@ -454,10 +464,11 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
               onChange={(e) => setActiveOrderId(e.target.value)}
               className="bg-transparent text-orange-400 font-mono font-bold focus:outline-none cursor-pointer"
             >
-              <option value="ord-1021">#ord-1021 (Biryani ₹280)</option>
-              <option value="ord-1044">#ord-1044 (Pizza Delay ₹350)</option>
-              <option value="ord-1030">#ord-1030 (Party Pack ₹1,450)</option>
-              <option value="ord-1040">#ord-1040 (Gulab Jamun ₹260)</option>
+              {profile?.demo.sampleOrders.map((order) => (
+                <option key={order.id} value={order.id}>
+                  #{order.id} ({order.label})
+                </option>
+              ))}
             </select>
           </div>
 
@@ -565,7 +576,7 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
                       </div>
                     )}
 
-                    {tool.result && (
+                    {tool.result != null && (
                       <div className="mt-1.5 text-[11px] text-emerald-300 bg-emerald-950/20 p-1.5 rounded border border-emerald-900/40 overflow-x-auto max-h-24">
                         <span className="text-emerald-500 font-sans text-[10px]">RESULT: </span>
                         {typeof tool.result === 'object'
@@ -585,30 +596,21 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
           {/* Quick Scenario Buttons */}
           <div className="p-3 bg-slate-950/60 border-b border-slate-800 flex items-center space-x-2 overflow-x-auto text-xs">
             <span className="text-[11px] text-slate-500 whitespace-nowrap font-medium">Quick Scenarios:</span>
-            <button
-              onClick={() => handleSendText('I ordered Hyderabadi Biryani on order #ord-1021 and it was delivered cold. Please process my refund.')}
-              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md whitespace-nowrap transition-all border border-slate-700"
-            >
-              🥘 Cold Biryani (#ord-1021)
-            </button>
-            <button
-              onClick={() => handleSendText('Where is my pizza? Order #ord-1044 is taking over 45 minutes!')}
-              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md whitespace-nowrap transition-all border border-slate-700"
-            >
-              ⏱️ Delayed Pizza (#ord-1044)
-            </button>
-            <button
-              onClick={() => handleSendText('I want a complete refund of ₹1450 for my party order #ord-1030. All curries leaked.')}
-              className="px-2.5 py-1 bg-amber-950/30 hover:bg-amber-900/40 text-amber-300 border border-amber-800/40 rounded-md whitespace-nowrap transition-all"
-            >
-              👑 Party Order ₹1450 (HITL)
-            </button>
-            <button
-              onClick={() => handleSendText('This service is ridiculous, transfer me to a human manager right now!')}
-              className="px-2.5 py-1 bg-red-950/30 hover:bg-red-900/40 text-red-300 border border-red-800/40 rounded-md whitespace-nowrap transition-all"
-            >
-              👨‍💼 Supervisor Transfer
-            </button>
+            {profile?.demo.samplePrompts.map((prompt) => (
+              <button
+                key={prompt.label}
+                onClick={() => handleSendText(prompt.text)}
+                className={`px-2.5 py-1 rounded-md whitespace-nowrap transition-all border ${
+                  prompt.tone === 'warning'
+                    ? 'bg-amber-950/30 hover:bg-amber-900/40 text-amber-300 border-amber-800/40'
+                    : prompt.tone === 'danger'
+                    ? 'bg-red-950/30 hover:bg-red-900/40 text-red-300 border-red-800/40'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                }`}
+              >
+                {prompt.label}
+              </button>
+            ))}
           </div>
 
           {/* Transcript Feed */}
