@@ -88,196 +88,201 @@ export default function HeroSection() {
   };
 
   return (
-    <section className="relative flex flex-col items-center justify-center w-full min-h-[96vh] pt-32 sm:pt-40 md:pt-44 pb-20 sm:pb-28 overflow-hidden">
-      {/* Ambient background glow & radial gradients */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-        <div
-          className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[550px] rounded-full blur-[180px] opacity-25 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(ellipse at center, #FF6B00 0%, #0055FF 50%, transparent 75%)",
-          }}
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))]" />
-      </div>
-
-      {/* Main Centered Content */}
-      <div className="relative z-10 ds-container flex flex-col items-center text-center max-w-[1200px] mx-auto px-4 sm:px-6">
-        {/* BlazeResolver Harness in signature font (Refined, proportional) */}
-        <div className="mb-4 sm:mb-5">
-          <h2
-            className="hero-brand-title text-white tracking-wider inline-block"
-            style={{
-              fontSize: "clamp(1.25rem, 2.5vw, 1.85rem)",
-              lineHeight: 1.2,
-              fontWeight: 700,
-            }}
-          >
+    // Bottom padding intentionally exceeds top padding: the fixed header occupies the
+    // top edge, so optical centering sits slightly above the geometric centre.
+    <section className="flex flex-col items-center justify-center w-full min-h-[88svh] pt-[clamp(5rem,7vw,7rem)] pb-[clamp(6rem,9vw,8rem)]">
+      {/*
+        Spacing is owned by the three block wrappers below rather than by per-child
+        `mb-*`, so the whole vertical rhythm reads from one place:
+          A Identity  →  gap-4  (16px)
+          ·  mt-8     →  32px   opens the message block
+          B Message   →  gap-5  (20px) / inner gap-4 (16px)
+          ·  mt-14    →  56px   the major break into the action block
+          C Action    →  gap-8  (32px) keeps the terminal bound to the CTAs
+      */}
+      <div className="w-full max-w-[1120px] mx-auto px-6 flex flex-col items-center text-center">
+        {/* ── A · Identity ─────────────────────────────────────────── */}
+        <div className="flex flex-col items-center gap-4">
+          <h2 className="hero-brand-title text-white tracking-wider inline-block">
             BlazeResolver <span className="text-[#FF6B00]">Harness</span>
           </h2>
-        </div>
 
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.1] backdrop-blur-xl mb-6 sm:mb-7 shadow-xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#28c840] animate-pulse" />
-          <span className="font-mono text-[11px] sm:text-xs font-normal text-white/75 tracking-normal">
-            Open-Source Customer Service Resolution Harness
-          </span>
-        </div>
-
-        {/* Headline (Punchy, balanced typography) */}
-        <h1
-          className="hero-main-headline font-ds-display text-white max-w-[980px] mb-6 sm:mb-8"
-          style={{
-            fontSize: "clamp(2.5rem, 5.2vw, 4.5rem)",
-            lineHeight: 1.08,
-            letterSpacing: "-0.03em",
-            fontWeight: 800,
-          }}
-        >
-          It doesn&apos;t just chat.{" "}
-          <span className="bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FFA066] bg-clip-text text-transparent">
-            It resolves.
-          </span>
-        </h1>
-
-        {/* Descriptions with comfortable breathing space */}
-        <div className="max-w-[760px] flex flex-col items-center gap-3.5 mb-10">
-          <p className="text-base sm:text-lg md:text-xl text-white/80 leading-relaxed font-normal">
-            BlazeResolver is an open-source, business-agnostic AI resolution harness.
-            Drop it into any product&apos;s support flow to triage inquiries, correlate operational telemetry,
-            and autonomously close out customer issues across voice and chat.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-2 text-xs sm:text-sm font-mono text-white/45">
-            <span>LLMs decide intent</span>
-            <span className="text-white/20">•</span>
-            <span>Deterministic mutations</span>
-            <span className="text-white/20">•</span>
-            <span>Policy-gated actions</span>
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.1] backdrop-blur-xl shadow-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#28c840] animate-pulse" />
+            <span className="font-mono text-[11px] sm:text-xs font-normal text-white/75 tracking-normal">
+              Open-Source Customer Service Resolution Harness
+            </span>
           </div>
         </div>
 
-        {/* Action Buttons with clean margins and generous hit-areas */}
-        <div className="flex flex-wrap items-center justify-center gap-3.5 sm:gap-4 mb-12">
-          <a
-            className="ds-btn-primary ds-btn-m flex items-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
-            href="https://github.com/DikshantJangra/BlazeResolver"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <FaGithub className="w-4 h-4" />
-            <span>View on GitHub</span>
-          </a>
-          <a
-            className="ds-btn-secondary ds-btn-m flex items-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
-            href="https://github.com/DikshantJangra/BlazeResolver#readme"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <FaBook className="w-4 h-4" />
-            <span>Developer Docs</span>
-          </a>
-          <a
-            className="ds-btn-secondary ds-btn-m flex items-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
-            href="#architecture"
-          >
-            <FaPuzzlePiece className="w-4 h-4" />
-            <span>4-Adapter Harness</span>
-          </a>
-          <a
-            className="ds-btn-secondary ds-btn-m flex items-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
-            href="#voice-demo"
-          >
-            <FaHeadset className="w-4 h-4" />
-            <span>Live Voice Demo</span>
-          </a>
+        {/* ── B · Message ──────────────────────────────────────────── */}
+        <div className="mt-8 flex flex-col items-center gap-5">
+          <h1 className="hero-main-headline font-ds-display text-white max-w-[980px]">
+            It doesn&apos;t just chat.{" "}
+            <span className="bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FFA066] bg-clip-text text-transparent">
+              It resolves.
+            </span>
+          </h1>
+
+          {/* The feature triplet is a caption to the paragraph, so it sits one step
+              tighter (16px) than the headline-to-paragraph gap (20px) above it. */}
+          <div className="flex flex-col items-center gap-4 max-w-[720px]">
+            <p className="text-base sm:text-lg md:text-xl text-white/80 leading-relaxed font-normal">
+              BlazeResolver is an open-source, business-agnostic AI resolution harness.
+              Drop it into any product&apos;s support flow to triage inquiries, correlate operational telemetry,
+              and autonomously close out customer issues across voice and chat.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2 text-xs sm:text-sm font-mono text-white/45">
+              <span>LLMs decide intent</span>
+              <span className="text-white/20">•</span>
+              <span>Deterministic mutations</span>
+              <span className="text-white/20">•</span>
+              <span>Policy-gated actions</span>
+            </div>
+          </div>
         </div>
 
-        {/* Interactive Install & Clone Terminal Component */}
-        <div className="w-full max-w-[640px] mx-auto text-left">
-          <div className="rounded-2xl border border-white/[0.12] bg-[#0c0d12]/90 backdrop-blur-2xl overflow-hidden shadow-2xl transition-all duration-300 hover:border-white/20">
-            {/* Top Bar: Selector Tabs + Status */}
-            <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-white/[0.08] bg-white/[0.015]">
-              {/* Package Manager Tabs */}
-              <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar">
-                {(["npm", "pnpm", "bun", "git"] as InstallTab[]).map((tab) => {
-                  const isActive = activeTab === tab;
-                  return (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setActiveTab(tab)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md transition-all cursor-pointer outline-none ${
-                        isActive
-                          ? "bg-white/10 text-white font-medium"
-                          : "text-white/40 hover:text-white/80 hover:bg-white/[0.03]"
-                      }`}
-                    >
-                      {tabConfigs[tab].icon}
-                      <span>{tabConfigs[tab].label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Status Tag */}
-              <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono text-white/40">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#28c840]" />
-                <span>v0.1.0</span>
-              </div>
-            </div>
-
-            {/* Code Command Row (Entire bar is interactive + Click to copy) */}
-            <div
-              onClick={handleCopy}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  handleCopy();
-                }
-              }}
-              title="Click anywhere to copy"
-              className="relative flex items-center justify-between gap-3 px-4 sm:px-5 py-4 sm:py-4.5 cursor-pointer group hover:bg-white/[0.02] transition-colors"
+        {/* ── C · Action ───────────────────────────────────────────────
+            Shares the 680px measure with the paragraph above, so the copy,
+            the buttons and the terminal all resolve to one vertical edge. */}
+        <div className="mt-14 w-full max-w-[800px] flex flex-col items-center gap-8">
+          {/*
+            Layout never switches `display` across breakpoints: the stale Tailwind v3
+            block in globals.css defines a plain `.grid` AFTER v4's `@media .sm\:flex`,
+            so a `grid → sm:flex` switch can never take effect. Staying on flex and
+            varying only `flex-basis` (a class with no v3 counterpart) sidesteps that.
+            2-up below `sm`, single 781px row above it.
+          */}
+          <div className="w-full flex flex-wrap justify-center gap-5">
+            {/* `sm:mr-2` widens the gap after the primary only — the one spacing
+                cue that marks it as primary without altering its styling. */}
+            <a
+              className="ds-btn-primary ds-btn-m basis-[calc(50%-0.625rem)] sm:basis-auto flex items-center justify-center gap-2.5 px-6 py-3 text-sm font-medium transition-all sm:mr-2"
+              href="https://github.com/DikshantJangra/BlazeResolver"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              {/* Terminal Prompt + Command */}
-              <div className="flex items-center gap-3 font-mono text-xs sm:text-sm overflow-x-auto no-scrollbar pr-2 select-all">
-                <div className="flex items-center gap-1.5 select-none text-[#FF6B00]">
-                  <FaTerminal className="w-3 h-3 opacity-70" />
-                  <span className="font-bold">$</span>
+              <FaGithub className="w-4 h-4" />
+              <span>View on GitHub</span>
+            </a>
+            <a
+              className="ds-btn-secondary ds-btn-m basis-[calc(50%-0.625rem)] sm:basis-auto flex items-center justify-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
+              href="https://github.com/DikshantJangra/BlazeResolver#readme"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <FaBook className="w-4 h-4" />
+              <span>Developer Docs</span>
+            </a>
+            <a
+              className="ds-btn-secondary ds-btn-m basis-[calc(50%-0.625rem)] sm:basis-auto flex items-center justify-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
+              href="#architecture"
+            >
+              <FaPuzzlePiece className="w-4 h-4" />
+              <span>4-Adapter Harness</span>
+            </a>
+            <a
+              className="ds-btn-secondary ds-btn-m basis-[calc(50%-0.625rem)] sm:basis-auto flex items-center justify-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
+              href="#voice-demo"
+            >
+              <FaHeadset className="w-4 h-4" />
+              <span>Live Voice Demo</span>
+            </a>
+          </div>
+
+          {/* Interactive Install & Clone Terminal Component */}
+          <div className="w-full text-left">
+            <div className="rounded-2xl border border-white/[0.12] bg-[#0c0d12]/90 backdrop-blur-2xl overflow-hidden shadow-2xl transition-all duration-300 hover:border-white/20">
+              {/* Top Bar: Selector Tabs + Status */}
+              <div className="flex items-center justify-between px-4 sm:px-5 py-1.5 border-b border-white/[0.08] bg-white/[0.015]">
+                {/*
+                  No negative margin here: the unlayered v3 Preflight in globals.css
+                  (`button {padding:0}`) outranks the layered `px-2.5` below, so each tab
+                  button currently has zero horizontal padding and its icon already sits
+                  on the row's padding edge — level with the `$` prompt. If that cascade
+                  conflict is ever resolved, `px-2.5` revives and this row needs `-ml-2.5`
+                  restored to keep the two left edges aligned.
+                */}
+                <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar">
+                  {(["npm", "pnpm", "bun", "git"] as InstallTab[]).map((tab) => {
+                    const isActive = activeTab === tab;
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setActiveTab(tab)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md transition-all cursor-pointer outline-none ${
+                          isActive
+                            ? "bg-white/10 text-white font-medium"
+                            : "text-white/40 hover:text-white/80 hover:bg-white/[0.03]"
+                        }`}
+                      >
+                        {tabConfigs[tab].icon}
+                        <span>{tabConfigs[tab].label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="whitespace-nowrap">
-                  {tabConfigs[activeTab].rendered}
+
+                {/* Status Tag */}
+                <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono text-white/40">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#28c840]" />
+                  <span>v0.1.0</span>
                 </div>
               </div>
 
-              {/* Copy Button */}
-              <div className="shrink-0 flex items-center">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
+              {/* Code Command Row (Entire bar is interactive + Click to copy) */}
+              <div
+                onClick={handleCopy}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
                     handleCopy();
-                  }}
-                  aria-label="Copy command"
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer border ${
-                    copied
-                      ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                      : "bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white/70 hover:text-white"
-                  }`}
-                >
-                  {copied ? (
-                    <>
-                      <FaCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <FaCopy className="w-3.5 h-3.5 text-white/60 group-hover:text-white" />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
+                  }
+                }}
+                title="Click anywhere to copy"
+                className="relative flex items-center justify-between gap-3 px-4 sm:px-5 py-4 cursor-pointer group hover:bg-white/[0.02] transition-colors"
+              >
+                {/* Terminal Prompt + Command */}
+                <div className="flex items-center gap-3 font-mono text-xs sm:text-sm overflow-x-auto no-scrollbar pr-2 select-all">
+                  <div className="flex items-center gap-1.5 select-none text-[#FF6B00]">
+                    <FaTerminal className="w-3 h-3 opacity-70" />
+                    <span className="font-bold">$</span>
+                  </div>
+                  <div className="whitespace-nowrap">
+                    {tabConfigs[activeTab].rendered}
+                  </div>
+                </div>
+
+                {/* Copy Button */}
+                <div className="shrink-0 flex items-center">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopy();
+                    }}
+                    aria-label="Copy command"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer border ${
+                      copied
+                        ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                        : "bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-white/70 hover:text-white"
+                    }`}
+                  >
+                    {copied ? (
+                      <>
+                        <FaCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <FaCopy className="w-3.5 h-3.5 text-white/60 group-hover:text-white" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

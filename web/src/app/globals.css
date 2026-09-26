@@ -701,6 +701,17 @@ video {
   font-weight: 800 !important;
   letter-spacing: -0.03em !important;
 }
+
+/* Referenced by the hero install terminal's scrollable tab strip and command row.
+   Without it those containers render a native horizontal scrollbar inside the card
+   on Windows/Linux and on macOS set to always show scrollbars. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 @keyframes arrow-sweep {
   0% {
     stroke-dashoffset: 20;
