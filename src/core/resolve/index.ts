@@ -153,6 +153,9 @@ export class ResolutionEngine {
     if (!toolValidation.valid) {
       proposedAction.approvalStatus = 'failed';
       proposedAction.reason = `Blocked by Tool Execution Guard: ${toolValidation.reason}`;
+      this.executionHistory.push(proposedAction);
+      // No money moves, but the claim must not be dropped: a person follows up through a support ticket.
+      const followUp = await this.openFollowUpTicket(triage, adapters, proposedAction);
       return {
         policyDecision: {
           allowed: false,
@@ -160,7 +163,7 @@ export class ResolutionEngine {
           recommendedAction: 'create_ticket',
           requiresHitl: false
         },
-        actions: [proposedAction],
+        actions: [proposedAction, followUp],
         hitlRequired: false
       };
     }
@@ -183,7 +186,7 @@ export class ResolutionEngine {
 
     // 6. Execute Deterministic Mutation via Adapter
     try {
-      const execResult = await this.executeAction(proposedAction, adapters);
+      const execResult = await this.executeAction(proposedAction, adapters, triage);
       proposedAction.approvalStatus = 'executed';
       proposedAction.executedAt = new Date();
       proposedAction.executionResult = execResult;
@@ -253,7 +256,49 @@ export class ResolutionEngine {
     return policy.defaultAmount;
   }
 
-  private async executeAction(action: ResolutionAction, adapters: ResolverAdapters): Promise<Record<string, unknown>> {
+  /** Opens a support ticket for a claim the guard blocked; a repeat of the same claim reuses the ticket. */
+  private async openFollowUpTicket(
+    triage: TriagedComplaint,
+    adapters: ResolverAdapters,
+    blocked: ResolutionAction
+  ): Promise<ResolutionAction> {
+    const followUp: ResolutionAction = {
+      id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      complaintId: triage.id,
+      actionType: 'create_ticket',
+      idempotencyKey: `${blocked.idempotencyKey}_follow_up_ticket`,
+      currency: this.profile.currency.code,
+      orderId: triage.orderId,
+      customerId: triage.customerId,
+      resourceId: triage.resourceId,
+      reason: `Support follow-up: ${blocked.reason}`,
+      requiresApproval: false,
+      approvalStatus: 'auto_approved',
+      createdAt: new Date()
+    };
+
+    try {
+      const existing = this.idempotencyManager.has(followUp.idempotencyKey)
+        ? this.idempotencyManager.getReceipt(followUp.idempotencyKey)
+        : undefined;
+      const result = (existing as Record<string, unknown> | undefined) ?? (await this.executeAction(followUp, adapters, triage));
+      this.idempotencyManager.saveReceipt(followUp.idempotencyKey, result);
+      followUp.approvalStatus = 'executed';
+      followUp.executedAt = new Date();
+      followUp.executionResult = result;
+    } catch (err: unknown) {
+      followUp.approvalStatus = 'failed';
+      followUp.reason = `Could not open a support ticket: ${err instanceof Error ? err.message : String(err)}`;
+    }
+    this.executionHistory.push(followUp);
+    return followUp;
+  }
+
+  private async executeAction(
+    action: ResolutionAction,
+    adapters: ResolverAdapters,
+    triage?: TriagedComplaint
+  ): Promise<Record<string, unknown>> {
     switch (action.actionType) {
       case 'refund': {
         if (!action.orderId) throw new Error('Missing orderId for refund');
@@ -274,6 +319,12 @@ export class ResolutionEngine {
         if (!adapters.availabilityControl) throw new Error('No AvailabilityControl adapter configured');
         await adapters.availabilityControl.disableItem(action.itemId, action.resourceId, action.reason);
         return { itemDisabled: true, itemId: action.itemId, resourceId: action.resourceId };
+      }
+
+      case 'create_ticket': {
+        if (!triage) throw new Error('Missing complaint for ticket');
+        const ticket = await adapters.ticketSink.createTicket(triage);
+        return { ticketId: ticket.id, ticketStatus: ticket.status };
       }
 
       default:

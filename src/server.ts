@@ -10,6 +10,7 @@ import { BlazeResolverPipeline } from './core/pipeline/index.js';
 import { loadExample } from './examples/index.js';
 import { VoiceChannelBridge } from './channels/voice.js';
 import { getAgentToolSchemas, createAgentToolExecutor } from './channels/byo-agent.js';
+import { buildInboundResponse } from './channels/inbound.js';
 import { CustomerInput } from './core/types.js';
 import { ReportSchema, anthropicComplete, triage } from './triage/index.js';
 import { ProjectRegistry, type Project } from './projects/index.js';
@@ -251,44 +252,7 @@ app.post('/api/inbound', async (req, res) => {
     const result = await pipeline.processComplaint(input);
     broadcastLiveEvent('pipeline_result', result);
 
-    const hitlActions = (result.resolution.actions || []).filter((a) => a.requiresApproval && a.approvalStatus === 'pending_human');
-    const isEscalated = hitlActions.length > 0 || result.triage.severity === 'critical';
-
-    const proposedAction = hitlActions.length > 0 ? {
-      actionId: hitlActions[0].id,
-      type: hitlActions[0].actionType,
-      amount: hitlActions[0].amount,
-      currency: profile.currency.code,
-      reason: hitlActions[0].reason,
-      resourceId: result.triage.resourceId || resourceId,
-      itemId: result.triage.itemId || itemId,
-      orderId: result.triage.orderId || orderId,
-      requiresSupervisorReview: true,
-      autoExecutable: false
-    } : {
-      type: result.resolution.actions[0]?.actionType || 'none',
-      amount: result.resolution.actions[0]?.amount,
-      currency: profile.currency.code,
-      reason: result.resolution.actions[0]?.reason || 'Autonomous resolution',
-      autoExecutable: true
-    };
-
-    return res.json({
-      success: true,
-      status: isEscalated ? 'escalated_with_proposed_action' : 'auto_resolved',
-      result: {
-        complaintId: result.complaintId,
-        intent: result.triage.intent,
-        category: result.triage.category,
-        urgency: result.triage.severity,
-        sentiment: result.triage.sentiment,
-        response: result.response.text,
-        executedActions: (result.resolution.actions || []).filter((a) => a.approvalStatus === 'executed')
-      },
-      proposedAction,
-      ticketId: isEscalated ? (hitlActions[0]?.id || `tkt_${Date.now()}`) : null,
-      autoResolved: !isEscalated
-    });
+    return res.json(buildInboundResponse(result, profile, { orderId, resourceId, itemId }));
   } catch (err: unknown) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
