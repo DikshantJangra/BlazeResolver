@@ -74,3 +74,11 @@ Thumbs.db
 
 # Cloned references
 references/
+
+# Roadmap
+ROADMAP.md
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class

@@ -28,6 +28,8 @@
   "author": "DJ",
   "license": "Apache-2.0",
   "dependencies": {
+    "@langchain/core": "^1.2.12",
+    "@langchain/langgraph": "^1.4.18",
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

@@ -85,6 +85,80 @@ app.post('/api/pipeline/process', async (req, res) => {
   }
 });
 
+// 1b. Inbound Intake Endpoint (Resolvd Pattern: POST /api/inbound -> triage -> policy auto-resolve or escalate with proposed action attached)
+app.post('/api/inbound', async (req, res) => {
+  try {
+    const {
+      customerMessage,
+      rawText,
+      customerId = 'cust_guest',
+      orderId,
+      resourceId,
+      itemId,
+      channel = 'inbound_api'
+    } = req.body;
+
+    const message = customerMessage || rawText;
+    if (!message) {
+      return res.status(400).json({ error: 'customerMessage or rawText is required' });
+    }
+
+    const input: CustomerInput = {
+      id: `inbound_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      channel,
+      rawText: message,
+      orderId,
+      customerId,
+      branchId: resourceId,
+      timestamp: new Date()
+    };
+
+    const result = await pipeline.processComplaint(input);
+    broadcastLiveEvent('pipeline_result', result);
+
+    const hitlActions = (result.resolution.actions || []).filter((a) => a.requiresApproval && a.approvalStatus === 'pending_human');
+    const isEscalated = hitlActions.length > 0 || result.triage.severity === 'critical';
+
+    const proposedAction = hitlActions.length > 0 ? {
+      actionId: hitlActions[0].id,
+      type: hitlActions[0].actionType,
+      amount: hitlActions[0].amount,
+      currency: 'INR',
+      reason: hitlActions[0].reason,
+      resourceId: result.triage.branchId || resourceId,
+      itemId: result.triage.dishId || itemId,
+      orderId: result.triage.orderId || orderId,
+      requiresSupervisorReview: true,
+      autoExecutable: false
+    } : {
+      type: result.resolution.actions[0]?.actionType || 'none',
+      amount: result.resolution.actions[0]?.amount,
+      currency: 'INR',
+      reason: result.resolution.actions[0]?.reason || 'Autonomous resolution',
+      autoExecutable: true
+    };
+
+    return res.json({
+      success: true,
+      status: isEscalated ? 'escalated_with_proposed_action' : 'auto_resolved',
+      result: {
+        complaintId: result.complaintId,
+        intent: result.triage.intent,
+        category: result.triage.category,
+        urgency: result.triage.severity,
+        sentiment: result.triage.sentiment,
+        response: result.response.text,
+        executedActions: (result.resolution.actions || []).filter((a) => a.approvalStatus === 'executed')
+      },
+      proposedAction,
+      ticketId: isEscalated ? (hitlActions[0]?.id || `tkt_${Date.now()}`) : null,
+      autoResolved: !isEscalated
+    });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // 2. Run All 20 Seed Complaints sequentially
 app.post('/api/pipeline/seed', async (req, res) => {
   try {
