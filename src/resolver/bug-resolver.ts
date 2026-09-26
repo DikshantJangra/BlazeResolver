@@ -11,7 +11,20 @@ export interface BugResolverOptions {
   ai: AIProvider;
   /** Fix attempts before giving up. Defaults to 3; at most HARD_MAX_ATTEMPTS. */
   maxAttempts?: number;
+  /** Edits to matching paths are refused, so a human has to make them. Defaults to DEFAULT_FORBIDDEN_PATHS. */
+  forbiddenPaths?: RegExp[];
 }
+
+/** CI config, secrets, lockfiles, and the code where a wrong fix costs the most: auth, payments, migrations. */
+export const DEFAULT_FORBIDDEN_PATHS: RegExp[] = [
+  /^\.github\//,
+  /(^|\/)\.env(\.|$)/,
+  /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/,
+  /(^|\/)(migrations?|auth|payments?|billing|secrets?)(\/|$)/i
+];
+
+/** A fix bigger than this is a redesign, not a bug fix; it goes to a human. */
+const MAX_PATCH_LINES = 400;
 
 /** No configuration can make the resolver try more fixes than this for one incident. */
 export const HARD_MAX_ATTEMPTS = 5;
@@ -111,8 +124,18 @@ export class BugResolver {
 
     const attempt: FixAttempt = { number, workspace, proposal };
 
+    const forbidden = this.options.forbiddenPaths ?? DEFAULT_FORBIDDEN_PATHS;
+    const blocked = proposal.edits.find((e) => forbidden.some((re) => re.test(e.path.replace(/^\.\//, ''))));
+    if (blocked) {
+      attempt.failure = { stage: 'patch', output: `${blocked.path} is a forbidden path: a human must change it. Fix this some other way.` };
+      return attempt;
+    }
+
     try {
       attempt.patch = await renderPatch(proposal.edits, (path) => workspaces.readFile(workspace, path));
+      if (attempt.patch.split('\n').length > MAX_PATCH_LINES) {
+        throw new Error(`the patch is over ${MAX_PATCH_LINES} lines; make the smallest change that fixes the bug`);
+      }
       await workspaces.applyPatch(workspace, attempt.patch);
     } catch (err) {
       attempt.failure = { stage: 'patch', output: err instanceof Error ? err.message : String(err) };
