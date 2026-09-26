@@ -1,25 +1,108 @@
 "use client";
 
 import React from "react";
+import {
+  FaBrain,
+  FaGears,
+  FaShieldHalved,
+  FaFilter,
+  FaNetworkWired,
+  FaScaleBalanced,
+  FaHeadset,
+  FaArrowRight,
+  FaCircleCheck,
+  FaCodeBranch,
+  FaPlug,
+  FaLock,
+} from "react-icons/fa6";
 
 export default function ArchitectureFlow() {
+  const harnessStages = [
+    {
+      step: "01",
+      title: "Triage Harness",
+      subtitle: "Intent & Security Boundary",
+      icon: <FaFilter className="text-[#FF6B00] w-4 h-4" />,
+      tag: "Inbound Shield",
+      details: [
+        "Prompt injection & jailbreak defense",
+        "Entity extraction (Order, Item, Branch)",
+        "Urgency & sentiment scoring",
+      ],
+      badge: "Zero-Trust",
+    },
+    {
+      step: "02",
+      title: "Correlate Harness",
+      subtitle: "Operational Telemetry",
+      icon: <FaNetworkWired className="text-[#0055FF] w-4 h-4" />,
+      tag: "The Differentiator",
+      details: [
+        "Live KDS kitchen timing verification",
+        "Sliding 24h buffer incident clustering",
+        "Emits 1 systemic ticket instead of N tickets",
+      ],
+      badge: "Telemetry Guard",
+    },
+    {
+      step: "03",
+      title: "Resolve Harness",
+      subtitle: "Policy-Gated Mutations",
+      icon: <FaScaleBalanced className="text-[#28c840] w-4 h-4" />,
+      tag: "Financial Gate",
+      details: [
+        "Auto-refund threshold (≤ $35 / ₹300)",
+        "HITL supervisor queue for high-value claims",
+        "100% idempotent tool call execution",
+      ],
+      badge: "Money-Safe",
+    },
+    {
+      step: "04",
+      title: "Respond Harness",
+      subtitle: "Voice & Chat Delivery",
+      icon: <FaHeadset className="text-[#FF6B00] w-4 h-4" />,
+      tag: "Omnichannel Loop",
+      details: [
+        "Empathetic contextual response pass",
+        "Ultra-low latency audio streaming",
+        "Audit trail & receipt dispatch to CRM",
+      ],
+      badge: "Real-Time",
+    },
+  ];
+
   return (
-    <section className="ds-container pt-ds-9 pb-ds-11">
-      <div className="max-w-[820px] mx-auto flex flex-col items-center gap-ds-6 text-center">
-        <span
-          className="inline-flex items-center rounded-[8px] p-[1px]"
+    <section
+      id="architecture"
+      className="ds-container pt-ds-9 pb-ds-11 scroll-mt-24"
+    >
+      {/* Header with Agent = Model + Harness formula */}
+      <div className="max-w-[860px] mx-auto flex flex-col items-center gap-ds-5 text-center">
+        {/* Formula Badge */}
+        <div
+          className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 border border-white/15 bg-white/[0.04] backdrop-blur-md"
           style={{
-            background:
-              "linear-gradient(135deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.08) 35%, rgba(255,255,255,0.04) 65%, rgba(255,255,255,0.28) 100%)",
-            boxShadow:
-              "0 0 16px rgba(255,255,255,0.08), 0 0 32px rgba(255,255,255,0.04)",
+            boxShadow: "0 0 24px rgba(255, 107, 0, 0.08)",
           }}
         >
-          <span className="px-[9px] pt-[6px] pb-[5px] rounded-[7px] bg-black/25 font-mono text-[12px] font-medium text-white/95 leading-none tracking-wider uppercase">
-            Agent = Model + Harness
+          <span className="flex items-center gap-1.5 font-mono text-xs font-semibold text-white/90">
+            <FaBrain className="text-[#FF6B00] w-3 h-3" />
+            Model (Intent)
           </span>
-        </span>
-        <h2 className="ds-text-heading1 text-ds-primary">
+          <span className="text-white/40 font-mono text-xs">+</span>
+          <span className="flex items-center gap-1.5 font-mono text-xs font-semibold text-white/90">
+            <FaGears className="text-[#0055FF] w-3 h-3" />
+            Harness (Execution)
+          </span>
+          <span className="text-white/40 font-mono text-xs">=</span>
+          <span className="font-mono text-xs font-bold text-[#FF6B00] uppercase tracking-wider">
+            Autonomous Resolution
+          </span>
+        </div>
+
+        {/* Main Title */}
+        <h2 className="ds-text-heading1 text-ds-primary tracking-tight">
           <span className="font-bold text-white font-ds-display">
             Blaze<span className="text-[#FF6B00]">Resolver</span>{" "}
           </span>
@@ -29,264 +112,172 @@ export default function ArchitectureFlow() {
           <br />
           keeps agents working in real-world environments
         </h2>
-        <div className="max-w-[760px] flex flex-col gap-1">
-          <p className="ds-text-body text-ds-description leading-[1.75]">
-            The model is the soul of an agent.
+
+        {/* Contextual Description */}
+        <div className="max-w-[740px] flex flex-col gap-2.5 text-ds-description">
+          <p className="ds-text-body leading-[1.75]">
+            <strong className="text-white">
+              The model is the brain; the harness is the operational body.
+            </strong>{" "}
+            Foundation models excel at interpreting customer speech, but alone
+            they hallucinate database writes and offer empty apologies.
           </p>
-          <p className="ds-text-body text-ds-description leading-[1.75]">
-            A harness lets an agent understand its environment, use tools, and
-            keep working in real-world settings.
+          <p className="ds-text-body text-white/70 leading-[1.75]">
+            The BlazeResolver Harness connects the model to real operational
+            data, enforces hard financial boundaries, and closes customer
+            tickets with deterministic, auditable tool execution.
           </p>
         </div>
       </div>
 
-      <div className="mt-ds-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-ds-5">
-          {/* Card 1 */}
-          <div className="rounded-[12px] h-full relative group">
-            <div className="bg-ds-surface-3 border border-ds-border-default rounded-ds-media p-ds-6 flex flex-col items-center text-center h-full transition-all duration-300 group-hover:border-white/20 group-hover:bg-ds-surface-2">
-              <div className="text-ds-primary opacity-80 mb-ds-4 transition-transform duration-300 group-hover:scale-105">
-                <svg
-                  aria-hidden="true"
-                  width="72"
-                  height="72"
-                  viewBox="0 0 72 72"
-                  fill="none"
-                >
-                  <circle
-                    cx="36"
-                    cy="36"
-                    r="4"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                  <circle cx="36" cy="36" r="1.5" fill="currentColor" />
-                  <ellipse
-                    cx="36"
-                    cy="36"
-                    rx="25"
-                    ry="11"
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    opacity="0.7"
-                    transform="rotate(90 36 36)"
-                  />
-                  <ellipse
-                    cx="36"
-                    cy="36"
-                    rx="25"
-                    ry="11"
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    opacity="0.7"
-                    transform="rotate(30 36 36)"
-                  />
-                  <ellipse
-                    cx="36"
-                    cy="36"
-                    rx="25"
-                    ry="11"
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    opacity="0.7"
-                    transform="rotate(150 36 36)"
-                  />
-                </svg>
+      {/* Harness Architecture Pipeline Grid */}
+      <div className="mt-ds-9">
+        <div className="mb-ds-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#FF6B00] animate-pulse" />
+            <span className="font-mono text-xs font-semibold text-white/80 uppercase tracking-wider">
+              End-to-End Resolution Harness Flow
+            </span>
+          </div>
+          <span className="font-mono text-[11px] text-white/50 hidden sm:inline-block">
+            LLM decides intent • Deterministic code executes mutations
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-ds-4">
+          {harnessStages.map((stage, idx) => (
+            <div
+              key={idx}
+              className="relative group rounded-xl border border-white/10 bg-[#0d1017] p-5 flex flex-col justify-between transition-all duration-300 hover:border-white/20 hover:bg-[#121620]"
+            >
+              <div>
+                {/* Header with step number and badge */}
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-mono text-xs font-bold text-white/40">
+                    STAGE {stage.step}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/[0.06] text-white/70 border border-white/10">
+                    {stage.badge}
+                  </span>
+                </div>
+
+                {/* Title & Icon */}
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <div className="p-2 rounded-lg bg-white/[0.04] border border-white/10 shrink-0">
+                    {stage.icon}
+                  </div>
+                  <h3 className="font-ds-sans font-bold text-base text-white">
+                    {stage.title}
+                  </h3>
+                </div>
+                <p className="font-mono text-[11px] text-[#FF6B00] mb-3">
+                  {stage.subtitle}
+                </p>
+
+                {/* Details list */}
+                <ul className="flex flex-col gap-2 pt-2 border-t border-white/[0.06]">
+                  {stage.details.map((detail, dIdx) => (
+                    <li
+                      key={dIdx}
+                      className="flex items-start gap-2 text-xs text-white/70 leading-relaxed font-sans"
+                    >
+                      <FaCircleCheck className="text-white/30 w-3 h-3 mt-0.5 shrink-0 group-hover:text-[#28c840] transition-colors" />
+                      <span>{detail}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <h3 className="ds-text-title text-ds-primary mb-ds-2">
-                <a
-                  href="https://github.com/DikshantJangra/BlazeResolver"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline decoration-dashed decoration-white/30 underline-offset-4 transition-colors hover:text-ds-brand"
-                >
-                  LangGraph kernel
-                </a>
+
+              {/* Tag at bottom */}
+              <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px] font-mono text-white/50">
+                <span>{stage.tag}</span>
+                {idx < 3 && (
+                  <FaArrowRight className="hidden lg:block text-white/20 group-hover:text-[#FF6B00] transition-colors" />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 3 Foundational Pillars of the Harness */}
+      <div className="mt-ds-7 grid grid-cols-1 md:grid-cols-3 gap-ds-5">
+        {/* Pillar 1 */}
+        <div className="rounded-[12px] h-full relative group">
+          <div className="bg-ds-surface-3 border border-ds-border-default rounded-ds-media p-ds-6 flex flex-col h-full transition-all duration-300 group-hover:border-white/20 group-hover:bg-ds-surface-2">
+            <div className="flex items-center gap-3 mb-ds-3">
+              <div className="p-2.5 rounded-lg bg-[#FF6B00]/10 border border-[#FF6B00]/25 text-[#FF6B00]">
+                <FaCodeBranch className="w-5 h-5" />
+              </div>
+              <h3 className="ds-text-title text-ds-primary font-bold">
+                LangGraph State Machine
               </h3>
-              <p className="ds-text-caption text-ds-description leading-[1.65]">
-                The LangGraph kernel manages plugin mounting, unmounting, and
-                dependencies. Agent capabilities live in the plugins.
-              </p>
+            </div>
+            <p className="ds-text-caption text-ds-description leading-[1.65] mb-3">
+              Deterministic graph execution kernel. Coordinates multi-step
+              triage, correlation, tool planning, and verification passes with
+              durable state checkpointing and automatic recovery.
+            </p>
+            <div className="mt-auto pt-3 border-t border-white/[0.06] font-mono text-[11px] text-[#FF6B00]">
+              Graph Node Orchestration
             </div>
           </div>
+        </div>
 
-          {/* Card 2 */}
-          <div className="rounded-[12px] h-full relative group">
-            <div className="bg-ds-surface-3 border border-ds-border-default rounded-ds-media p-ds-6 flex flex-col items-center text-center h-full transition-all duration-300 group-hover:border-white/20 group-hover:bg-ds-surface-2">
-              <div className="text-ds-primary opacity-80 mb-ds-4 transition-transform duration-300 group-hover:scale-105">
-                <svg
-                  aria-hidden="true"
-                  width="72"
-                  height="72"
-                  viewBox="0 0 72 72"
-                  fill="none"
-                >
-                  <defs>
-                    <mask id="plugin-ring-mask">
-                      <rect width="72" height="72" fill="white" />
-                      <circle cx="36" cy="10" r="4.4" fill="black" />
-                      <circle
-                        cx="58.5166604983954"
-                        cy="23"
-                        r="4.4"
-                        fill="black"
-                      />
-                      <circle
-                        cx="58.51666049839541"
-                        cy="49"
-                        r="4.4"
-                        fill="black"
-                      />
-                      <circle cx="36" cy="62" r="4.4" fill="black" />
-                      <circle
-                        cx="13.4833395016046"
-                        cy="49"
-                        r="4.4"
-                        fill="black"
-                      />
-                      <circle
-                        cx="13.483339501604597"
-                        cy="23"
-                        r="4.4"
-                        fill="black"
-                      />
-                    </mask>
-                  </defs>
-                  <circle
-                    cx="36"
-                    cy="36"
-                    r="17"
-                    stroke="currentColor"
-                    strokeWidth="0.9"
-                    strokeDasharray="2 2.5"
-                    opacity="0.5"
-                  />
-                  <circle
-                    cx="36"
-                    cy="36"
-                    r="26"
-                    stroke="currentColor"
-                    strokeWidth="0.9"
-                    opacity="0.7"
-                    mask="url(#plugin-ring-mask)"
-                  />
-                  <circle
-                    cx="36"
-                    cy="36"
-                    r="4.5"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                  <circle cx="36" cy="10" r="2.6" fill="currentColor" />
-                  <circle
-                    cx="58.5166604983954"
-                    cy="23"
-                    r="2.6"
-                    fill="currentColor"
-                  />
-                  <circle
-                    cx="58.51666049839541"
-                    cy="49"
-                    r="2.6"
-                    fill="currentColor"
-                  />
-                  <circle cx="36" cy="62" r="2.6" fill="currentColor" />
-                  <circle
-                    cx="13.4833395016046"
-                    cy="49"
-                    r="2.6"
-                    fill="currentColor"
-                  />
-                  <circle
-                    cx="13.483339501604597"
-                    cy="23"
-                    r="2.6"
-                    fill="currentColor"
-                  />
-                </svg>
+        {/* Pillar 2 */}
+        <div className="rounded-[12px] h-full relative group">
+          <div className="bg-ds-surface-3 border border-ds-border-default rounded-ds-media p-ds-6 flex flex-col h-full transition-all duration-300 group-hover:border-white/20 group-hover:bg-ds-surface-2">
+            <div className="flex items-center gap-3 mb-ds-3">
+              <div className="p-2.5 rounded-lg bg-[#0055FF]/10 border border-[#0055FF]/25 text-[#0055FF]">
+                <FaPlug className="w-5 h-5" />
               </div>
-              <h3 className="ds-text-title text-ds-primary mb-ds-2">
-                Capabilities as plugins
+              <h3 className="ds-text-title text-ds-primary font-bold">
+                The 4-Adapter Contracts
               </h3>
-              <p className="ds-text-caption text-ds-description leading-[1.65]">
-                Plugins provide every agent capability, including models, tools,
-                skills, sessions, sandboxes, storage, loops, scheduling, and the
-                UI. LangGraph services and events let the plugins work together.
-              </p>
+            </div>
+            <p className="ds-text-caption text-ds-description leading-[1.65] mb-3">
+              Business-agnostic core contracts for{" "}
+              <code className="text-white/90 bg-white/[0.06] px-1 py-0.5 rounded">
+                OrderSource
+              </code>
+              ,{" "}
+              <code className="text-white/90 bg-white/[0.06] px-1 py-0.5 rounded">
+                RefundGateway
+              </code>
+              ,{" "}
+              <code className="text-white/90 bg-white/[0.06] px-1 py-0.5 rounded">
+                TicketSink
+              </code>
+              , and{" "}
+              <code className="text-white/90 bg-white/[0.06] px-1 py-0.5 rounded">
+                MenuControl
+              </code>
+              . Swap implementations without touching core engine logic.
+            </p>
+            <div className="mt-auto pt-3 border-t border-white/[0.06] font-mono text-[11px] text-[#0055FF]">
+              Pluggable Domain Interfaces
             </div>
           </div>
+        </div>
 
-          {/* Card 3 */}
-          <div className="rounded-[12px] h-full relative group">
-            <div className="bg-ds-surface-3 border border-ds-border-default rounded-ds-media p-ds-6 flex flex-col items-center text-center h-full transition-all duration-300 group-hover:border-white/20 group-hover:bg-ds-surface-2">
-              <div className="text-ds-primary opacity-80 mb-ds-4 transition-transform duration-300 group-hover:scale-105">
-                <svg
-                  aria-hidden="true"
-                  width="72"
-                  height="72"
-                  viewBox="0 0 72 72"
-                  fill="none"
-                >
-                  <rect
-                    x="18"
-                    y="22"
-                    width="15"
-                    height="15"
-                    rx="3"
-                    stroke="currentColor"
-                    strokeWidth="1.1"
-                    opacity="0.85"
-                  />
-                  <rect
-                    x="18"
-                    y="41"
-                    width="15"
-                    height="15"
-                    rx="3"
-                    stroke="currentColor"
-                    strokeWidth="1.1"
-                    opacity="0.85"
-                  />
-                  <rect
-                    x="37"
-                    y="41"
-                    width="15"
-                    height="15"
-                    rx="3"
-                    stroke="currentColor"
-                    strokeWidth="1.1"
-                    opacity="0.85"
-                  />
-                  <rect
-                    x="37"
-                    y="22"
-                    width="15"
-                    height="15"
-                    rx="3"
-                    stroke="currentColor"
-                    strokeWidth="0.9"
-                    strokeDasharray="2.5 2.5"
-                    opacity="0.45"
-                  />
-                  <rect
-                    x="47"
-                    y="12"
-                    width="15"
-                    height="15"
-                    rx="3"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                  />
-                  <circle cx="54.5" cy="19.5" r="1.4" fill="currentColor" />
-                </svg>
+        {/* Pillar 3 */}
+        <div className="rounded-[12px] h-full relative group">
+          <div className="bg-ds-surface-3 border border-ds-border-default rounded-ds-media p-ds-6 flex flex-col h-full transition-all duration-300 group-hover:border-white/20 group-hover:bg-ds-surface-2">
+            <div className="flex items-center gap-3 mb-ds-3">
+              <div className="p-2.5 rounded-lg bg-[#28c840]/10 border border-[#28c840]/25 text-[#28c840]">
+                <FaLock className="w-5 h-5" />
               </div>
-              <h3 className="ds-text-title text-ds-primary mb-ds-2">
-                Compose with configuration
+              <h3 className="ds-text-title text-ds-primary font-bold">
+                Money-Gate & Guardrails
               </h3>
-              <p className="ds-text-caption text-ds-description leading-[1.65]">
-                Developers can select, swap, or extend any capability in
-                configuration without changing the BlazeResolver source code.
-              </p>
+            </div>
+            <p className="ds-text-caption text-ds-description leading-[1.65] mb-3">
+              Deterministic financial limits enforce strict auto-refund
+              ceilings. Claims exceeding thresholds route directly to human
+              supervisor queues with one-click review and complete audit trails.
+            </p>
+            <div className="mt-auto pt-3 border-t border-white/[0.06] font-mono text-[11px] text-[#28c840]">
+              Audited Idempotent Execution
             </div>
           </div>
         </div>
