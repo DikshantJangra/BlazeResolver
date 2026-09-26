@@ -12,6 +12,8 @@
     "build:client": "vite build",
     "build": "npm run build:server && npm run build:client",
     "demo": "tsx src/cli/demo.ts",
+    "demo:fix": "tsx src/cli/fix-demo.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "test": "tsx --test src/**/*.test.ts"
   },
   "keywords": [
@@ -30,6 +32,8 @@
   "dependencies": {
     "@langchain/core": "^1.2.12",
     "@langchain/langgraph": "^1.4.18",
+    "@lzehrung/codegraph": "^2.3.31",
+    "@modelcontextprotocol/client": "^2.1.0",
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

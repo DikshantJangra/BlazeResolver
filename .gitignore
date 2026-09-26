@@ -82,3 +82,6 @@ ROADMAP.md
 __pycache__/
 *.py[cod]
 *$py.class
+
+# codegraph index cache
+.codegraph/
