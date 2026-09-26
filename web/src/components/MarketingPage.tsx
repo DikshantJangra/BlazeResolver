@@ -6,7 +6,6 @@ import HeroSection from "./HeroSection";
 import ArchitectureFlow from "./ArchitectureFlow";
 import StickyShowcase from "./StickyShowcase";
 import VideoSection from "./VideoSection";
-import CustomizationSection from "./CustomizationSection";
 import InstallationSection from "./InstallationSection";
 import Footer from "./Footer";
 
@@ -19,7 +18,6 @@ export default function MarketingPage() {
         <ArchitectureFlow />
         <StickyShowcase />
         <VideoSection />
-        <CustomizationSection />
         <InstallationSection />
       </main>
       <Footer />
