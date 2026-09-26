@@ -85,3 +85,6 @@ __pycache__/
 
 # codegraph index cache
 .codegraph/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
