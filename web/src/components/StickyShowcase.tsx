@@ -1,199 +1,34 @@
 "use client";
 
-import React, { useState } from "react";
-import Image from "next/image";
-import { FaSliders, FaRoute, FaPuzzlePiece, FaCheck } from "react-icons/fa6";
-import { LuWorkflow, LuLayers, LuSparkles, LuTerminal } from "react-icons/lu";
+import React, { useState, useRef, useEffect } from "react";
 
 export default function StickyShowcase() {
   const [activeSlide, setActiveSlide] = useState(0);
 
-  const slides = [
-    {
-      title: "Everything is a plugin",
-      subtitle: "Modular agent capabilities",
-      description:
-        "BlazeResolver is architected around LangGraph's extensible plugin system. Capabilities like Triage, Correlate, Guardrails, and Voice synthesizers are registered as independent nodes. Swap LLM providers or plug in custom ERP databases without modifying the core orchestrator.",
-      icon: <FaPuzzlePiece className="text-xl text-[#FF6B00]" />,
-    },
-    {
-      title: "Every run is traceable",
-      subtitle: "Append-only session logs & trajectory audit",
-      description:
-        "Every incoming ticket event, LLM reasoning chain, tool execution result, and guardrail check is permanently stored in an immutable trajectory log. Reconstruct entire support sessions, debug hallucination edges, and replay resolutions directly from the trace inspector.",
-      icon: <FaRoute className="text-xl text-[#0055FF]" />,
-    },
-    {
-      title: "Multiple runtime modes",
-      subtitle: "Standard, Voice WebRTC, and Strict Guardrails",
-      description:
-        "Switch between operational modes on the fly: Standard mode runs full omnichannel support; Voice mode integrates ultra-low latency audio streaming; Strict Guardrail mode enforces deterministic financial approval gates on refunds and discounts.",
-      icon: <FaSliders className="text-xl text-emerald-400" />,
-    },
-  ];
+  const card0Ref = useRef<HTMLDivElement>(null);
+  const card1Ref = useRef<HTMLDivElement>(null);
+  const card2Ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const cards = [card0Ref.current, card1Ref.current, card2Ref.current];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const idx = cards.indexOf(entry.target as HTMLDivElement);
+            if (idx !== -1) setActiveSlide(idx);
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+    cards.forEach((c) => c && observer.observe(c));
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <section id="traceability" className="relative py-24 border-t border-white/[0.06] bg-[#0c0d10]">
-      <div className="mx-auto max-w-[1240px] px-4 sm:px-8">
-        {/* Section Header */}
-        <div className="mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-medium uppercase tracking-wider text-white/90 bg-white/[0.08] border border-white/10 mb-4">
-            Design approach
-          </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight font-ds-display">
-            Everything is a plugin.
-            <br />
-            <span className="text-neutral-400">Every run is traceable.</span>
-          </h2>
-        </div>
-
-        {/* Desktop 2-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[45fr_55fr] gap-12 items-start">
-          {/* Left Column: Interactive Cards */}
-          <div className="flex flex-col gap-6">
-            {slides.map((slide, idx) => (
-              <div
-                key={idx}
-                onClick={() => setActiveSlide(idx)}
-                className={`p-6 sm:p-8 rounded-2xl border transition-all duration-300 cursor-pointer ${
-                  activeSlide === idx
-                    ? "bg-[#161820] border-[#FF6B00]/40 shadow-xl"
-                    : "bg-[#121318]/50 border-white/[0.06] hover:border-white/15 opacity-60 hover:opacity-100"
-                }`}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-lg bg-white/[0.05] border border-white/10">
-                    {slide.icon}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white font-ds-display">
-                      {slide.title}
-                    </h3>
-                    <p className="text-xs text-[#FF6B00] font-mono">
-                      {slide.subtitle}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-sm text-neutral-300 leading-relaxed pl-1">
-                  {slide.description}
-                </p>
-
-                {/* Active indicator bar */}
-                <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs text-neutral-400">
-                  <span className="font-mono">Slide 0{idx + 1} / 03</span>
-                  {activeSlide === idx && (
-                    <span className="flex items-center gap-1 text-[#FF6B00] font-medium">
-                      <span>Active Preview</span>
-                      <FaCheck className="text-xs" />
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Right Column: Sticky Visual Preview */}
-          <div className="lg:sticky lg:top-28">
-            <div className="rounded-2xl border border-white/15 bg-[#121318] p-3 shadow-2xl overflow-hidden aspect-[8/5] relative">
-              {/* Slide 0: Plugin System */}
-              <div
-                className={`absolute inset-3 transition-opacity duration-500 rounded-xl overflow-hidden bg-black/60 flex items-center justify-center ${
-                  activeSlide === 0 ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-                }`}
-              >
-                <img
-                  src="/images/harness/feat-plugin.en.png"
-                  alt="BlazeResolver Plugin Architecture"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-
-              {/* Slide 1: Trajectory Real View */}
-              <div
-                className={`absolute inset-3 transition-opacity duration-500 rounded-xl overflow-hidden bg-black/60 flex items-center justify-center ${
-                  activeSlide === 1 ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-                }`}
-              >
-                <img
-                  src="/images/harness/trajectory-real-view.en.png"
-                  alt="BlazeResolver Session Trajectory"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-
-              {/* Slide 2: Mode Selector Card */}
-              <div
-                className={`absolute inset-3 transition-opacity duration-500 rounded-xl overflow-hidden bg-[#181a22] p-6 flex flex-col justify-between ${
-                  activeSlide === 2 ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-                }`}
-              >
-                <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#FF6B00]" />
-                    <span className="font-mono text-sm font-bold text-white">Runtime Mode Engine</span>
-                  </div>
-                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-white/10 text-neutral-300">
-                    config.mode
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-4">
-                  <div className="p-3 rounded-lg bg-white/[0.04] border border-white/10 flex flex-col justify-between">
-                    <div>
-                      <div className="font-semibold text-white text-sm">Standard Agent</div>
-                      <div className="text-xs text-neutral-400 mt-1">Full support loop with tools, CRM, and voice API.</div>
-                    </div>
-                    <span className="text-[11px] font-mono text-[#FF6B00] mt-2">Active Default</span>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-white/[0.04] border border-white/10 flex flex-col justify-between">
-                    <div>
-                      <div className="font-semibold text-white text-sm">Strict Money-Gate</div>
-                      <div className="text-xs text-neutral-400 mt-1">Refunds &gt; $50 require dual human sign-off.</div>
-                    </div>
-                    <span className="text-[11px] font-mono text-neutral-400 mt-2">Policy Guardrail</span>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-white/[0.04] border border-white/10 flex flex-col justify-between">
-                    <div>
-                      <div className="font-semibold text-white text-sm">Voice WebRTC</div>
-                      <div className="text-xs text-neutral-400 mt-1">Direct SIP trunking for low-latency phone triage.</div>
-                    </div>
-                    <span className="text-[11px] font-mono text-emerald-400 mt-2">Streaming Audio</span>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-white/[0.04] border border-white/10 flex flex-col justify-between">
-                    <div>
-                      <div className="font-semibold text-white text-sm">Simulator Mode</div>
-                      <div className="text-xs text-neutral-400 mt-1">Replay historic tickets against new prompts.</div>
-                    </div>
-                    <span className="text-[11px] font-mono text-neutral-400 mt-2">Benchmark Eval</span>
-                  </div>
-                </div>
-
-                <div className="text-[11px] font-mono text-neutral-400 border-t border-white/10 pt-3 flex justify-between">
-                  <span>Target: LangGraph StateGraph</span>
-                  <span className="text-emerald-400">All checks pass</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick slide tabs below preview on mobile */}
-            <div className="flex lg:hidden items-center justify-center gap-2 mt-4">
-              {slides.map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setActiveSlide(idx)}
-                  className={`w-3 h-3 rounded-full transition-all ${
-                    activeSlide === idx ? "bg-[#FF6B00] w-8" : "bg-white/20"
-                  }`}
-                  aria-label={`Slide ${idx + 1}`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+    <section className="ds-container py-ds-10"><div className="hidden md:block"><div style={({"opacity":"0","transform":"translateY(20px)"}) as React.CSSProperties}><span className="inline-flex items-center rounded-[8px] p-[1px] " style={({"background":"linear-gradient(135deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.08) 35%, rgba(255,255,255,0.04) 65%, rgba(255,255,255,0.28) 100%)","boxShadow":"0 0 16px rgba(255,255,255,0.08), 0 0 32px rgba(255,255,255,0.04)"}) as React.CSSProperties}><span className="px-[9px] pt-[6px] pb-[5px] rounded-[7px] bg-black/25 font-mono text-[12px] font-medium text-white/95 leading-none tracking-wider uppercase">Design approach</span></span><h2 className="ds-text-heading1 text-ds-primary mt-ds-4 mb-ds-9 max-w-[680px] whitespace-pre-line">Everything is a plugin.
+Every run is traceable.</h2></div><div className="grid grid-cols-[42fr_58fr] gap-ds-9 w-full" style={({"opacity":"0","transform":"translateY(24px)"}) as React.CSSProperties}><div className="flex flex-col"><div ref={card0Ref} onClick={() => setActiveSlide(0)} className="flex flex-col justify-center gap-ds-4 min-h-[35vh] py-[11vh] transition-opacity duration-500 cursor-pointer" style={{ opacity: activeSlide === 0 ? 1 : 0.3 }}><div className="flex items-center gap-ds-2"><div className="transition-colors duration-500 text-ds-primary"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 3L23.5 8.5V19.5L14 25L4.5 19.5V8.5L14 3Z" stroke="currentColor" strokeWidth="1.3"></path><path d="M5 9L14 14.2L23 9M14 14.2V24.4" stroke="currentColor" strokeWidth="1.3"></path></svg></div><h3 className="ds-text-subtitle !text-[22px] !font-normal text-ds-primary">Everything is a plugin</h3></div><p className="ds-text-body text-ds-description leading-[1.7]">BlazeResolver is built on <a href="https://github.com/DikshantJangra/BlazeResolver" target="_blank" rel="noopener noreferrer" className="text-ds-primary hover:text-ds-brand transition-colors underline underline-offset-4 decoration-1 decoration-dashed decoration-white/30">LangGraph</a>&#x27;s plugin system. Plugins provide every agent capability, including models, tools, skills, sessions, sandboxes, storage, loops, scheduling, and the UI. LangGraph services and events let the plugins work together. Developers can select, swap, or extend any capability in configuration without changing the BlazeResolver source code.</p></div><div ref={card1Ref} onClick={() => setActiveSlide(1)} className="flex flex-col justify-center gap-ds-4 min-h-[35vh] py-[11vh] transition-opacity duration-500 cursor-pointer" style={{ opacity: activeSlide === 1 ? 1 : 0.3 }}><div className="flex items-center gap-ds-2"><div className="transition-colors duration-500 text-ds-description"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="9.5" stroke="currentColor" strokeWidth="1.3"></circle><path d="M12 10.5L18 14L12 17.5V10.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"></path></svg></div><h3 className="ds-text-subtitle !text-[22px] !font-normal text-ds-primary">Every run is traceable</h3></div><p className="ds-text-body text-ds-description leading-[1.7]">Everything the model sees is recorded in an append-only session log: system prompts, reasoning, tool calls and results, subagent scheduling, and every context injection. In the Trajectory view, you can inspect these records by source. Resume, fork, search, and replay all operate on the same event stream.</p></div><div ref={card2Ref} onClick={() => setActiveSlide(2)} className="flex flex-col justify-center gap-ds-4 min-h-[35vh] py-[11vh] transition-opacity duration-500 cursor-pointer" style={{ opacity: activeSlide === 2 ? 1 : 0.3 }}><div className="flex items-center gap-ds-2"><div className="transition-colors duration-500 text-ds-description"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4.5" y="4.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"></rect><rect x="15.5" y="4.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"></rect><rect x="4.5" y="15.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"></rect><rect x="15.5" y="15.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"></rect></svg></div><h3 className="ds-text-subtitle !text-[22px] !font-normal text-ds-primary">Multiple runtime modes</h3></div><p className="ds-text-body text-ds-description leading-[1.7]">Standard mode includes the full toolset. Code mode uses model-generated code to orchestrate multiple rounds of tool calls. Minimal mode keeps only a shell tool and a file editor for benchmarking models in a minimal environment. Creator mode lets you inspect the current runtime, test LangGraph plugins in memory, and combine them into new modes.</p></div></div><div><div className="sticky" style={({"top":"20vh"}) as React.CSSProperties}><div className="grid min-w-0 max-w-[760px] aspect-[8/5] bg-ds-surface-3 border border-ds-border-default rounded-ds-media overflow-hidden"><div className="col-start-1 row-start-1 min-w-0 transition-opacity duration-500" style={{ opacity: activeSlide === 0 ? 1 : 0, pointerEvents: activeSlide === 0 ? "auto" : "none" }}><div className="w-full h-full flex items-center overflow-hidden bg-[#101113]"><img src="/images/harness/feat-plugin.en.png" alt="BlazeResolver settings showing installed plugins and their status" className="block w-full h-full object-contain"/></div></div><div className="col-start-1 row-start-1 min-w-0 transition-opacity duration-500" style={{ opacity: activeSlide === 1 ? 1 : 0, pointerEvents: activeSlide === 1 ? "auto" : "none" }}><div className="w-full h-full flex items-center overflow-hidden bg-[#101113]"><img src="/images/harness/trajectory-real-view.en.png" alt="Reconstruct a complete run from a single session log" className="block w-full h-full object-contain"/></div></div><div className="col-start-1 row-start-1 min-w-0 transition-opacity duration-500" style={{ opacity: activeSlide === 2 ? 1 : 0, pointerEvents: activeSlide === 2 ? "auto" : "none" }}><div role="img" aria-label="The new-session mode picker listing Standard, Code, Minimal, and Creator modes" className="w-full h-full flex flex-col justify-center font-ds-sans select-text" style={({"containerType":"inline-size"}) as React.CSSProperties}><div className="grid" style={({"fontSize":"clamp(9px, 2.3cqw, 13.5px)","padding":"1.4em 2.4em 1.5em"}) as React.CSSProperties}><div className="col-start-1 row-start-1 min-w-0"><div className="flex items-center" style={({"gap":"0.5em"}) as React.CSSProperties}><span style={({"display":"inline-flex","alignItems":"center","gap":"0.25em","minHeight":"2.1em","padding":"0 0.75em","borderRadius":"1.05em","fontSize":"0.8125em","lineHeight":"1.25em","fontWeight":"500","color":"#e6e8ea","whiteSpace":"nowrap"}) as React.CSSProperties}><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" style={({"width":"1.23em","height":"1.23em"}) as React.CSSProperties}><path d="M2 4.5C2 3.7 2.7 3 3.5 3H6.2L7.7 4.8H12.5C13.3 4.8 14 5.5 14 6.3V11.5C14 12.3 13.3 13 12.5 13H3.5C2.7 13 2 12.3 2 11.5V4.5Z" stroke="#e6e8ea" strokeWidth="1.3" strokeLinejoin="round"></path></svg>dsh-demo<svg aria-hidden="true" viewBox="0 0 12 12" fill="none" className="shrink-0" style={({"width":"0.75em","height":"0.75em"}) as React.CSSProperties}><path d="M3 4.5L6 7.5L9 4.5" stroke="#81858c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path></svg></span><span style={({"display":"inline-flex","alignItems":"center","gap":"0.25em","minHeight":"2.1em","padding":"0 0.75em","borderRadius":"1.05em","fontSize":"0.8125em","lineHeight":"1.25em","fontWeight":"500","color":"#e6e8ea","whiteSpace":"nowrap","background":"rgba(255, 255, 255, 0.08)"}) as React.CSSProperties}><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" style={({"width":"1.23em","height":"1.23em"}) as React.CSSProperties}><mask id="mask0_agent_preset_16" maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16"><rect width="16" height="16" fill="white"></rect><circle cx="7.9995" cy="3.28319" r="1.712" fill="black"></circle><circle cx="3.51122" cy="11.3855" r="1.712" fill="black"></circle><circle cx="12.4878" cy="11.3855" r="1.712" fill="black"></circle></mask><path mask="url(#mask0_agent_preset_16)" d="M12.2881 11.0425C12.6002 11.3723 13.0413 11.5786 13.5312 11.5786L13.5342 11.5776C13.1476 12.3233 12.6119 12.9785 11.9639 13.5005C10.9327 14.3309 9.6199 14.8286 8.19336 14.8286C7.29864 14.8285 6.45056 14.6313 5.6875 14.2808C6.08309 14.0281 6.36707 13.6189 6.45215 13.1392C6.99022 13.3561 7.57767 13.476 8.19336 13.4761C9.30019 13.4761 10.3157 13.0915 11.1152 12.4478C11.5935 12.0626 11.9924 11.5848 12.2881 11.0425ZM4.14746 4.36475C4.25569 4.83228 4.55488 5.2247 4.95898 5.4585C4.07956 6.30639 3.53144 7.49605 3.53125 8.81396C3.53125 9.69534 3.77613 10.5202 4.20117 11.2231C3.74959 11.3817 3.38395 11.7232 3.19531 12.1597C2.5541 11.2032 2.17969 10.052 2.17969 8.81396C2.17989 7.05087 2.93868 5.4646 4.14746 4.36475ZM8.19336 2.80029C8.85717 2.80029 9.49784 2.90834 10.0967 3.10791C12.3237 3.85044 13.9725 5.86061 14.1846 8.28369C13.9832 8.20048 13.7627 8.15382 13.5312 8.15381C13.2802 8.15381 13.042 8.20907 12.8271 8.30615C12.6281 6.47264 11.3666 4.95616 9.66895 4.39014C9.2063 4.236 8.70989 4.15186 8.19336 4.15186C7.96112 4.15189 7.7329 4.16981 7.50977 4.20264C7.51947 4.12886 7.52637 4.05348 7.52637 3.97705C7.52628 3.56604 7.3811 3.18914 7.13965 2.89404C7.48183 2.83352 7.83381 2.80033 8.19336 2.80029Z" fill="currentColor"></path><path d="M9.1123 3.28271C9.11205 2.66858 8.61322 2.17041 7.99902 2.17041C7.38504 2.17067 6.88697 2.66874 6.88672 3.28271C6.88672 3.89691 7.38489 4.39574 7.99902 4.396C8.61338 4.396 9.1123 3.89707 9.1123 3.28271ZM10.3115 3.28271C10.3115 4.55981 9.27612 5.59521 7.99902 5.59521C6.72214 5.59496 5.6875 4.55965 5.6875 3.28271C5.68776 2.00599 6.7223 0.971447 7.99902 0.971191C9.27596 0.971191 10.3113 2.00584 10.3115 3.28271Z" fill="currentColor"></path><path d="M4.62402 11.385C4.62377 10.7709 4.12494 10.2727 3.51074 10.2727C2.89676 10.273 2.39869 10.771 2.39844 11.385C2.39844 11.9992 2.89661 12.498 3.51074 12.4983C4.1251 12.4983 4.62402 11.9994 4.62402 11.385ZM5.82324 11.385C5.82324 12.6621 4.78784 13.6975 3.51074 13.6975C2.23386 13.6973 1.19922 12.6619 1.19922 11.385C1.19947 10.1083 2.23402 9.07374 3.51074 9.07349C4.78768 9.07349 5.82299 10.1081 5.82324 11.385Z" fill="currentColor"></path><path d="M13.6006 11.385C13.6003 10.7709 13.1015 10.2727 12.4873 10.2727C11.8733 10.273 11.3753 10.771 11.375 11.385C11.375 11.9992 11.8732 12.498 12.4873 12.4983C13.1017 12.4983 13.6006 11.9994 13.6006 11.385ZM14.7998 11.385C14.7998 12.6621 13.7644 13.6975 12.4873 13.6975C11.2104 13.6973 10.1758 12.6619 10.1758 11.385C10.176 10.1083 11.2106 9.07374 12.4873 9.07349C13.7642 9.07349 14.7995 10.1081 14.7998 11.385Z" fill="currentColor"></path></svg>Creator mode<svg aria-hidden="true" viewBox="0 0 12 12" fill="none" className="shrink-0" style={({"width":"0.75em","height":"0.75em","transform":"rotate(180deg)"}) as React.CSSProperties}><path d="M3 4.5L6 7.5L9 4.5" stroke="#81858c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path></svg></span></div><div className="flex flex-col" style={({"marginTop":"0.9em","gap":"0.75em","paddingTop":"0.625em","borderRadius":"1.375em","background":"#1f2126","boxShadow":"0 0.5em 1.5em rgba(0, 0, 0, 0.35)"}) as React.CSSProperties}><div style={({"minHeight":"3.25em","padding":"0.25em 0.75em 0 1em","color":"#81858c","lineHeight":"1.5"}) as React.CSSProperties}>Describe what you want to build</div><div className="flex items-center justify-between" style={({"padding":"0.125em 0.5em 0.375em","gap":"0.75em"}) as React.CSSProperties}><div className="flex items-center" style={({"gap":"1em"}) as React.CSSProperties}><span className="flex items-center justify-center rounded-full shrink-0" style={({"width":"1.75em","height":"1.75em","background":"rgba(255, 255, 255, 0.08)"}) as React.CSSProperties}><svg aria-hidden="true" viewBox="0 0 12 12" fill="none" style={({"width":"0.75em","height":"0.75em"}) as React.CSSProperties}><path d="M6 1.5V10.5M1.5 6H10.5" stroke="#e6e8ea" strokeWidth="1.3" strokeLinecap="round"></path></svg></span></div><span className="flex items-center justify-center rounded-full shrink-0" style={({"width":"2.125em","height":"2.125em","background":"#679efe","transform":"translateY(-0.125em)"}) as React.CSSProperties}><svg aria-hidden="true" viewBox="0 0 12 12" fill="none" style={({"width":"0.9em","height":"0.9em"}) as React.CSSProperties}><path d="M6 10V2M2.5 5.5L6 2L9.5 5.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path></svg></span></div></div></div><div className="col-start-1 row-start-1 min-w-0 relative z-10" style={({"paddingTop":"2.35em","paddingLeft":"min(7.2em, 12%)"}) as React.CSSProperties}><div className="flex flex-col" style={({"width":"min(30em, 100%)","padding":"0.45em","border":"1px solid rgba(255, 255, 255, 0.06)","borderRadius":"0.75em","background":"#26282c","boxShadow":"0 1.2em 2.8em rgba(0, 0, 0, 0.55)"}) as React.CSSProperties}><div className="flex items-center" style={({"gap":"0.5em","padding":"0.5em 0.625em","borderRadius":"0.625em"}) as React.CSSProperties}><div className="flex-1 min-w-0" style={({"display":"flex","flexDirection":"column","gap":"0.125em"}) as React.CSSProperties}><div style={({"color":"#e6e8ea","fontSize":"0.875em","lineHeight":"1.55","fontWeight":"500"}) as React.CSSProperties}>Standard mode</div><div style={({"color":"#81858c","fontSize":"0.8125em","lineHeight":"1.55"}) as React.CSSProperties}>Full coding agent with file editing, shell, file and web search, skills, planning, goals, subagents, and workflows.</div></div></div><div className="flex items-center" style={({"gap":"0.5em","padding":"0.5em 0.625em","borderRadius":"0.625em"}) as React.CSSProperties}><div className="flex-1 min-w-0" style={({"display":"flex","flexDirection":"column","gap":"0.125em"}) as React.CSSProperties}><div style={({"color":"#e6e8ea","fontSize":"0.875em","lineHeight":"1.55","fontWeight":"500"}) as React.CSSProperties}>Code mode</div><div style={({"color":"#81858c","fontSize":"0.8125em","lineHeight":"1.55"}) as React.CSSProperties}>All Standard mode capabilities, with tools exposed through the Code Mode SDK so the model can combine multi-step operations in one TypeScript program.</div></div></div><div className="flex items-center" style={({"gap":"0.5em","padding":"0.5em 0.625em","borderRadius":"0.625em"}) as React.CSSProperties}><div className="flex-1 min-w-0" style={({"display":"flex","flexDirection":"column","gap":"0.125em"}) as React.CSSProperties}><div style={({"color":"#e6e8ea","fontSize":"0.875em","lineHeight":"1.55","fontWeight":"500"}) as React.CSSProperties}>Minimal mode</div><div style={({"color":"#81858c","fontSize":"0.8125em","lineHeight":"1.55"}) as React.CSSProperties}>Two-tool coding agent with persistent bash and str_replace_editor.</div></div></div><div className="flex items-center" style={({"gap":"0.5em","padding":"0.8em 0.75em","borderRadius":"0.625em","background":"rgba(255, 255, 255, 0.07)"}) as React.CSSProperties}><div className="flex-1 min-w-0" style={({"display":"flex","flexDirection":"column","gap":"0.125em"}) as React.CSSProperties}><div style={({"color":"#e6e8ea","fontSize":"0.875em","lineHeight":"1.55","fontWeight":"500"}) as React.CSSProperties}>Creator mode</div><div style={({"color":"#81858c","fontSize":"0.8125em","lineHeight":"1.55"}) as React.CSSProperties}>Built for creating custom agent presets, with all Standard mode capabilities plus runtime inspection, plugin experiments, and preset-authoring guidance.</div></div><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="shrink-0" style={({"width":"1em","height":"1em"}) as React.CSSProperties}><path d="M3 8.2L6.5 11.7L13 4.7" stroke="#679efe" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"></path></svg></div></div></div></div></div></div></div></div></div></div></div><div className="md:hidden"><span className="inline-flex items-center rounded-[8px] p-[1px] " style={({"background":"linear-gradient(135deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.08) 35%, rgba(255,255,255,0.04) 65%, rgba(255,255,255,0.28) 100%)","boxShadow":"0 0 16px rgba(255,255,255,0.08), 0 0 32px rgba(255,255,255,0.04)"}) as React.CSSProperties}><span className="px-[9px] pt-[6px] pb-[5px] rounded-[7px] bg-black/25 font-mono text-[12px] font-medium text-white/95 leading-none tracking-wider uppercase">Design approach</span></span><h2 className="ds-text-heading1 text-ds-primary mt-ds-4 mb-ds-9 whitespace-pre-line">Everything is a plugin.
+Every run is traceable.</h2></div><div className="flex md:hidden flex-col gap-ds-9"><div className="flex flex-col gap-ds-5" style={({"opacity":"0","transform":"translateY(30px)"}) as React.CSSProperties}><div className="flex flex-col gap-ds-4"><div className="flex items-center gap-ds-2"><div className="text-ds-primary"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 3L23.5 8.5V19.5L14 25L4.5 19.5V8.5L14 3Z" stroke="currentColor" strokeWidth="1.3"></path><path d="M5 9L14 14.2L23 9M14 14.2V24.4" stroke="currentColor" strokeWidth="1.3"></path></svg></div><h3 className="ds-text-subtitle !text-[22px] !font-normal text-ds-primary">Everything is a plugin</h3></div><p className="ds-text-body text-ds-description leading-[1.7]">BlazeResolver is built on <a href="https://github.com/DikshantJangra/BlazeResolver" target="_blank" rel="noopener noreferrer" className="text-ds-primary hover:text-ds-brand transition-colors underline underline-offset-4 decoration-1 decoration-dashed decoration-white/30">LangGraph</a>&#x27;s plugin system. Plugins provide every agent capability, including models, tools, skills, sessions, sandboxes, storage, loops, scheduling, and the UI. LangGraph services and events let the plugins work together. Developers can select, swap, or extend any capability in configuration without changing the BlazeResolver source code.</p></div><div className="min-w-0 aspect-[8/5] bg-ds-surface-3 border border-ds-border-default rounded-ds-media overflow-hidden"><div className="w-full h-full flex items-center overflow-hidden bg-[#101113]"><img src="/images/harness/feat-plugin.en.png" alt="BlazeResolver settings showing installed plugins and their status" className="block w-full h-full object-contain"/></div></div></div><div className="flex flex-col gap-ds-5" style={({"opacity":"0","transform":"translateY(30px)"}) as React.CSSProperties}><div className="flex flex-col gap-ds-4"><div className="flex items-center gap-ds-2"><div className="text-ds-primary"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="9.5" stroke="currentColor" strokeWidth="1.3"></circle><path d="M12 10.5L18 14L12 17.5V10.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"></path></svg></div><h3 className="ds-text-subtitle !text-[22px] !font-normal text-ds-primary">Every run is traceable</h3></div><p className="ds-text-body text-ds-description leading-[1.7]">Everything the model sees is recorded in an append-only session log: system prompts, reasoning, tool calls and results, subagent scheduling, and every context injection. In the Trajectory view, you can inspect these records by source. Resume, fork, search, and replay all operate on the same event stream.</p></div><div className="min-w-0 aspect-[8/5] bg-ds-surface-3 border border-ds-border-default rounded-ds-media overflow-hidden"><div className="w-full h-full flex items-center overflow-hidden bg-[#101113]"><img src="/images/harness/trajectory-real-view.en.png" alt="Reconstruct a complete run from a single session log" className="block w-full h-full object-contain"/></div></div></div><div className="flex flex-col gap-ds-5" style={({"opacity":"0","transform":"translateY(30px)"}) as React.CSSProperties}><div className="flex flex-col gap-ds-4"><div className="flex items-center gap-ds-2"><div className="text-ds-primary"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4.5" y="4.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"></rect><rect x="15.5" y="4.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"></rect><rect x="4.5" y="15.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"></rect><rect x="15.5" y="15.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"></rect></svg></div><h3 className="ds-text-subtitle !text-[22px] !font-normal text-ds-primary">Multiple runtime modes</h3></div><p className="ds-text-body text-ds-description leading-[1.7]">Standard mode includes the full toolset. Code mode uses model-generated code to orchestrate multiple rounds of tool calls. Minimal mode keeps only a shell tool and a file editor for benchmarking models in a minimal environment. Creator mode lets you inspect the current runtime, test LangGraph plugins in memory, and combine them into new modes.</p></div><div className="min-w-0 aspect-[8/5] bg-ds-surface-3 border border-ds-border-default rounded-ds-media overflow-hidden"><div role="img" aria-label="The new-session mode picker listing Standard, Code, Minimal, and Creator modes" className="w-full h-full flex flex-col justify-center font-ds-sans select-text" style={({"containerType":"inline-size"}) as React.CSSProperties}><div className="grid" style={({"fontSize":"clamp(9px, 2.3cqw, 13.5px)","padding":"1.4em 2.4em 1.5em"}) as React.CSSProperties}><div className="col-start-1 row-start-1 min-w-0"><div className="flex items-center" style={({"gap":"0.5em"}) as React.CSSProperties}><span style={({"display":"inline-flex","alignItems":"center","gap":"0.25em","minHeight":"2.1em","padding":"0 0.75em","borderRadius":"1.05em","fontSize":"0.8125em","lineHeight":"1.25em","fontWeight":"500","color":"#e6e8ea","whiteSpace":"nowrap"}) as React.CSSProperties}><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" style={({"width":"1.23em","height":"1.23em"}) as React.CSSProperties}><path d="M2 4.5C2 3.7 2.7 3 3.5 3H6.2L7.7 4.8H12.5C13.3 4.8 14 5.5 14 6.3V11.5C14 12.3 13.3 13 12.5 13H3.5C2.7 13 2 12.3 2 11.5V4.5Z" stroke="#e6e8ea" strokeWidth="1.3" strokeLinejoin="round"></path></svg>dsh-demo<svg aria-hidden="true" viewBox="0 0 12 12" fill="none" className="shrink-0" style={({"width":"0.75em","height":"0.75em"}) as React.CSSProperties}><path d="M3 4.5L6 7.5L9 4.5" stroke="#81858c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path></svg></span><span style={({"display":"inline-flex","alignItems":"center","gap":"0.25em","minHeight":"2.1em","padding":"0 0.75em","borderRadius":"1.05em","fontSize":"0.8125em","lineHeight":"1.25em","fontWeight":"500","color":"#e6e8ea","whiteSpace":"nowrap","background":"rgba(255, 255, 255, 0.08)"}) as React.CSSProperties}><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" style={({"width":"1.23em","height":"1.23em"}) as React.CSSProperties}><mask id="mask0_agent_preset_16" maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16"><rect width="16" height="16" fill="white"></rect><circle cx="7.9995" cy="3.28319" r="1.712" fill="black"></circle><circle cx="3.51122" cy="11.3855" r="1.712" fill="black"></circle><circle cx="12.4878" cy="11.3855" r="1.712" fill="black"></circle></mask><path mask="url(#mask0_agent_preset_16)" d="M12.2881 11.0425C12.6002 11.3723 13.0413 11.5786 13.5312 11.5786L13.5342 11.5776C13.1476 12.3233 12.6119 12.9785 11.9639 13.5005C10.9327 14.3309 9.6199 14.8286 8.19336 14.8286C7.29864 14.8285 6.45056 14.6313 5.6875 14.2808C6.08309 14.0281 6.36707 13.6189 6.45215 13.1392C6.99022 13.3561 7.57767 13.476 8.19336 13.4761C9.30019 13.4761 10.3157 13.0915 11.1152 12.4478C11.5935 12.0626 11.9924 11.5848 12.2881 11.0425ZM4.14746 4.36475C4.25569 4.83228 4.55488 5.2247 4.95898 5.4585C4.07956 6.30639 3.53144 7.49605 3.53125 8.81396C3.53125 9.69534 3.77613 10.5202 4.20117 11.2231C3.74959 11.3817 3.38395 11.7232 3.19531 12.1597C2.5541 11.2032 2.17969 10.052 2.17969 8.81396C2.17989 7.05087 2.93868 5.4646 4.14746 4.36475ZM8.19336 2.80029C8.85717 2.80029 9.49784 2.90834 10.0967 3.10791C12.3237 3.85044 13.9725 5.86061 14.1846 8.28369C13.9832 8.20048 13.7627 8.15382 13.5312 8.15381C13.2802 8.15381 13.042 8.20907 12.8271 8.30615C12.6281 6.47264 11.3666 4.95616 9.66895 4.39014C9.2063 4.236 8.70989 4.15186 8.19336 4.15186C7.96112 4.15189 7.7329 4.16981 7.50977 4.20264C7.51947 4.12886 7.52637 4.05348 7.52637 3.97705C7.52628 3.56604 7.3811 3.18914 7.13965 2.89404C7.48183 2.83352 7.83381 2.80033 8.19336 2.80029Z" fill="currentColor"></path><path d="M9.1123 3.28271C9.11205 2.66858 8.61322 2.17041 7.99902 2.17041C7.38504 2.17067 6.88697 2.66874 6.88672 3.28271C6.88672 3.89691 7.38489 4.39574 7.99902 4.396C8.61338 4.396 9.1123 3.89707 9.1123 3.28271ZM10.3115 3.28271C10.3115 4.55981 9.27612 5.59521 7.99902 5.59521C6.72214 5.59496 5.6875 4.55965 5.6875 3.28271C5.68776 2.00599 6.7223 0.971447 7.99902 0.971191C9.27596 0.971191 10.3113 2.00584 10.3115 3.28271Z" fill="currentColor"></path><path d="M4.62402 11.385C4.62377 10.7709 4.12494 10.2727 3.51074 10.2727C2.89676 10.273 2.39869 10.771 2.39844 11.385C2.39844 11.9992 2.89661 12.498 3.51074 12.4983C4.1251 12.4983 4.62402 11.9994 4.62402 11.385ZM5.82324 11.385C5.82324 12.6621 4.78784 13.6975 3.51074 13.6975C2.23386 13.6973 1.19922 12.6619 1.19922 11.385C1.19947 10.1083 2.23402 9.07374 3.51074 9.07349C4.78768 9.07349 5.82299 10.1081 5.82324 11.385Z" fill="currentColor"></path><path d="M13.6006 11.385C13.6003 10.7709 13.1015 10.2727 12.4873 10.2727C11.8733 10.273 11.3753 10.771 11.375 11.385C11.375 11.9992 11.8732 12.498 12.4873 12.4983C13.1017 12.4983 13.6006 11.9994 13.6006 11.385ZM14.7998 11.385C14.7998 12.6621 13.7644 13.6975 12.4873 13.6975C11.2104 13.6973 10.1758 12.6619 10.1758 11.385C10.176 10.1083 11.2106 9.07374 12.4873 9.07349C13.7642 9.07349 14.7995 10.1081 14.7998 11.385Z" fill="currentColor"></path></svg>Creator mode<svg aria-hidden="true" viewBox="0 0 12 12" fill="none" className="shrink-0" style={({"width":"0.75em","height":"0.75em","transform":"rotate(180deg)"}) as React.CSSProperties}><path d="M3 4.5L6 7.5L9 4.5" stroke="#81858c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path></svg></span></div><div className="flex flex-col" style={({"marginTop":"0.9em","gap":"0.75em","paddingTop":"0.625em","borderRadius":"1.375em","background":"#1f2126","boxShadow":"0 0.5em 1.5em rgba(0, 0, 0, 0.35)"}) as React.CSSProperties}><div style={({"minHeight":"3.25em","padding":"0.25em 0.75em 0 1em","color":"#81858c","lineHeight":"1.5"}) as React.CSSProperties}>Describe what you want to build</div><div className="flex items-center justify-between" style={({"padding":"0.125em 0.5em 0.375em","gap":"0.75em"}) as React.CSSProperties}><div className="flex items-center" style={({"gap":"1em"}) as React.CSSProperties}><span className="flex items-center justify-center rounded-full shrink-0" style={({"width":"1.75em","height":"1.75em","background":"rgba(255, 255, 255, 0.08)"}) as React.CSSProperties}><svg aria-hidden="true" viewBox="0 0 12 12" fill="none" style={({"width":"0.75em","height":"0.75em"}) as React.CSSProperties}><path d="M6 1.5V10.5M1.5 6H10.5" stroke="#e6e8ea" strokeWidth="1.3" strokeLinecap="round"></path></svg></span></div><span className="flex items-center justify-center rounded-full shrink-0" style={({"width":"2.125em","height":"2.125em","background":"#679efe","transform":"translateY(-0.125em)"}) as React.CSSProperties}><svg aria-hidden="true" viewBox="0 0 12 12" fill="none" style={({"width":"0.9em","height":"0.9em"}) as React.CSSProperties}><path d="M6 10V2M2.5 5.5L6 2L9.5 5.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path></svg></span></div></div></div><div className="col-start-1 row-start-1 min-w-0 relative z-10" style={({"paddingTop":"2.35em","paddingLeft":"min(7.2em, 12%)"}) as React.CSSProperties}><div className="flex flex-col" style={({"width":"min(30em, 100%)","padding":"0.45em","border":"1px solid rgba(255, 255, 255, 0.06)","borderRadius":"0.75em","background":"#26282c","boxShadow":"0 1.2em 2.8em rgba(0, 0, 0, 0.55)"}) as React.CSSProperties}><div className="flex items-center" style={({"gap":"0.5em","padding":"0.5em 0.625em","borderRadius":"0.625em"}) as React.CSSProperties}><div className="flex-1 min-w-0" style={({"display":"flex","flexDirection":"column","gap":"0.125em"}) as React.CSSProperties}><div style={({"color":"#e6e8ea","fontSize":"0.875em","lineHeight":"1.55","fontWeight":"500"}) as React.CSSProperties}>Standard mode</div><div style={({"color":"#81858c","fontSize":"0.8125em","lineHeight":"1.55"}) as React.CSSProperties}>Full coding agent with file editing, shell, file and web search, skills, planning, goals, subagents, and workflows.</div></div></div><div className="flex items-center" style={({"gap":"0.5em","padding":"0.5em 0.625em","borderRadius":"0.625em"}) as React.CSSProperties}><div className="flex-1 min-w-0" style={({"display":"flex","flexDirection":"column","gap":"0.125em"}) as React.CSSProperties}><div style={({"color":"#e6e8ea","fontSize":"0.875em","lineHeight":"1.55","fontWeight":"500"}) as React.CSSProperties}>Code mode</div><div style={({"color":"#81858c","fontSize":"0.8125em","lineHeight":"1.55"}) as React.CSSProperties}>All Standard mode capabilities, with tools exposed through the Code Mode SDK so the model can combine multi-step operations in one TypeScript program.</div></div></div><div className="flex items-center" style={({"gap":"0.5em","padding":"0.5em 0.625em","borderRadius":"0.625em"}) as React.CSSProperties}><div className="flex-1 min-w-0" style={({"display":"flex","flexDirection":"column","gap":"0.125em"}) as React.CSSProperties}><div style={({"color":"#e6e8ea","fontSize":"0.875em","lineHeight":"1.55","fontWeight":"500"}) as React.CSSProperties}>Minimal mode</div><div style={({"color":"#81858c","fontSize":"0.8125em","lineHeight":"1.55"}) as React.CSSProperties}>Two-tool coding agent with persistent bash and str_replace_editor.</div></div></div><div className="flex items-center" style={({"gap":"0.5em","padding":"0.8em 0.75em","borderRadius":"0.625em","background":"rgba(255, 255, 255, 0.07)"}) as React.CSSProperties}><div className="flex-1 min-w-0" style={({"display":"flex","flexDirection":"column","gap":"0.125em"}) as React.CSSProperties}><div style={({"color":"#e6e8ea","fontSize":"0.875em","lineHeight":"1.55","fontWeight":"500"}) as React.CSSProperties}>Creator mode</div><div style={({"color":"#81858c","fontSize":"0.8125em","lineHeight":"1.55"}) as React.CSSProperties}>Built for creating custom agent presets, with all Standard mode capabilities plus runtime inspection, plugin experiments, and preset-authoring guidance.</div></div><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="shrink-0" style={({"width":"1em","height":"1em"}) as React.CSSProperties}><path d="M3 8.2L6.5 11.7L13 4.7" stroke="#679efe" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"></path></svg></div></div></div></div></div></div></div></div></section>
   );
 }
