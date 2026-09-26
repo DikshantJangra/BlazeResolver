@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.2-purple.svg)](https://vitejs.dev/)
-[![Tests](https://img.shields.io/badge/Tests-5%20Passing-brightgreen.svg)]()
+[![Tests](<https://img.shields.io/badge/Tests-5%20Passing-brightgreen.svg>)]()
 
 ---
 
@@ -39,18 +39,19 @@ Customer Input (Text / Voice, any channel)
 ```
 
 ### Core Principle
+
 > **LLM decides intent, deterministic code executes mutations.** No hallucinated database writes, no hallucinated refunds. Every financial mutation goes through an **idempotent, policy-checked, auditable tool call**.
 
 ---
 
 ## 🔌 2. The 4-Adapter Architecture (Business-Agnostic Core)
 
-The core engine knows nothing about restaurants or food. It only knows 4 typed interface contracts in [`src/adapters/contracts.ts`](file:///Users/dikshantjangra/Documents/projects/BlazeResolver/src/adapters/contracts.ts):
+The core engine is business-agnostic. It only knows 4 typed interface contracts in [`src/adapters/contracts.ts`](file:///Users/dikshantjangra/Documents/projects/BlazeResolver/src/adapters/contracts.ts):
 
-| Adapter Contract | Responsibility | Reference Implementation (`examples/blazeeats`) |
+| Adapter Contract | Responsibility | Reference Implementation (`examples/restaurant`) |
 | :--- | :--- | :--- |
 | **`OrderSource`** | Fetch orders, customer histories, and real KDS prep timestamps | Reads orders & kitchen station ticket logs |
-| **`RefundGateway`** | Issue idempotent refunds & wallet credits | Wraps Razorpay / UPI / Wallet with idempotency keys |
+| **`RefundGateway`** | Issue idempotent refunds & wallet credits | Wraps payment gateway / UPI / Wallet with idempotency keys |
 | **`TicketSink`** | File tickets & consolidate cluster incidents | Escalates single systemic incidents to branch managers |
 | **`MenuControl`** | Temporarily suspend defective dishes (86ing) | Flips branch-level dish availability flags |
 
@@ -81,6 +82,7 @@ The core engine knows nothing about restaurants or food. It only knows 4 typed i
 ## 🤖 5. Bring Your Own Agent (BYO-Agent)
 
 BlazeResolver exposes its 4 pipeline stages as standardized JSON tools in [`src/channels/byo-agent.ts`](file:///Users/dikshantjangra/Documents/projects/BlazeResolver/src/channels/byo-agent.ts). Compatible with:
+
 - **LangGraph**
 - **OpenAI Agents SDK / Function Calling**
 - **Anthropic Claude Tool Use**
@@ -91,10 +93,12 @@ BlazeResolver exposes its 4 pipeline stages as standardized JSON tools in [`src/
 ## 🚀 6. Quick Start Guide
 
 ### Prerequisites
+
 - Node.js $\ge 18$
 - npm or pnpm
 
 ### Installation
+
 ```bash
 git clone https://github.com/DikshantJangra/BlazeResolver.git
 cd BlazeResolver
@@ -102,19 +106,23 @@ npm install
 ```
 
 ### Run All 5 Unit & Integration Tests
+
 ```bash
 npm test
 ```
 
 ### Run the Interactive Terminal Demo Script
+
 ```bash
 npm run demo
 ```
 
 ### Run Full Stack (Backend API + Live UI Dashboard)
+
 ```bash
 npm run dev
 ```
+
 - **Web Dashboard**: [http://localhost:5173](http://localhost:5173)
 - **REST API & Voice WebSocket**: [http://localhost:3001](http://localhost:3001)
 
@@ -131,4 +139,5 @@ npm run dev
 ---
 
 ## 📄 License
+
 Licensed under the [Apache-2.0 License](file:///Users/dikshantjangra/Documents/projects/BlazeResolver/LICENSE).

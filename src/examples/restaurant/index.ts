@@ -12,7 +12,7 @@ import {
 } from '../../adapters/contracts.js';
 import { TriagedComplaint, CorrelatedIncident } from '../../core/types.js';
 
-export class BlazeEatsOrderSource implements OrderSource {
+export class RestaurantOrderSource implements OrderSource {
   private orders: Map<string, Order> = new Map();
   private kitchenTimings: Map<string, KitchenTiming> = new Map();
   private branchBaselines: Map<string, { avgMinutes: number; baselineMinutes: number }> = new Map([
@@ -55,7 +55,7 @@ export class BlazeEatsOrderSource implements OrderSource {
   private seedDefaultOrders(): void {
     const now = new Date();
 
-    // Seed all sample orders used across test suites & seed complaints
+    // Seed sample orders used across test suites & seed complaints
     const seedOrderList: Array<{
       id: string;
       customerId: string;
@@ -88,7 +88,7 @@ export class BlazeEatsOrderSource implements OrderSource {
         customerId: item.customerId,
         customerName: item.customerName,
         branchId: item.branchId,
-        branchName: item.branchId === 'branch_cp_02' ? 'Connaught Place Flagship (Branch 2)' : item.branchId === 'branch_ind_01' ? 'Indiranagar (Branch 1)' : 'Koramangala (Branch 3)',
+        branchName: item.branchId === 'branch_cp_02' ? 'Central Flagship (Branch 2)' : item.branchId === 'branch_ind_01' ? 'East Hub (Branch 1)' : 'South Hub (Branch 3)',
         items: [
           { id: item.dishId, name: item.dishName, quantity: 1, unitPrice: item.amount, totalPrice: item.amount }
         ],
@@ -110,7 +110,7 @@ export class BlazeEatsOrderSource implements OrderSource {
         prepMinutes: item.prepMinutes,
         baselineMinutes: 4.0,
         isBottleneck: item.prepMinutes > 8.0,
-        station: item.branchId === 'branch_cp_02' ? 'Biryani Expedite Station 2' : 'General Line 1',
+        station: item.branchId === 'branch_cp_02' ? 'Expedite Station 2' : 'General Line 1',
         chefNotes: item.prepMinutes > 8.0 ? 'Station backlog; heat-lamp saturation' : 'Standard prep'
       });
     });
@@ -121,7 +121,7 @@ export class BlazeEatsOrderSource implements OrderSource {
       customerId: 'cust_ananya_08',
       customerName: 'Ananya Roy',
       branchId: 'branch_cp_02',
-      branchName: 'Connaught Place Flagship (Branch 2)',
+      branchName: 'Central Flagship (Branch 2)',
       items: [
         { id: 'dish_butter_chicken_02', name: 'Butter Chicken (Family Pack)', quantity: 2, unitPrice: 550, totalPrice: 1100 },
         { id: 'dish_naan_04', name: 'Butter Garlic Naan (Pack of 5)', quantity: 1, unitPrice: 250, totalPrice: 250 },
@@ -136,41 +136,10 @@ export class BlazeEatsOrderSource implements OrderSource {
       paymentMethod: 'card',
       paymentId: 'pay_card_1030'
     });
-
-    // Normal fast orders at Indiranagar (Branch 1)
-    this.orders.set('ord-1040', {
-      id: 'ord-1040',
-      customerId: 'cust_rohit_09',
-      customerName: 'Rohit Nair',
-      branchId: 'branch_ind_01',
-      branchName: 'Indiranagar (Branch 1)',
-      items: [
-        { id: 'dish_paneer_03', name: 'Paneer Tikka Masala', quantity: 1, unitPrice: 260, totalPrice: 260 }
-      ],
-      totalAmount: 260,
-      deliveryFee: 30,
-      tax: 13,
-      status: 'delivered',
-      orderedAt: new Date(now.getTime() - 35 * 60 * 1000),
-      deliveredAt: new Date(now.getTime() - 10 * 60 * 1000),
-      paymentMethod: 'upi',
-      paymentId: 'pay_upi_1040'
-    });
-
-    this.kitchenTimings.set('ord-1040', {
-      orderId: 'ord-1040',
-      branchId: 'branch_ind_01',
-      prepStart: new Date(now.getTime() - 32 * 60 * 1000),
-      prepEnd: new Date(now.getTime() - 28 * 60 * 1000),
-      prepMinutes: 4.1,
-      baselineMinutes: 4.0,
-      isBottleneck: false,
-      station: 'Curry Station 1'
-    });
   }
 }
 
-export class BlazeEatsRefundGateway implements RefundGateway {
+export class RestaurantRefundGateway implements RefundGateway {
   private refunds: Map<string, RefundReceipt> = new Map();
   private credits: Map<string, CreditReceipt> = new Map();
   private customerBalances: Map<string, number> = new Map();
@@ -183,12 +152,12 @@ export class BlazeEatsRefundGateway implements RefundGateway {
     }
 
     const receipt: RefundReceipt = {
-      refundId: `rfnd_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      refundId: `rfnd_pg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       orderId,
       amount,
       currency: 'INR',
       idempotencyKey,
-      gatewayReference: `rzp_txn_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      gatewayReference: `txn_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
       status: 'processed',
       processedAt: new Date()
     };
@@ -235,7 +204,7 @@ export class BlazeEatsRefundGateway implements RefundGateway {
   }
 }
 
-export class BlazeEatsTicketSink implements TicketSink {
+export class RestaurantTicketSink implements TicketSink {
   private tickets: Map<string, Ticket> = new Map();
   private incidents: Map<string, CorrelatedIncident> = new Map();
 
@@ -324,7 +293,7 @@ export class BlazeEatsTicketSink implements TicketSink {
   }
 }
 
-export class BlazeEatsMenuControl implements MenuControl {
+export class RestaurantMenuControl implements MenuControl {
   private dishAvailability: Map<string, boolean> = new Map([
     ['dish_biryani_01::branch_cp_02', true],
     ['dish_butter_chicken_02::branch_cp_02', true],
@@ -374,11 +343,11 @@ export class BlazeEatsMenuControl implements MenuControl {
   }
 }
 
-export function createBlazeEatsAdapters(): ResolverAdapters {
+export function createRestaurantAdapters(): ResolverAdapters {
   return {
-    orderSource: new BlazeEatsOrderSource(),
-    refundGateway: new BlazeEatsRefundGateway(),
-    ticketSink: new BlazeEatsTicketSink(),
-    menuControl: new BlazeEatsMenuControl()
+    orderSource: new RestaurantOrderSource(),
+    refundGateway: new RestaurantRefundGateway(),
+    ticketSink: new RestaurantTicketSink(),
+    menuControl: new RestaurantMenuControl()
   };
 }

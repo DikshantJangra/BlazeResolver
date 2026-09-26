@@ -1,6 +1,6 @@
 import { BlazeResolverPipeline } from '../core/pipeline/index.js';
-import { createBlazeEatsAdapters } from '../examples/blazeeats/index.js';
-import { SEED_COMPLAINTS } from '../examples/blazeeats/seed.js';
+import { createRestaurantAdapters } from '../examples/restaurant/index.js';
+import { SEED_COMPLAINTS } from '../examples/restaurant/seed.js';
 
 async function runCliDemo() {
   console.log('\x1b[36m%s\x1b[0m', '\n======================================================');
@@ -8,7 +8,7 @@ async function runCliDemo() {
   console.log('\x1b[36m%s\x1b[0m', '======================================================\n');
   console.log('Initializing 4-Adapter Harness (OrderSource, RefundGateway, TicketSink, MenuControl)...\n');
 
-  const adapters = createBlazeEatsAdapters();
+  const adapters = createRestaurantAdapters();
   const pipeline = new BlazeResolverPipeline(adapters, {
     autoRefundThresholdINR: 300,
     correlationSlidingWindowHours: 24

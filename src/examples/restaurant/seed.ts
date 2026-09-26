@@ -1,7 +1,7 @@
 import { CustomerInput } from '../../core/types.js';
 
 export const SEED_COMPLAINTS: CustomerInput[] = [
-  // --- CLUSTER: 5 Correlated Cold Biryani Complaints at Branch 2 (CP) ---
+  // --- CLUSTER: 5 Correlated Cold Food Complaints at Branch 2 ---
   {
     id: 'seed_01',
     channel: 'text',
@@ -14,7 +14,7 @@ export const SEED_COMPLAINTS: CustomerInput[] = [
   {
     id: 'seed_02',
     channel: 'text',
-    rawText: 'Hey team, my biryani in ord-1022 from Connaught Place branch was totally cold. Kids could not eat it. Want refund of ₹280.',
+    rawText: 'Hey team, my biryani in ord-1022 from Central branch was totally cold. Kids could not eat it. Want refund of ₹280.',
     customerId: 'cust_priya_02',
     orderId: 'ord-1022',
     branchId: 'branch_cp_02',
@@ -23,7 +23,7 @@ export const SEED_COMPLAINTS: CustomerInput[] = [
   {
     id: 'seed_03',
     channel: 'text',
-    rawText: 'Terrible experience with order ord-1023 at CP branch! Dum biryani was chilled as if straight out of fridge. Need money back ₹295.',
+    rawText: 'Terrible experience with order ord-1023 at Branch 2! Dum biryani was chilled as if straight out of fridge. Need money back ₹295.',
     customerId: 'cust_rahul_03',
     orderId: 'ord-1023',
     branchId: 'branch_cp_02',
@@ -32,7 +32,7 @@ export const SEED_COMPLAINTS: CustomerInput[] = [
   {
     id: 'seed_04',
     channel: 'voice',
-    rawText: 'Hey, I just opened my order ord-1024 from Connaught Place and the biryani is freezing cold and greasy, please fix this and refund ₹280!',
+    rawText: 'Hey, I just opened my order ord-1024 from Branch 2 and the biryani is freezing cold and greasy, please fix this and refund ₹280!',
     customerId: 'cust_sneha_04',
     orderId: 'ord-1024',
     branchId: 'branch_cp_02',
@@ -74,7 +74,7 @@ export const SEED_COMPLAINTS: CustomerInput[] = [
   {
     id: 'seed_08',
     channel: 'text',
-    rawText: 'In order ord-1040 from Indiranagar branch, the Gulab Jamun (₹100) was missing from the bag. Please refund for the dessert.',
+    rawText: 'In order ord-1040 from East Hub branch, the Gulab Jamun (₹100) was missing from the bag. Please refund for the dessert.',
     customerId: 'cust_rohit_09',
     orderId: 'ord-1040',
     branchId: 'branch_ind_01',
@@ -143,7 +143,7 @@ export const SEED_COMPLAINTS: CustomerInput[] = [
   {
     id: 'seed_15',
     channel: 'text',
-    rawText: 'Paneer dish smells really bad and raw in order ord-1047 from CP branch. Unacceptable hygiene.',
+    rawText: 'Paneer dish smells really bad and raw in order ord-1047 from Branch 2. Unacceptable hygiene.',
     customerId: 'cust_arjun_16',
     orderId: 'ord-1047',
     branchId: 'branch_cp_02',
@@ -154,7 +154,7 @@ export const SEED_COMPLAINTS: CustomerInput[] = [
   {
     id: 'seed_16',
     channel: 'text',
-    rawText: 'Hi, do you offer Jain food options without onion and garlic at Koramangala branch?',
+    rawText: 'Hi, do you offer customized allergy options without onion and garlic at South Hub branch?',
     customerId: 'cust_bhavna_17',
     branchId: 'branch_kor_03',
     timestamp: new Date(Date.now() - 50 * 60 * 1000)

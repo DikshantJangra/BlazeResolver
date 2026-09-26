@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { BlazeResolverPipeline } from '../core/pipeline/index.js';
-import { createBlazeEatsAdapters } from '../examples/blazeeats/index.js';
+import { createRestaurantAdapters } from '../examples/restaurant/index.js';
 import { PromptInjectionGuard } from '../core/guardrails/index.js';
 import { CustomerInput } from '../core/types.js';
 
@@ -20,7 +20,7 @@ describe('BlazeResolver End-to-End Suite', () => {
   });
 
   it('should auto-approve refunds under ₹300 threshold', async () => {
-    const adapters = createBlazeEatsAdapters();
+    const adapters = createRestaurantAdapters();
     const pipeline = new BlazeResolverPipeline(adapters, { autoRefundThresholdINR: 300 });
 
     const input: CustomerInput = {
@@ -41,7 +41,7 @@ describe('BlazeResolver End-to-End Suite', () => {
   });
 
   it('should gate high-value refunds (> ₹300) in HITL queue', async () => {
-    const adapters = createBlazeEatsAdapters();
+    const adapters = createRestaurantAdapters();
     const pipeline = new BlazeResolverPipeline(adapters, { autoRefundThresholdINR: 300 });
 
     const input: CustomerInput = {
@@ -68,7 +68,7 @@ describe('BlazeResolver End-to-End Suite', () => {
   });
 
   it('should enforce idempotency and prevent double-refunds', async () => {
-    const adapters = createBlazeEatsAdapters();
+    const adapters = createRestaurantAdapters();
     const pipeline = new BlazeResolverPipeline(adapters, { autoRefundThresholdINR: 300 });
 
     const input: CustomerInput = {
@@ -88,7 +88,7 @@ describe('BlazeResolver End-to-End Suite', () => {
   });
 
   it('should correlate 5 cold biryani complaints with KDS timing and emit 1 consolidated incident', async () => {
-    const adapters = createBlazeEatsAdapters();
+    const adapters = createRestaurantAdapters();
     const pipeline = new BlazeResolverPipeline(adapters, {
       autoRefundThresholdINR: 300,
       correlationSlidingWindowHours: 24

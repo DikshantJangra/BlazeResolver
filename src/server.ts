@@ -3,8 +3,8 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { BlazeResolverPipeline } from './core/pipeline/index.js';
-import { createBlazeEatsAdapters } from './examples/blazeeats/index.js';
-import { SEED_COMPLAINTS } from './examples/blazeeats/seed.js';
+import { createRestaurantAdapters } from './examples/restaurant/index.js';
+import { SEED_COMPLAINTS } from './examples/restaurant/seed.js';
 import { VoiceChannelBridge } from './channels/voice.js';
 import { getAgentToolSchemas, createAgentToolExecutor } from './channels/byo-agent.js';
 import { CustomerInput } from './core/types.js';
@@ -16,7 +16,7 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize Adapter Reference & Pipeline
-let adapters = createBlazeEatsAdapters();
+let adapters = createRestaurantAdapters();
 let pipeline = new BlazeResolverPipeline(adapters, {
   autoRefundThresholdINR: 300,
   correlationSlidingWindowHours: 24
@@ -95,7 +95,7 @@ app.post('/api/pipeline/seed', async (req, res) => {
 
 // 3. Reset pipeline & adapters state
 app.post('/api/pipeline/reset', (req, res) => {
-  adapters = createBlazeEatsAdapters();
+  adapters = createRestaurantAdapters();
   pipeline = new BlazeResolverPipeline(adapters, {
     autoRefundThresholdINR: 300,
     correlationSlidingWindowHours: 24
@@ -157,17 +157,17 @@ app.post('/api/hitl/action', async (req, res) => {
 
 // 8. Adapters Overview
 app.get('/api/adapters/overview', async (req, res) => {
-  const blazeOrderSource = adapters.orderSource as any;
-  const blazeRefundGateway = adapters.refundGateway as any;
-  const blazeTicketSink = adapters.ticketSink as any;
-  const blazeMenuControl = adapters.menuControl as any;
+  const currentOrderSource = adapters.orderSource as any;
+  const currentRefundGateway = adapters.refundGateway as any;
+  const currentTicketSink = adapters.ticketSink as any;
+  const currentMenuControl = adapters.menuControl as any;
 
   return res.json({
-    orders: blazeOrderSource.getAllOrders ? blazeOrderSource.getAllOrders() : [],
-    refunds: blazeRefundGateway.getAllRefunds ? blazeRefundGateway.getAllRefunds() : [],
-    credits: blazeRefundGateway.getAllCredits ? blazeRefundGateway.getAllCredits() : [],
-    incidents: blazeTicketSink.getAllIncidents ? blazeTicketSink.getAllIncidents() : [],
-    disabledDishes: await blazeMenuControl.getDisabledDishes()
+    orders: currentOrderSource.getAllOrders ? currentOrderSource.getAllOrders() : [],
+    refunds: currentRefundGateway.getAllRefunds ? currentRefundGateway.getAllRefunds() : [],
+    credits: currentRefundGateway.getAllCredits ? currentRefundGateway.getAllCredits() : [],
+    incidents: currentTicketSink.getAllIncidents ? currentTicketSink.getAllIncidents() : [],
+    disabledDishes: await currentMenuControl.getDisabledDishes()
   });
 });
 
