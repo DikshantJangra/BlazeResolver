@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import { FaPlay, FaPause, FaVolumeHigh, FaPhone, FaShieldHalved } from "react-icons/fa6";
+import {
+  FaPlay,
+  FaPause,
+  FaVolumeHigh,
+  FaPhone,
+  FaShieldHalved,
+} from "react-icons/fa6";
 
 export default function VideoSection() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -43,9 +49,25 @@ export default function VideoSection() {
             {/* Animated Audio Spectrum Bars */}
             <div className="flex items-end justify-center gap-1.5 h-16 w-full max-w-[320px]">
               {[
-                "h-4", "h-8", "h-14", "h-10", "h-6", "h-16", "h-12", "h-7",
-                "h-14", "h-11", "h-16", "h-8", "h-12", "h-5", "h-9", "h-14",
-                "h-6", "h-11", "h-4"
+                "h-4",
+                "h-8",
+                "h-14",
+                "h-10",
+                "h-6",
+                "h-16",
+                "h-12",
+                "h-7",
+                "h-14",
+                "h-11",
+                "h-16",
+                "h-8",
+                "h-12",
+                "h-5",
+                "h-9",
+                "h-14",
+                "h-6",
+                "h-11",
+                "h-4",
               ].map((hClass, i) => (
                 <div
                   key={i}
@@ -66,11 +88,16 @@ export default function VideoSection() {
             <div className="flex flex-col gap-2 font-mono text-sm max-w-[580px]">
               <p className="text-white/60 text-xs">
                 <span className="text-[#0055FF] font-semibold">Caller:</span>{" "}
-                &quot;My order from Burger Bistro arrived 45 mins late and the food was cold.&quot;
+                &quot;My order from Burger Bistro arrived 45 mins late and the
+                food was cold.&quot;
               </p>
               <p className="text-white text-sm font-sans font-medium">
-                <span className="text-[#FF6B00] font-semibold font-mono">BlazeResolver:</span>{" "}
-                &quot;I completely understand and apologize. I&apos;ve checked the driver delay, refunded your full $28.50 order immediately, and added $5 to your BlazeEats credit.&quot;
+                <span className="text-[#FF6B00] font-semibold font-mono">
+                  BlazeResolver:
+                </span>{" "}
+                &quot;I completely understand and apologize. I&apos;ve checked
+                the driver delay, refunded your full $28.50 order immediately,
+                and added $5 to your BlazeEats credit.&quot;
               </p>
             </div>
           </div>
@@ -97,7 +124,11 @@ export default function VideoSection() {
                 onClick={() => setIsPlaying(!isPlaying)}
                 className="cursor-pointer hover:text-white"
               >
-                {isPlaying ? <FaPause className="w-3 h-3" /> : <FaPlay className="w-3 h-3" />}
+                {isPlaying ? (
+                  <FaPause className="w-3 h-3" />
+                ) : (
+                  <FaPlay className="w-3 h-3" />
+                )}
               </button>
               <span className="font-mono text-[11px] text-white/60">
                 {isPlaying ? "0:18 / 1:42" : "0:00 / 1:42"}

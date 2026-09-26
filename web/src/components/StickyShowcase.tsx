@@ -5,7 +5,7 @@ import {
   FaPlug,
   FaRoute,
   FaLayerGroup,
-  FaCheckCircle,
+  FaCircleCheck,
   FaTerminal,
   FaPhoneVolume,
   FaShieldHalved,
@@ -95,10 +95,10 @@ export default function StickyShowcase() {
                 </h3>
               </div>
               <p className="ds-text-body text-ds-description leading-[1.7]">
-                Everything the model executes is recorded in an immutable session
-                log: incoming caller intent, operational telemetry queries,
-                policy guard evaluations, refund amounts, and audio responses.
-                Inspect full audit trajectories end-to-end.
+                Everything the model executes is recorded in an immutable
+                session log: incoming caller intent, operational telemetry
+                queries, policy guard evaluations, refund amounts, and audio
+                responses. Inspect full audit trajectories end-to-end.
               </p>
             </div>
 
@@ -126,10 +126,10 @@ export default function StickyShowcase() {
               </div>
               <p className="ds-text-body text-ds-description leading-[1.7]">
                 Standard mode handles autonomous triage and omnichannel chat.
-                Voice mode streams low-latency real-time voice resolution. Policy
-                mode enforces financial refund and voucher approval gates.
-                Creator mode lets you compose custom plugins and test flows in
-                memory.
+                Voice mode streams low-latency real-time voice resolution.
+                Policy mode enforces financial refund and voucher approval
+                gates. Creator mode lets you compose custom plugins and test
+                flows in memory.
               </p>
             </div>
           </div>
@@ -162,9 +162,10 @@ export default function StickyShowcase() {
                     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/10 flex flex-col gap-1.5">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-white flex items-center gap-1.5">
-                          <FaPlug className="text-[#FF6B00]" /> BlazeEats Adapter
+                          <FaPlug className="text-[#FF6B00]" /> BlazeEats
+                          Adapter
                         </span>
-                        <FaCheckCircle className="text-[#28c840] w-3 h-3" />
+                        <FaCircleCheck className="text-[#28c840] w-3 h-3" />
                       </div>
                       <span className="text-[10px] text-white/60">
                         Order & kitchen telemetry stream
@@ -177,9 +178,10 @@ export default function StickyShowcase() {
                     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/10 flex flex-col gap-1.5">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-white flex items-center gap-1.5">
-                          <FaPhoneVolume className="text-[#0055FF]" /> Twilio Voice
+                          <FaPhoneVolume className="text-[#0055FF]" /> Twilio
+                          Voice
                         </span>
-                        <FaCheckCircle className="text-[#28c840] w-3 h-3" />
+                        <FaCircleCheck className="text-[#28c840] w-3 h-3" />
                       </div>
                       <span className="text-[10px] text-white/60">
                         Bidirectional WebSocket audio
@@ -192,9 +194,10 @@ export default function StickyShowcase() {
                     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/10 flex flex-col gap-1.5">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-white flex items-center gap-1.5">
-                          <FaShieldHalved className="text-[#FF6B00]" /> Policy Guard
+                          <FaShieldHalved className="text-[#FF6B00]" /> Policy
+                          Guard
                         </span>
-                        <FaCheckCircle className="text-[#28c840] w-3 h-3" />
+                        <FaCircleCheck className="text-[#28c840] w-3 h-3" />
                       </div>
                       <span className="text-[10px] text-white/60">
                         Max refund threshold: $35.00
@@ -207,9 +210,10 @@ export default function StickyShowcase() {
                     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/10 flex flex-col gap-1.5">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-white flex items-center gap-1.5">
-                          <FaTerminal className="text-[#0055FF]" /> SQLite Event Log
+                          <FaTerminal className="text-[#0055FF]" /> SQLite Event
+                          Log
                         </span>
-                        <FaCheckCircle className="text-[#28c840] w-3 h-3" />
+                        <FaCircleCheck className="text-[#28c840] w-3 h-3" />
                       </div>
                       <span className="text-[10px] text-white/60">
                         Append-only audit trail
@@ -222,7 +226,9 @@ export default function StickyShowcase() {
 
                   <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[10px] text-white/40">
                     <span>Engine: LangGraph Kernel</span>
-                    <span className="text-[#FF6B00]">All systems operational</span>
+                    <span className="text-[#FF6B00]">
+                      All systems operational
+                    </span>
                   </div>
                 </div>
               </div>
@@ -250,7 +256,9 @@ export default function StickyShowcase() {
 
                   <div className="flex flex-col gap-2 my-auto">
                     <div className="flex items-start gap-2.5 text-[11px] p-1.5 rounded bg-white/[0.02]">
-                      <span className="text-white/40 shrink-0 font-mono">00:01.2</span>
+                      <span className="text-white/40 shrink-0 font-mono">
+                        00:01.2
+                      </span>
                       <span className="text-[#0055FF] font-semibold shrink-0">
                         [INCOMING]
                       </span>
@@ -260,7 +268,9 @@ export default function StickyShowcase() {
                     </div>
 
                     <div className="flex items-start gap-2.5 text-[11px] p-1.5 rounded bg-white/[0.02]">
-                      <span className="text-white/40 shrink-0 font-mono">00:02.1</span>
+                      <span className="text-white/40 shrink-0 font-mono">
+                        00:02.1
+                      </span>
                       <span className="text-[#FF6B00] font-semibold shrink-0">
                         [CORRELATE]
                       </span>
@@ -270,7 +280,9 @@ export default function StickyShowcase() {
                     </div>
 
                     <div className="flex items-start gap-2.5 text-[11px] p-1.5 rounded bg-white/[0.02]">
-                      <span className="text-white/40 shrink-0 font-mono">00:03.4</span>
+                      <span className="text-white/40 shrink-0 font-mono">
+                        00:03.4
+                      </span>
                       <span className="text-[#28c840] font-semibold shrink-0">
                         [POLICY_OK]
                       </span>
@@ -280,7 +292,9 @@ export default function StickyShowcase() {
                     </div>
 
                     <div className="flex items-start gap-2.5 text-[11px] p-1.5 rounded bg-white/[0.02]">
-                      <span className="text-white/40 shrink-0 font-mono">00:04.8</span>
+                      <span className="text-white/40 shrink-0 font-mono">
+                        00:04.8
+                      </span>
                       <span className="text-white font-semibold shrink-0">
                         [VOICE_OUT]
                       </span>
