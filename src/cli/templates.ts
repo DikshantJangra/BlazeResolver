@@ -32,7 +32,12 @@ jobs:
       - run: corepack enable
       - run: npx --yes blazeresolver@latest fix
         env:
+          # Any provider's key(s), comma-separated; each key's provider is recognized from the key itself,
+          # and several give automatic failover. \`gh secret set API_KEYS\`
+          API_KEYS: \${{ secrets.API_KEYS }}
           ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
+          BLAZE_PROVIDER: \${{ vars.BLAZE_PROVIDER }}
+          BLAZE_MODEL: \${{ vars.BLAZE_MODEL }}
           # Use a personal access token here (secret BLAZE_GITHUB_TOKEN) if you want CI to run on the PRs it opens.
           GITHUB_TOKEN: \${{ secrets.BLAZE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 

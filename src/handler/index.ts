@@ -1,5 +1,5 @@
 import { commentOnIssue, listOpenIssues, openIssue } from '../github/index.js';
-import { ReportSchema, anthropicComplete, triage, type Complete } from '../triage/index.js';
+import { ReportSchema, resolveComplete, triage, type Complete } from '../triage/index.js';
 import { emailMarker, groupKey, keyMarker, renderIssueBody, renderReport } from './issue.js';
 
 export interface HandlerOptions {
@@ -7,7 +7,7 @@ export interface HandlerOptions {
   repo: string;
   /** Needs Issues: write on that one repo and nothing else. Defaults to BLAZE_GITHUB_TOKEN. */
   githubToken?: string;
-  /** Model for triage. Defaults to Claude via ANTHROPIC_API_KEY; without a key, keyword rules are used. */
+  /** Model for triage. Defaults to whichever AI provider has a key configured; without one, keyword rules are used. */
   complete?: Complete;
   /** Keep the customer's email in the issue so they can be told when it's fixed. Only for private repos. */
   storeEmails?: boolean;
@@ -63,7 +63,7 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
     if (!parsed.success) return reply(400, { error: 'invalid report' });
     const report = parsed.data;
 
-    const verdict = await triage(report, options.complete ?? anthropicComplete());
+    const verdict = await triage(report, options.complete ?? resolveComplete());
     // The customer only ever gets an acknowledgement, never the verdict.
     const ack = () => reply(202, { received: true });
     if (verdict.injection || !(verdict.enterFixLoop || verdict.kind === 'feature_request')) return ack();

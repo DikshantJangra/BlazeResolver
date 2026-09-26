@@ -51,6 +51,67 @@ function nextRouteDir(cwd: string): string | undefined {
   return ['src/app', 'app'].find((d) => existsSync(join(cwd, d)));
 }
 
+interface EnvVar { key: string; comment?: string }
+interface EnvSection { header: string; vars: EnvVar[] }
+
+const ENV_SECTIONS: EnvSection[] = [
+  {
+    header:
+      '# --- BlazeResolver: AI (triage & the fix engine) ------------------------------\n' +
+      '# Paste any AI provider key; the provider is recognized from the key itself.\n' +
+      '# Several keys, even from different providers, give automatic failover and rotation:\n' +
+      '#   API_KEYS=sk-ant-...,gsk_...,nvapi-...\n' +
+      '# Recognized: Anthropic, OpenAI, Gemini, Groq, NVIDIA NIM, DeepSeek, xAI, Cerebras, Fireworks,\n' +
+      '# Perplexity, OpenRouter, Hugging Face, Zhipu, GitHub Models. Keys that look like nothing in particular\n' +
+      '# (Mistral, Together, Cohere, ...) go in a named variable instead, e.g. MISTRAL_API_KEY=...\n' +
+      '# Check what was recognized: npx blazeresolver providers\n' +
+      '# Optional: BLAZE_MODEL=<model>, BLAZE_PROVIDER=<name> to pin one, OLLAMA_BASE_URL for a local\n' +
+      '# Ollama, AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_DEPLOYMENT for Azure OpenAI.',
+    vars: [{ key: 'API_KEYS' }]
+  },
+  {
+    header: '# --- BlazeResolver: GitHub -----------------------------------------------------',
+    vars: [{ key: 'BLAZE_GITHUB_TOKEN', comment: '# Fine-grained token: Issues read and write on this repo only.' }]
+  }
+];
+
+/**
+ * Creates `.env` with BlazeResolver's variables, or appends only the ones an existing file is missing.
+ * Never touches a line that's already there, so it's safe to run on every `init`.
+ */
+function ensureEnvFile(cwd: string, log: (l: string) => void): void {
+  const path = join(cwd, '.env');
+  const existing = existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+  const existingKeys = new Set(
+    (existing ?? '')
+      .split('\n')
+      .map((l) => l.match(/^([A-Z0-9_]+)=/)?.[1])
+      .filter((k): k is string => !!k)
+  );
+
+  const blocks = ENV_SECTIONS.map(({ header, vars }) => {
+    const missing = vars.filter((v) => !existingKeys.has(v.key));
+    if (!missing.length) return undefined;
+    const lines = missing.map((v) => (v.comment ? `${v.comment}\n${v.key}=` : `${v.key}=`));
+    return [header, ...lines].join('\n');
+  }).filter((b): b is string => !!b);
+
+  if (!blocks.length) {
+    if (existing !== undefined) log("  kept   .env (already has BlazeResolver's variables)");
+    return;
+  }
+
+  const addition = blocks.join('\n\n') + '\n';
+  if (existing === undefined) {
+    writeFileSync(path, addition);
+    log('  wrote  .env');
+  } else {
+    const sep = existing.endsWith('\n\n') ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
+    writeFileSync(path, existing + sep + addition);
+    log('  edited .env (appended missing BlazeResolver variables)');
+  }
+}
+
 function write(cwd: string, file: string, content: string, force: boolean | undefined, log: (l: string) => void): boolean {
   const path = join(cwd, file);
   if (existsSync(path) && !force) {
@@ -96,6 +157,8 @@ export function runInit(opts: InitOptions): { repo: string; handlerFile?: string
     }
   }
 
+  ensureEnvFile(cwd, log);
+
   log('\nNext steps:');
   let step = 1;
   if (!cmds.hasTests) log(`  ${step++}. This project has no "test" script. BlazeResolver verifies every fix with your tests, so add some or fixes will go to a human.`);
@@ -105,11 +168,13 @@ export function runInit(opts: InitOptions): { repo: string; handlerFile?: string
     log(`       app.post('/api/blaze', nodeHandler(createHandler({ repo: '${repo}' })));\n`);
   }
   log(`  ${step++}. Create a fine-grained GitHub token with Issues: read and write on ${repo} only.`);
-  log(`     Give it to your backend as BLAZE_GITHUB_TOKEN, along with ANTHROPIC_API_KEY (optional; without it triage uses keyword rules).`);
-  log(`  ${step++}. Add the repo secret the fix workflow needs:   gh secret set ANTHROPIC_API_KEY`);
+  log(`     Give it to your backend as BLAZE_GITHUB_TOKEN in .env (just created/updated for you).`);
+  log(`  ${step++}. Paste any AI key into .env as API_KEYS= (any provider; it's recognized automatically; several = failover).`);
+  log(`     Optional: without one, triage uses keyword rules. Check with: npx blazeresolver providers`);
+  log(`  ${step++}. Give the fix workflow the same keys:   gh secret set API_KEYS`);
   log(`  ${step++}. GitHub, Settings, Actions, General: turn on "Allow GitHub Actions to create and approve pull requests".`);
   log(`  ${step++}. Protect ${branch} (Settings, Branches) so every fix needs a human review.`);
   log(`  ${step++}. Paste this before </body> in your app:\n\n       ${widgetTag('/api/blaze')}\n`);
-  log('Then commit the new files. Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest.');
+  log('Then commit the new files (not .env). Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest.');
   return { repo, handlerFile };
 }

@@ -13,7 +13,7 @@ import { LiveEvents, type Audience } from './channels/live-events.js';
 import { getAgentToolSchemas, createAgentToolExecutor } from './channels/byo-agent.js';
 import { buildInboundResponse } from './channels/inbound.js';
 import { CustomerInput } from './core/types.js';
-import { ReportSchema, anthropicComplete, triage } from './triage/index.js';
+import { ReportSchema, describeProviders, resolveComplete, triage } from './triage/index.js';
 import { ProjectRegistry, type Project } from './projects/index.js';
 import { IncidentStore, type IncidentRecord } from './incidents/index.js';
 import { ClaudeProvider } from './resolver/claude-provider.js';
@@ -88,6 +88,10 @@ const store = new IncidentStore();
 // Path differs between `tsx src/server.ts` and compiled `dist/server/src/server.js`.
 const widgetPath = ['../widget/widget.js', '../../../widget/widget.js'].map((p) => fileURLToPath(new URL(p, import.meta.url))).find(existsSync)!;
 app.get('/widget.js', (_req, res) => res.type('application/javascript').set('Cache-Control', 'public, max-age=300').sendFile(widgetPath));
+const svgPath = ['../assets/blazyy.svg', '../../../assets/blazyy.svg'].map((p) => fileURLToPath(new URL(p, import.meta.url))).find(existsSync);
+if (svgPath) {
+  app.get('/blazyy.svg', (_req, res) => res.type('image/svg+xml').set('Cache-Control', 'public, max-age=300').sendFile(svgPath));
+}
 
 // ponytail: fixed-window counters in memory, per process; use Redis if this ever runs on more than one instance.
 const hits = new Map<string, number[]>();
@@ -102,7 +106,7 @@ const limited = (id: string, max: number, windowMs: number) => {
 // The fix engine runs each repo's own tests on this machine, so it stays off on servers anyone can sign up to.
 const githubToken = process.env.BLAZE_GITHUB_TOKEN;
 // A fix proposal can be 4,096 tokens over large file context, which takes about a minute; allow three.
-const fixComplete = anthropicComplete({ maxTokens: 4096, timeoutMs: 180_000 });
+const fixComplete = resolveComplete({ maxTokens: 4096, timeoutMs: 180_000 });
 const fixPrerequisites = process.env.BLAZE_FIX_ENABLED === 'true' && process.env.BLAZE_OPEN_SIGNUP !== 'true' && !!githubToken && !!fixComplete;
 // Each fix's tests run AI-written code nobody has reviewed yet, so they run as a separate unprivileged user.
 const fixSandbox = fixPrerequisites ? resolveFixSandbox() : undefined;
@@ -111,7 +115,7 @@ if (process.env.BLAZE_FIX_ENABLED === 'true' && !fixEnabled) {
   console.warn(
     fixSandbox && !fixSandbox.ok
       ? `BLAZE_FIX_ENABLED ignored: ${fixSandbox.problem}`
-      : 'BLAZE_FIX_ENABLED ignored: it needs BLAZE_GITHUB_TOKEN, ANTHROPIC_API_KEY and BLAZE_OPEN_SIGNUP unset.'
+      : 'BLAZE_FIX_ENABLED ignored: it needs BLAZE_GITHUB_TOKEN, an AI key (any provider, e.g. API_KEYS=...) and BLAZE_OPEN_SIGNUP unset.'
   );
 }
 if (fixSandbox?.ok && fixSandbox.sandbox) lockDownServerFiles();
@@ -411,5 +415,7 @@ if (existsSync(join(clientDir, 'index.html'))) {
 server.listen(PORT, () => {
   console.log(`\n🚀 BlazeResolver Server running on http://localhost:${PORT} (profile: ${profile.name})`);
   console.log(`🎙️ Voice WebSocket Bridge listening on ws://localhost:${PORT}/ws`);
+  const ai = describeProviders();
+  console.log(`🤖 AI providers, in failover order:${ai.length ? ai.map((l) => `\n   ${l}`).join('') : ' none (triage uses keyword rules)'}`);
   console.log(`⚡ Ready to triage, correlate, resolve, and respond!\n`);
 });

@@ -264,4 +264,35 @@ describe('init', () => {
     execFileSync('git', ['init', '-q'], { cwd: dir });
     assert.throws(() => runInit({ cwd: dir, noInstall: true, log: () => {} }), /Could not find a GitHub remote/);
   });
+
+  it('creates .env with one universal API_KEYS line and the GitHub token when none exists', () => {
+    const dir = project({ 'package.json': '{}' });
+    runInit({ cwd: dir, noInstall: true, log: () => {} });
+    const env = readFileSync(join(dir, '.env'), 'utf8');
+    assert.match(env, /^API_KEYS=$/m);
+    assert.match(env, /^BLAZE_GITHUB_TOKEN=$/m);
+    assert.doesNotMatch(env, /^OPENAI_API_KEY=/m, 'no per-provider variables to fill in');
+  });
+
+  it('appends only the missing variables to an existing .env, leaving the rest untouched', () => {
+    const dir = project({ 'package.json': '{}', '.env': 'API_KEYS=sk-ant-mine\nMY_OWN_VAR=keep-me\n' });
+    const out: string[] = [];
+    runInit({ cwd: dir, noInstall: true, log: (l) => out.push(l) });
+    const env = readFileSync(join(dir, '.env'), 'utf8');
+    assert.match(env, /^API_KEYS=sk-ant-mine$/m);
+    assert.match(env, /MY_OWN_VAR=keep-me/);
+    assert.match(env, /^BLAZE_GITHUB_TOKEN=$/m);
+    assert.equal((env.match(/^API_KEYS=/gm) ?? []).length, 1, 'does not duplicate an existing key');
+    assert.match(out.join('\n'), /edited .env/);
+  });
+
+  it('leaves .env alone when it already has every variable, and says so', () => {
+    const dir = project({ 'package.json': '{}' });
+    runInit({ cwd: dir, noInstall: true, log: () => {} });
+    const before = readFileSync(join(dir, '.env'), 'utf8');
+    const out: string[] = [];
+    runInit({ cwd: dir, force: true, noInstall: true, log: (l) => out.push(l) });
+    assert.equal(readFileSync(join(dir, '.env'), 'utf8'), before);
+    assert.match(out.join('\n'), /kept   \.env/);
+  });
 });
