@@ -680,13 +680,10 @@ video {
 }
 .ds-font-harness {
   font-family:
-    Edit Undo,
+    "Edit Undo",
     monospace;
-  font-size: 20px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ds-color-text-primary);
-  -webkit-text-stroke: 0.04em var(--ds-color-bg-page);
 }
 @keyframes arrow-sweep {
   0% {
@@ -2027,11 +2024,11 @@ video {
   color: #fff;
 }
 @font-face {
-  font-family: Edit Undo;
+  font-family: "Edit Undo";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(/fonts/edit-undo.ttf) format("truetype");
+  src: url("/fonts/edit-undo.ttf") format("truetype");
 }
 @font-face {
   font-family: Host Grotesk;

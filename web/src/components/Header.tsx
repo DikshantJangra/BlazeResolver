@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { FaGithub } from "react-icons/fa6";
 
 export default function Header() {
@@ -28,7 +29,7 @@ export default function Header() {
           }}
         >
           {/* Logo & Brand */}
-          <a className="flex items-center gap-[10px] min-w-0" href="/">
+          <Link className="flex items-center gap-[10px] min-w-0" href="/">
             <span className="shrink-0 inline-flex items-center gap-2.5">
               <img
                 src="/blazyy.png"
@@ -58,10 +59,22 @@ export default function Header() {
                 </span>
               </span>
             </span>
-          </a>
+          </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-ds-5">
+            <a
+              href="#architecture"
+              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+            >
+              Architecture
+            </a>
+            <a
+              href="#voice-demo"
+              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+            >
+              Voice Engine
+            </a>
             <a
               href="https://github.com/DikshantJangra/BlazeResolver#readme"
               target="_blank"
@@ -69,14 +82,6 @@ export default function Header() {
               className="text-sm font-medium text-white/70 hover:text-white transition-colors"
             >
               Docs
-            </a>
-            <a
-              href="https://github.com/DikshantJangra/BlazeResolver"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
-            >
-              Plugins
             </a>
             <a
               href="https://github.com/DikshantJangra/BlazeResolver/discussions"
@@ -119,7 +124,11 @@ export default function Header() {
       {/* Mobile Drawer */}
       <div className={`ds-mobile-menu ${mobileMenuOpen ? "is-open" : ""}`}>
         <div className="ds-mobile-menu-header">
-          <a className="flex items-center gap-2.5" href="/">
+          <Link
+            className="flex items-center gap-2.5"
+            href="/"
+            onClick={() => setMobileMenuOpen(false)}
+          >
             <img
               src="/blazyy.png"
               alt="BlazeResolver"
@@ -128,7 +137,7 @@ export default function Header() {
             <span className="font-bold text-lg text-white font-ds-display">
               Blaze<span className="text-[#FF6B00]">Resolver</span>
             </span>
-          </a>
+          </Link>
           <button
             type="button"
             aria-label="Close mobile menu"
@@ -147,12 +156,18 @@ export default function Header() {
         </div>
         <nav className="ds-mobile-menu-body">
           <a
-            href="https://github.com/DikshantJangra/BlazeResolver"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#architecture"
+            onClick={() => setMobileMenuOpen(false)}
             className="ds-mobile-menu-item"
           >
-            GitHub
+            Architecture
+          </a>
+          <a
+            href="#voice-demo"
+            onClick={() => setMobileMenuOpen(false)}
+            className="ds-mobile-menu-item"
+          >
+            Voice Engine
           </a>
           <a
             href="https://github.com/DikshantJangra/BlazeResolver#readme"
@@ -160,15 +175,7 @@ export default function Header() {
             rel="noopener noreferrer"
             className="ds-mobile-menu-item"
           >
-            Developer docs
-          </a>
-          <a
-            href="https://github.com/DikshantJangra/BlazeResolver"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ds-mobile-menu-item"
-          >
-            Community plugins
+            Documentation
           </a>
           <a
             href="https://github.com/DikshantJangra/BlazeResolver/discussions"
@@ -176,7 +183,15 @@ export default function Header() {
             rel="noopener noreferrer"
             className="ds-mobile-menu-item"
           >
-            Community discussions
+            Community Discussions
+          </a>
+          <a
+            href="https://github.com/DikshantJangra/BlazeResolver"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ds-mobile-menu-item text-[#FF6B00]"
+          >
+            View on GitHub
           </a>
         </nav>
       </div>

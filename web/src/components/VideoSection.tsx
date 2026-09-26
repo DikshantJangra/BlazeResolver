@@ -13,14 +13,15 @@ export default function VideoSection() {
   const [isPlaying, setIsPlaying] = useState(false);
 
   return (
-    <section className="ds-container py-ds-10">
+    <section id="voice-demo" className="ds-container py-ds-10 scroll-mt-24">
       <div className="flex flex-col items-center text-center">
         <h2 className="ds-text-heading1 text-ds-primary max-w-[820px]">
-          Customize your BlazeResolver
+          Real-Time Voice Resolution in Action
         </h2>
-        <p className="ds-text-body text-ds-description max-w-[620px] mt-ds-3">
-          Watch how you can customize resolution workflows, triage tools, and
-          agent presets in real time.
+        <p className="ds-text-body text-ds-description max-w-[660px] mt-ds-3">
+          Experience bidirectional voice customer support powered by Gemini Live
+          and Twilio WebSockets. Zero robotic pauses, live operational data
+          queries, and policy-gated resolutions in under 5 seconds.
         </p>
       </div>
 
@@ -31,14 +32,14 @@ export default function VideoSection() {
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-white/[0.06] border border-white/10 text-white/90">
                 <span className="w-2 h-2 rounded-full bg-[#28c840] animate-ping" />
-                <span>LIVE VOICE CALL #BE-9821</span>
+                <span>LIVE VOICE CALL #CALL-9821</span>
               </span>
               <span className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono bg-[#0055FF]/20 text-[#8da4ff] border border-[#0055FF]/30">
-                <FaPhone className="w-2.5 h-2.5" /> Twilio SIP Trunk
+                <FaPhone className="w-2.5 h-2.5" /> Twilio / Gemini Live
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-[#FF6B00]/20 text-[#FF6B00] border border-[#FF6B00]/30 flex items-center gap-1.5">
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-[#28c840]/20 text-[#28c840] border border-[#28c840]/30 flex items-center gap-1.5">
                 <FaShieldHalved className="w-3 h-3" /> Policy Guard: Safe
               </span>
             </div>
@@ -88,16 +89,17 @@ export default function VideoSection() {
             <div className="flex flex-col gap-2 font-mono text-sm max-w-[580px]">
               <p className="text-white/60 text-xs">
                 <span className="text-[#0055FF] font-semibold">Caller:</span>{" "}
-                &quot;My order from Burger Bistro arrived 45 mins late and the
-                food was cold.&quot;
+                &quot;My order was delayed over 40 minutes and the items arrived
+                damaged.&quot;
               </p>
               <p className="text-white text-sm font-sans font-medium">
                 <span className="text-[#FF6B00] font-semibold font-mono">
                   BlazeResolver:
                 </span>{" "}
-                &quot;I completely understand and apologize. I&apos;ve checked
-                the driver delay, refunded your full $28.50 order immediately,
-                and added $5 to your BlazeEats credit.&quot;
+                &quot;I apologize for that inconvenience. I verified our
+                fulfillment telemetry and confirmed a delivery bottleneck.
+                I&apos;ve processed an instant refund of $28.50 and credited
+                $5.00 to your account.&quot;
               </p>
             </div>
           </div>
@@ -146,7 +148,7 @@ export default function VideoSection() {
             <div className="flex items-center gap-3">
               <FaVolumeHigh className="w-3.5 h-3.5 text-white/60" />
               <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 uppercase tracking-wider text-white/80">
-                HD Audio
+                HD Audio 24kHz
               </span>
             </div>
           </div>
