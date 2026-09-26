@@ -20,3 +20,5 @@ export { GitWorkspace, GitWorkspaceError } from './codebase/git-workspace.js';
 export type { GitWorkspaceOptions } from './codebase/git-workspace.js';
 export { CodeGraphAdapter } from './codebase/codegraph-adapter.js';
 export type { CodeGraphAdapterOptions } from './codebase/codegraph-adapter.js';
+export { isSoftwareDefect, toBugIncident } from './core/code-fix/index.js';
+export type { CodeFixer, CodeFixHandoff } from './core/code-fix/index.js';

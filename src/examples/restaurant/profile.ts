@@ -77,7 +77,8 @@ export const RESTAURANT_PROFILE: DomainProfile = {
       keywords: ['charged', 'bill', 'double', 'payment', 'price'],
       severity: 'medium',
       urgencyScore: 0.5,
-      policy: { action: 'create_ticket' }
+      policy: { action: 'create_ticket' },
+      softwareDefect: true
     }
   ],
   complimentKeywords: ['top notch', 'loved', 'awesome', 'kudos', 'great work', 'delicious'],

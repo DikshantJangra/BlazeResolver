@@ -9,7 +9,7 @@ export const UNASSIGNED_RESOURCE = 'unassigned';
 const SYSTEMIC_COMPLAINT_COUNT = 3;
 
 /** A signal this many times above its baseline confirms an operational bottleneck. */
-const SIGNAL_ANOMALY_RATIO = 1.8;
+export const SIGNAL_ANOMALY_RATIO = 1.8;
 
 export class CorrelateEngine {
   private buffer: TriagedComplaint[] = [];

@@ -42,6 +42,11 @@ export interface CategoryDefinition {
   disableItemOnIncident?: boolean;
   /** Recommended next step attached to incidents. `{resource}` is replaced with the resource ID. */
   incidentPlaybook?: string;
+  /**
+   * Complaints in this category point at a defect in the product's own software (wrong charges, errors,
+   * crashes). With a bug resolver attached, the pipeline hands their systemic incidents to the bug-fix loop.
+   */
+  softwareDefect?: boolean;
 }
 
 export interface CatalogEntry {
@@ -209,7 +214,8 @@ export const GENERIC_PROFILE: DomainProfile = {
       keywords: ['charged', 'invoice', 'billing', 'payment', 'subscription', 'price'],
       severity: 'medium',
       urgencyScore: 0.5,
-      policy: { action: 'create_ticket' }
+      policy: { action: 'create_ticket' },
+      softwareDefect: true
     },
     {
       id: 'account_access',
@@ -229,7 +235,8 @@ export const GENERIC_PROFILE: DomainProfile = {
       severity: 'medium',
       urgencyScore: 0.6,
       policy: { action: 'create_ticket' },
-      incidentPlaybook: 'Check recent releases and error logs for {resource}; this may be a systemic bug.'
+      incidentPlaybook: 'Check recent releases and error logs for {resource}; this may be a systemic bug.',
+      softwareDefect: true
     }
   ],
   complimentKeywords: ['love it', 'loved', 'awesome', 'great job', 'great work', 'kudos', 'excellent service'],
