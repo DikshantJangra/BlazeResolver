@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { BlazeResolverPipeline } from '../core/pipeline/index.js';
-import { createRestaurantAdapters } from '../examples/restaurant/index.js';
+import { createRestaurantAdapters, RESTAURANT_PROFILE } from '../examples/restaurant/index.js';
 import { PromptInjectionGuard } from '../core/guardrails/index.js';
 import { CustomerInput } from '../core/types.js';
 
@@ -21,7 +21,7 @@ describe('BlazeResolver End-to-End Suite', () => {
 
   it('should auto-approve refunds under ₹300 threshold', async () => {
     const adapters = createRestaurantAdapters();
-    const pipeline = new BlazeResolverPipeline(adapters, { autoRefundThresholdINR: 300 });
+    const pipeline = new BlazeResolverPipeline(adapters, { profile: RESTAURANT_PROFILE });
 
     const input: CustomerInput = {
       id: 'test_auto_refund',
@@ -29,7 +29,7 @@ describe('BlazeResolver End-to-End Suite', () => {
       rawText: 'Order ord-1021 arrived cold. Please refund ₹280.',
       orderId: 'ord-1021',
       customerId: 'cust_amit_01',
-      branchId: 'branch_cp_02',
+      resourceId: 'branch_cp_02',
       timestamp: new Date()
     };
 
@@ -42,7 +42,7 @@ describe('BlazeResolver End-to-End Suite', () => {
 
   it('should gate high-value refunds (> ₹300) in HITL queue', async () => {
     const adapters = createRestaurantAdapters();
-    const pipeline = new BlazeResolverPipeline(adapters, { autoRefundThresholdINR: 300 });
+    const pipeline = new BlazeResolverPipeline(adapters, { profile: RESTAURANT_PROFILE });
 
     const input: CustomerInput = {
       id: 'test_high_value',
@@ -50,7 +50,7 @@ describe('BlazeResolver End-to-End Suite', () => {
       rawText: 'Family feast ord-1030 ruined. Total bill was ₹1450, need full refund.',
       orderId: 'ord-1030',
       customerId: 'cust_ananya_08',
-      branchId: 'branch_cp_02',
+      resourceId: 'branch_cp_02',
       timestamp: new Date()
     };
 
@@ -69,7 +69,7 @@ describe('BlazeResolver End-to-End Suite', () => {
 
   it('should enforce idempotency and prevent double-refunds', async () => {
     const adapters = createRestaurantAdapters();
-    const pipeline = new BlazeResolverPipeline(adapters, { autoRefundThresholdINR: 300 });
+    const pipeline = new BlazeResolverPipeline(adapters, { profile: RESTAURANT_PROFILE });
 
     const input: CustomerInput = {
       id: 'test_idem_1',
@@ -90,16 +90,16 @@ describe('BlazeResolver End-to-End Suite', () => {
   it('should correlate 5 cold biryani complaints with KDS timing and emit 1 consolidated incident', async () => {
     const adapters = createRestaurantAdapters();
     const pipeline = new BlazeResolverPipeline(adapters, {
-      autoRefundThresholdINR: 300,
+      profile: RESTAURANT_PROFILE,
       correlationSlidingWindowHours: 24
     });
 
     const coldComplaints: CustomerInput[] = [
-      { id: 'c1', channel: 'text', rawText: 'ord-1021 biryani is cold at Branch 2. Refund ₹280.', orderId: 'ord-1021', branchId: 'branch_cp_02', timestamp: new Date() },
-      { id: 'c2', channel: 'text', rawText: 'ord-1022 cold biryani from CP. Refund ₹280.', orderId: 'ord-1022', branchId: 'branch_cp_02', timestamp: new Date() },
-      { id: 'c3', channel: 'text', rawText: 'ord-1023 chilled biryani. Refund ₹295.', orderId: 'ord-1023', branchId: 'branch_cp_02', timestamp: new Date() },
-      { id: 'c4', channel: 'text', rawText: 'ord-1024 freezing food at Connaught Place. Refund ₹280.', orderId: 'ord-1024', branchId: 'branch_cp_02', timestamp: new Date() },
-      { id: 'c5', channel: 'text', rawText: 'ord-1025 cold food again from Branch 2. Refund ₹310.', orderId: 'ord-1025', branchId: 'branch_cp_02', timestamp: new Date() },
+      { id: 'c1', channel: 'text', rawText: 'ord-1021 biryani is cold at Branch 2. Refund ₹280.', orderId: 'ord-1021', resourceId: 'branch_cp_02', timestamp: new Date() },
+      { id: 'c2', channel: 'text', rawText: 'ord-1022 cold biryani from CP. Refund ₹280.', orderId: 'ord-1022', resourceId: 'branch_cp_02', timestamp: new Date() },
+      { id: 'c3', channel: 'text', rawText: 'ord-1023 chilled biryani. Refund ₹295.', orderId: 'ord-1023', resourceId: 'branch_cp_02', timestamp: new Date() },
+      { id: 'c4', channel: 'text', rawText: 'ord-1024 freezing food at Connaught Place. Refund ₹280.', orderId: 'ord-1024', resourceId: 'branch_cp_02', timestamp: new Date() },
+      { id: 'c5', channel: 'text', rawText: 'ord-1025 cold food again from Branch 2. Refund ₹310.', orderId: 'ord-1025', resourceId: 'branch_cp_02', timestamp: new Date() },
     ];
 
     let lastResult;
@@ -110,9 +110,10 @@ describe('BlazeResolver End-to-End Suite', () => {
     assert.strictEqual(lastResult?.correlation.isSystemic, true);
     const incidents = pipeline.getCorrelateEngine().getIncidents();
     assert.strictEqual(incidents.length, 1);
-    assert.strictEqual(incidents[0].branchId, 'branch_cp_02');
+    assert.strictEqual(incidents[0].resourceId, 'branch_cp_02');
     assert.strictEqual(incidents[0].complaintCount, 5);
     assert.strictEqual(incidents[0].managerNotified, true);
-    assert.ok(incidents[0].avgTicketTimeMinutes > incidents[0].baselineTimeMinutes * 2);
+    assert.strictEqual(incidents[0].signal?.metric, 'kitchen_prep_time');
+    assert.ok(incidents[0].signal!.average > incidents[0].signal!.baseline * 2);
   });
 });

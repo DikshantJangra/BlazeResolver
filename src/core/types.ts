@@ -6,21 +6,15 @@ export interface CustomerInput {
   rawText: string;
   customerId?: string;
   orderId?: string;
-  branchId?: string;
+  /** Location or operational unit the complaint concerns (store, warehouse, region). */
+  resourceId?: string;
+  itemId?: string;
   timestamp: Date;
   metadata?: Record<string, unknown>;
 }
 
-export type TriageCategory =
-  | 'cold_food'
-  | 'missing_item'
-  | 'wrong_item'
-  | 'delivery_delay'
-  | 'quality_issue'
-  | 'spill_leak'
-  | 'pricing_billing'
-  | 'general_inquiry'
-  | 'prompt_injection';
+/** A category ID from the active DomainProfile, or one of the built-ins in domain.ts. */
+export type TriageCategory = string;
 
 export type TriageSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type TriageSentiment = 'positive' | 'neutral' | 'frustrated' | 'furious';
@@ -32,9 +26,9 @@ export interface TriagedComplaint {
   category: TriageCategory;
   severity: TriageSeverity;
   sentiment: TriageSentiment;
-  dish?: string;
-  dishId?: string;
-  branchId?: string;
+  itemId?: string;
+  itemName?: string;
+  resourceId?: string;
   orderId?: string;
   customerId?: string;
   claimedAmount?: number;
@@ -46,16 +40,25 @@ export interface TriagedComplaint {
   timestamp: Date;
 }
 
+/** An operational metric compared with its baseline, e.g. prep time, dispatch delay, error rate. */
+export interface SignalSummary {
+  metric: string;
+  label: string;
+  unit: string;
+  average: number;
+  baseline: number;
+  ratio: number;
+}
+
 export interface CorrelateCluster {
   clusterKey: string;
-  branchId: string;
+  resourceId: string;
   category: TriageCategory;
-  dishId?: string;
-  dishName?: string;
+  itemId?: string;
+  itemName?: string;
   complaintIds: string[];
   count: number;
-  avgKitchenPrepMinutes: number;
-  baselinePrepMinutes: number;
+  signal?: SignalSummary;
   isAnomalous: boolean;
   rootCauseHypothesis?: string;
   incidentId?: string;
@@ -67,19 +70,17 @@ export interface CorrelatedIncident {
   incidentId: string;
   title: string;
   summary: string;
-  branchId: string;
+  resourceId: string;
   category: TriageCategory;
-  dishId?: string;
-  dishName?: string;
+  itemId?: string;
+  itemName?: string;
   ticketIds: string[];
   complaintCount: number;
-  avgTicketTimeMinutes: number;
-  baselineTimeMinutes: number;
-  delayRatio: number;
+  signal?: SignalSummary;
   status: 'investigating' | 'action_taken' | 'resolved';
   recommendedAction: string;
   managerNotified: boolean;
-  dishDisabled: boolean;
+  itemDisabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -88,7 +89,7 @@ export type ResolutionActionType =
   | 'refund'
   | 'credit'
   | 're_deliver'
-  | 'disable_dish'
+  | 'disable_item'
   | 'create_ticket'
   | 'route_to_manager'
   | 'escalate_hitl'
@@ -109,10 +110,11 @@ export interface ResolutionAction {
   actionType: ResolutionActionType;
   idempotencyKey: string;
   amount?: number;
+  currency?: string;
   orderId?: string;
   customerId?: string;
-  dishId?: string;
-  branchId?: string;
+  itemId?: string;
+  resourceId?: string;
   reason: string;
   requiresApproval: boolean;
   approvalStatus: ApprovalStatus;

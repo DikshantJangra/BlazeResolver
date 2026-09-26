@@ -1,14 +1,14 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { BlazeResolverPipeline } from '../core/pipeline/index.js';
-import { createRestaurantAdapters } from '../examples/restaurant/index.js';
+import { createRestaurantAdapters, RESTAURANT_PROFILE } from '../examples/restaurant/index.js';
 import { getVoiceToolDeclarations, executeVoiceTool } from '../channels/voice/tools.js';
 import { generateTonePcm24k, calculatePcmRms, bufferToBase64 } from '../channels/voice/pcm-utils.js';
 
 describe('BlazeResolver Voice Layer Suite', () => {
   const adapters = createRestaurantAdapters();
   const pipeline = new BlazeResolverPipeline(adapters, {
-    autoRefundThresholdINR: 300,
+    profile: RESTAURANT_PROFILE,
     correlationSlidingWindowHours: 24
   });
 
@@ -25,7 +25,7 @@ describe('BlazeResolver Voice Layer Suite', () => {
     assert.strictEqual(toolNames.includes('check_incident_status'), true);
   });
 
-  test('lookup_order tool should return order items and KDS prep metrics', async () => {
+  test('lookup_order tool should return order items and operational signal', async () => {
     const result = await executeVoiceTool(
       'lookup_order',
       { orderId: 'ord-1021' },
@@ -34,9 +34,10 @@ describe('BlazeResolver Voice Layer Suite', () => {
 
     assert.strictEqual((result as any).found, true);
     assert.strictEqual((result as any).orderId, 'ord-1021');
-    assert.strictEqual((result as any).totalAmountINR, 280);
+    assert.strictEqual((result as any).totalAmount, 280);
+    assert.strictEqual((result as any).currency, 'INR');
     assert.strictEqual(Array.isArray((result as any).items), true);
-    assert.strictEqual((result as any).kitchenTiming.isBottleneck, true);
+    assert.strictEqual((result as any).operationalSignal.isAnomalous, true);
   });
 
   test('process_refund tool should auto-approve amounts <= ₹300', async () => {
@@ -47,7 +48,7 @@ describe('BlazeResolver Voice Layer Suite', () => {
     );
 
     assert.strictEqual((result as any).status, 'approved_and_processed');
-    assert.strictEqual((result as any).amountINR, 280);
+    assert.strictEqual((result as any).amount, 280);
     assert.strictEqual(typeof (result as any).refundId, 'string');
   });
 
@@ -60,7 +61,7 @@ describe('BlazeResolver Voice Layer Suite', () => {
 
     assert.strictEqual((result as any).status, 'hitl_gated');
     assert.strictEqual((result as any).requiresSupervisorApproval, true);
-    assert.strictEqual((result as any).amountINR, 1450);
+    assert.strictEqual((result as any).amount, 1450);
 
     const hitlQueue = pipeline.getResolutionEngine().getHitlQueue();
     const queuedAction = hitlQueue.find((a) => a.orderId === 'ord-1030');

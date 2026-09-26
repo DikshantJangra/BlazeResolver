@@ -8,6 +8,7 @@ import {
   GeminiServerContentMessage
 } from './types.js';
 import { getVoiceToolDeclarations, executeVoiceTool, VoiceToolExecutionContext } from './tools.js';
+import { extractOrderId, formatMoney, matchesKeywords, normalizeOrderId } from '../../core/domain.js';
 import { generateTonePcm24k, bufferToBase64 } from './pcm-utils.js';
 
 export interface GeminiLiveClientCallbacks {
@@ -99,18 +100,19 @@ export class GeminiLiveSession {
     const voiceName = this.config.voiceName || 'Puck';
     const model = this.config.model || 'models/gemini-2.0-flash-exp';
 
+    const profile = this.context.pipeline.getProfile();
     const systemPrompt =
       this.config.systemInstruction ||
-      `You are Blazzy, the real-time AI voice resolution agent for BlazeResolver (foodtech & restaurant operations).
+      `You are Blazzy, the real-time AI voice resolution agent for BlazeResolver, supporting customers of a ${profile.labels.business}.
 You speak empathetically, concisely, and with a natural conversational tone.
-When customers complain about an order or state an order ID (e.g. ord-1021, ord-1030, ord-1044), ALWAYS dispatch tools mid-conversation:
-- lookup_order: to check items, pricing, delivery status, and KDS kitchen prep timings.
-- process_refund: to issue refunds/credits for valid issues like cold food, delayed delivery, missing items, or wrong orders.
-- file_complaint: to file complaints into the correlation engine and correlate with KDS kitchen delays.
+When customers complain about an order or state an order ID, ALWAYS dispatch tools mid-conversation:
+- lookup_order: to check items, pricing, delivery status, and live operational signals.
+- process_refund: to issue refunds/credits for valid issues like ${profile.categories.slice(0, 4).map((c) => c.label.toLowerCase()).join(', ')}.
+- file_complaint: to file complaints into the correlation engine and detect systemic operational issues.
 - escalate_to_human: if the customer demands a human supervisor or there is a critical dispute.
-- check_incident_status: to check branch kitchen bottlenecks.
+- check_incident_status: to check for active incidents at a ${profile.labels.resource.toLowerCase()}.
 
-Always clearly mention amounts in INR (₹) when refunds or credits are issued. Keep voice responses short, natural, and helpful without robotic lists.`;
+Always clearly mention amounts in ${profile.currency.code} (${profile.currency.symbol}) when refunds or credits are issued. Keep voice responses short, natural, and helpful without robotic lists.`;
 
     const setupMsg: GeminiSetupMessage = {
       setup: {
@@ -130,7 +132,7 @@ Always clearly mention amounts in INR (₹) when refunds or credits are issued. 
         },
         tools: [
           {
-            functionDeclarations: getVoiceToolDeclarations()
+            functionDeclarations: getVoiceToolDeclarations(profile)
           }
         ]
       }
@@ -258,53 +260,69 @@ Always clearly mention amounts in INR (₹) when refunds or credits are issued. 
    * High-Fidelity Voice Simulator Fallback for Instant Testing & Offline Environments
    */
   private async handleSimulatorTurn(text: string): Promise<void> {
+    const profile = this.context.pipeline.getProfile();
+    const money = (amount: number) => formatMoney(amount, profile.currency);
     const lower = text.toLowerCase();
-    const orderMatch = lower.match(/ord-\d+/);
-    const orderId = orderMatch ? orderMatch[0] : this.config.orderId || 'ord-1021';
+    const mentionedOrderId = extractOrderId(text, profile);
+    const orderId = mentionedOrderId ?? (this.config.orderId ? normalizeOrderId(this.config.orderId, profile) : undefined);
+    const isComplaint =
+      lower.includes('refund') ||
+      lower.includes('complaint') ||
+      profile.categories.some((category) => matchesKeywords(lower, category.keywords));
 
     // 1. Detect Intent & Dispatch Tools Mid-Conversation
-    if (lower.includes('order') || lower.includes('status') || lower.includes('where') || orderMatch) {
+    if ((lower.includes('order') || lower.includes('status') || lower.includes('where') || mentionedOrderId) && !orderId) {
+      this.speak('I can help with that. Could you tell me your order number?', 500);
+      return;
+    }
+
+    if (orderId && (lower.includes('order') || lower.includes('status') || lower.includes('where') || mentionedOrderId)) {
       const callId = `sim_call_${Date.now()}`;
       this.callbacks.onToolCallStart?.('lookup_order', callId, { orderId });
       const orderResult = await executeVoiceTool('lookup_order', { orderId }, this.context);
       this.callbacks.onToolCallComplete?.('lookup_order', callId, orderResult);
 
-      if (lower.includes('cold') || lower.includes('delayed') || lower.includes('late') || lower.includes('spill') || lower.includes('refund') || lower.includes('complaint')) {
+      if (!(orderResult as any).found) {
+        this.speak(`I couldn't find order #${orderId}. Could you double-check the order number for me?`, 500);
+        return;
+      }
+
+      if (isComplaint) {
         // Dispatch file_complaint tool
         const cmpCallId = `sim_cmp_${Date.now()}`;
         this.callbacks.onToolCallStart?.('file_complaint', cmpCallId, {
           complaintText: text,
           orderId,
-          dishName: (orderResult as any)?.items?.[0]?.name
+          itemName: (orderResult as any)?.items?.[0]?.name
         });
         const cmpResult = await executeVoiceTool('file_complaint', {
           complaintText: text,
           orderId,
-          dishName: (orderResult as any)?.items?.[0]?.name
+          itemName: (orderResult as any)?.items?.[0]?.name
         }, this.context);
         this.callbacks.onToolCallComplete?.('file_complaint', cmpCallId, cmpResult);
 
         // Dispatch process_refund tool
         const refCallId = `sim_ref_${Date.now()}`;
-        const amount = (orderResult as any)?.totalAmountINR || 280;
+        const amount = (orderResult as any).totalAmount;
         this.callbacks.onToolCallStart?.('process_refund', refCallId, {
           orderId,
           amount,
-          reason: 'Customer reported cold food / delivery delay via Voice'
+          reason: 'Customer reported an order problem via Voice'
         });
         const refResult = await executeVoiceTool('process_refund', {
           orderId,
           amount,
-          reason: 'Customer reported cold food / delivery delay via Voice'
+          reason: 'Customer reported an order problem via Voice'
         }, this.context);
         this.callbacks.onToolCallComplete?.('process_refund', refCallId, refResult);
 
         // Emit synthesized audio & response
         let spokenText = '';
         if ((refResult as any).status === 'hitl_gated') {
-          spokenText = `I looked up Order #${orderId}. Because this is a high-value order of ₹${amount}, I have expedited it directly to our Senior Supervisor Priority Queue for instant 1-click approval. You will receive an SMS confirmation within a few minutes.`;
+          spokenText = `I looked up Order #${orderId}. Because this is a high-value order of ${money(amount)}, I have expedited it directly to our Senior Supervisor Priority Queue for instant 1-click approval. You will receive an SMS confirmation within a few minutes.`;
         } else {
-          spokenText = `I apologize for the issue with your ${(orderResult as any)?.items?.[0]?.name || 'order'} on #${orderId}. I have processed an instant refund of ₹${amount} back to your original payment method. Is there anything else I can help you with?`;
+          spokenText = `I apologize for the issue with your ${(orderResult as any)?.items?.[0]?.name || 'order'} on #${orderId}. I have processed an instant refund of ${money(amount)} back to your original payment method. Is there anything else I can help you with?`;
         }
 
         this.callbacks.onTranscript?.(spokenText, 'model', true);
@@ -314,7 +332,7 @@ Always clearly mention amounts in INR (₹) when refunds or credits are issued. 
         return;
       }
 
-      const spokenText = `I have pulled up Order #${orderId} for ${(orderResult as any)?.customerName || 'you'}. It includes ${(orderResult as any)?.items?.map((i: any) => i.name).join(', ')} totaling ₹${(orderResult as any)?.totalAmountINR}. Status is currently ${(orderResult as any)?.status}. How can I assist you with this order?`;
+      const spokenText = `I have pulled up Order #${orderId} for ${(orderResult as any)?.customerName || 'you'}. It includes ${(orderResult as any)?.items?.map((i: any) => i.name).join(', ')} totaling ${money((orderResult as any).totalAmount)}. Status is currently ${(orderResult as any)?.status}. How can I assist you with this order?`;
       this.callbacks.onTranscript?.(spokenText, 'model', true);
       const toneBuffer = generateTonePcm24k(520, 1000);
       this.callbacks.onAudioOutput?.(bufferToBase64(toneBuffer));
@@ -345,10 +363,16 @@ Always clearly mention amounts in INR (₹) when refunds or credits are issued. 
     }
 
     // Default conversational turn
-    const spokenText = `Hello! I'm Blazzy, your AI resolution assistant. If you have an issue with your food order or need a refund, please let me know your order number or describe what happened.`;
+    const spokenText = `Hello! I'm Blazzy, your AI resolution assistant. If you have an issue with an order or need a refund, please let me know your order number or describe what happened.`;
     this.callbacks.onTranscript?.(spokenText, 'model', true);
     const toneBuffer = generateTonePcm24k(480, 800);
     this.callbacks.onAudioOutput?.(bufferToBase64(toneBuffer));
+    this.callbacks.onTurnComplete?.();
+  }
+
+  private speak(text: string, toneMs: number): void {
+    this.callbacks.onTranscript?.(text, 'model', true);
+    this.callbacks.onAudioOutput?.(bufferToBase64(generateTonePcm24k(500, toneMs)));
     this.callbacks.onTurnComplete?.();
   }
 

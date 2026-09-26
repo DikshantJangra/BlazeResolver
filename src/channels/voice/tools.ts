@@ -1,23 +1,28 @@
 import { BlazeResolverPipeline } from '../../core/pipeline/index.js';
 import { ResolverAdapters } from '../../adapters/contracts.js';
-import { CustomerInput } from '../../core/types.js';
+import { CustomerInput, ResolutionAction } from '../../core/types.js';
+import { DomainProfile, GENERIC_PROFILE, formatMoney, normalizeOrderId } from '../../core/domain.js';
 import { GeminiFunctionDeclaration } from './types.js';
 
 /**
- * Returns function declarations for Gemini Multimodal Live API
+ * Returns function declarations for Gemini Multimodal Live API, worded for the active domain profile.
  */
-export function getVoiceToolDeclarations(): GeminiFunctionDeclaration[] {
+export function getVoiceToolDeclarations(profile: DomainProfile = GENERIC_PROFILE): GeminiFunctionDeclaration[] {
+  const { labels, currency, moneyPolicy } = profile;
+  const itemLabel = labels.item.toLowerCase();
+  const resourceLabel = labels.resource.toLowerCase();
+  const categoryExamples = profile.categories.slice(0, 4).map((c) => c.label.toLowerCase()).join(', ');
+
   return [
     {
       name: 'lookup_order',
-      description:
-        'Look up real-time restaurant customer order details, line items, prices, delivery status, branch, and kitchen prep timings (KDS). Always invoke this when the customer provides or inquires about an order ID.',
+      description: `Look up real-time order details, line items, prices, delivery status, ${resourceLabel}, and live operational signals. Always invoke this when the customer provides or inquires about an order ID.`,
       parameters: {
         type: 'OBJECT',
         properties: {
           orderId: {
             type: 'STRING',
-            description: 'The order ID (e.g. ord-1021, ord-1030, ord-1044)'
+            description: 'The order ID the customer mentioned'
           }
         },
         required: ['orderId']
@@ -25,8 +30,7 @@ export function getVoiceToolDeclarations(): GeminiFunctionDeclaration[] {
     },
     {
       name: 'process_refund',
-      description:
-        'Process an instant refund or wallet store credit for an order through the BlazeResolver MoneyGate policy guardrail. Handles auto-refunds under ₹300, or queues higher amounts for human supervisor (HITL) approval.',
+      description: `Process an instant refund or wallet store credit for an order through the BlazeResolver MoneyGate policy guardrail. Handles auto-refunds up to ${formatMoney(moneyPolicy.autoApproveThreshold, currency)}, or queues higher amounts for human supervisor (HITL) approval.`,
       parameters: {
         type: 'OBJECT',
         properties: {
@@ -36,16 +40,16 @@ export function getVoiceToolDeclarations(): GeminiFunctionDeclaration[] {
           },
           amount: {
             type: 'NUMBER',
-            description: 'The refund amount in INR'
+            description: `The refund amount in ${currency.code}`
           },
           reason: {
             type: 'STRING',
-            description: 'Reason for refund (e.g., cold food, delivery delay, missing item, wrong order)'
+            description: `Reason for refund (e.g., ${categoryExamples})`
           },
           refundType: {
             type: 'STRING',
             enum: ['original_payment', 'store_credit'],
-            description: 'Refund destination: original UPI/card payment or instant store credit'
+            description: 'Refund destination: original payment method or instant store credit'
           }
         },
         required: ['orderId', 'amount', 'reason']
@@ -53,8 +57,7 @@ export function getVoiceToolDeclarations(): GeminiFunctionDeclaration[] {
     },
     {
       name: 'file_complaint',
-      description:
-        'File and run a customer complaint through the BlazeResolver correlation harness. Cross-references live kitchen prep timestamps to identify systemic branch delays or dish quality issues.',
+      description: `File and run a customer complaint through the BlazeResolver correlation harness. Cross-references live operational signals to identify systemic ${resourceLabel} problems or ${itemLabel} quality issues.`,
       parameters: {
         type: 'OBJECT',
         properties: {
@@ -66,17 +69,17 @@ export function getVoiceToolDeclarations(): GeminiFunctionDeclaration[] {
             type: 'STRING',
             description: 'Associated order ID if known'
           },
-          dishName: {
+          itemName: {
             type: 'STRING',
-            description: 'Affected dish or food item name'
+            description: `Affected ${itemLabel} name`
           },
           claimedAmount: {
             type: 'NUMBER',
-            description: 'Claimed refund amount in INR if requested by customer'
+            description: `Claimed refund amount in ${currency.code} if requested by customer`
           },
-          branchId: {
+          resourceId: {
             type: 'STRING',
-            description: 'Branch ID if known'
+            description: `${labels.resource} ID if known`
           }
         },
         required: ['complaintText']
@@ -112,17 +115,16 @@ export function getVoiceToolDeclarations(): GeminiFunctionDeclaration[] {
     },
     {
       name: 'check_incident_status',
-      description:
-        'Check if there is currently an active systemic kitchen bottleneck or operational incident at a restaurant branch.',
+      description: `Check if there is currently an active systemic incident or operational bottleneck at a ${resourceLabel}.`,
       parameters: {
         type: 'OBJECT',
         properties: {
-          branchId: {
+          resourceId: {
             type: 'STRING',
-            description: 'Restaurant branch ID (e.g. branch_cp_02, branch_ind_01, branch_kor_03)'
+            description: `${labels.resource} ID${profile.resources.length > 0 ? ` (e.g. ${profile.resources.map((r) => r.id).join(', ')})` : ''}`
           }
         },
-        required: ['branchId']
+        required: ['resourceId']
       }
     }
   ];
@@ -144,29 +146,32 @@ export async function executeVoiceTool(
   context: VoiceToolExecutionContext
 ): Promise<Record<string, unknown>> {
   const { pipeline, adapters, customerId = 'cust_voice_user', onEvent } = context;
+  const profile = pipeline.getProfile();
+  const money = (amount: number) => formatMoney(amount, profile.currency);
 
   switch (toolName) {
     case 'lookup_order': {
-      const rawOrderId = String(args.orderId || '').toLowerCase().trim();
-      const order = await adapters.orderSource.getOrder(rawOrderId);
+      const orderId = normalizeOrderId(String(args.orderId || ''), profile);
+      const order = await adapters.orderSource.getOrder(orderId);
       if (!order) {
         return {
           found: false,
-          message: `Order #${rawOrderId} not found in the restaurant order registry. Please verify the order number with the customer.`
+          message: `Order #${orderId} not found in the order system. Please verify the order number with the customer.`
         };
       }
 
-      const timing = await adapters.orderSource.getKitchenTiming(rawOrderId);
-      const baseline = await adapters.orderSource.getBranchAveragePrepTime(order.branchId);
+      const signal = adapters.signalSource ? await adapters.signalSource.getOrderSignal(orderId) : null;
+      const baseline = adapters.signalSource ? await adapters.signalSource.getResourceBaseline(order.resourceId) : null;
 
       const payload = {
         found: true,
         orderId: order.id,
         customerName: order.customerName,
-        branchId: order.branchId,
-        branchName: order.branchName,
+        resourceId: order.resourceId,
+        resourceName: order.resourceName,
         status: order.status,
-        totalAmountINR: order.totalAmount,
+        totalAmount: order.totalAmount,
+        currency: order.currency,
         paymentMethod: order.paymentMethod,
         items: order.items.map(item => ({
           name: item.name,
@@ -176,16 +181,19 @@ export async function executeVoiceTool(
         })),
         orderedAt: order.orderedAt,
         deliveredAt: order.deliveredAt,
-        kitchenTiming: timing
+        operationalSignal: signal
           ? {
-              prepMinutes: timing.prepMinutes,
-              baselineMinutes: timing.baselineMinutes,
-              isBottleneck: timing.isBottleneck,
-              chefNotes: timing.chefNotes,
-              station: timing.station
+              metric: signal.metric,
+              label: signal.label,
+              unit: signal.unit,
+              value: signal.value,
+              baseline: signal.baseline,
+              isAnomalous: signal.isAnomalous,
+              stage: signal.stage,
+              notes: signal.notes
             }
           : null,
-        branchBaselineMinutes: baseline.baselineMinutes
+        resourceBaseline: baseline ? { label: baseline.label, unit: baseline.unit, baseline: baseline.baseline } : null
       };
 
       onEvent?.('order_lookup_success', payload);
@@ -193,42 +201,43 @@ export async function executeVoiceTool(
     }
 
     case 'process_refund': {
-      const rawOrderId = String(args.orderId || '').toLowerCase().trim();
+      const orderId = normalizeOrderId(String(args.orderId || ''), profile);
       const amount = Number(args.amount || 0);
       const reason = String(args.reason || 'Customer voice complaint');
       const refundType = (args.refundType as string) || 'original_payment';
-      const idempotencyKey = `voice_rfnd_${rawOrderId}_${amount}_${Date.now()}`;
+      const idempotencyKey = `voice_rfnd_${orderId}_${amount}_${Date.now()}`;
 
-      // Check auto-refund threshold via resolution engine
-      const threshold = 300; // default ₹300
-      const order = await adapters.orderSource.getOrder(rawOrderId);
+      const threshold = pipeline.getResolutionEngine().getAutoApproveThreshold();
+      const order = await adapters.orderSource.getOrder(orderId);
 
       if (amount > threshold) {
         // High amount: MoneyGate HITL route
-        const hitlAction = {
+        const hitlAction: ResolutionAction = {
           id: `hitl_voice_${Date.now()}`,
-          complaintId: `cmp_voice_${rawOrderId}`,
+          complaintId: `cmp_voice_${orderId}`,
           actionType: refundType === 'store_credit' ? 'credit' : 'refund',
           idempotencyKey,
           amount,
-          orderId: rawOrderId,
+          currency: profile.currency.code,
+          orderId,
           customerId: order?.customerId || customerId,
-          reason: `High value refund request exceeding ₹${threshold} threshold: ${reason}`,
-          approvalStatus: 'pending_human' as const,
+          reason: `High value refund request exceeding ${money(threshold)} threshold: ${reason}`,
+          requiresApproval: true,
+          approvalStatus: 'pending_human',
           createdAt: new Date()
         };
 
-        // Queue in resolution engine HITL list
-        (pipeline.getResolutionEngine() as any).hitlQueue.unshift(hitlAction);
+        pipeline.getResolutionEngine().queueForHumanApproval(hitlAction);
         onEvent?.('hitl_queued', hitlAction);
 
         return {
           status: 'hitl_gated',
           requiresSupervisorApproval: true,
-          amountINR: amount,
-          orderId: rawOrderId,
+          amount,
+          currency: profile.currency.code,
+          orderId,
           reason,
-          message: `Refund of ₹${amount} exceeds the automated safety threshold (₹${threshold}). It has been placed in the Supervisor Priority Queue for immediate 1-click human approval.`
+          message: `Refund of ${money(amount)} exceeds the automated safety threshold (${money(threshold)}). It has been placed in the Supervisor Priority Queue for immediate 1-click human approval.`
         };
       }
 
@@ -241,35 +250,33 @@ export async function executeVoiceTool(
           idempotencyKey
         );
       } else {
-        receipt = await adapters.refundGateway.issueRefund(rawOrderId, amount, idempotencyKey);
+        receipt = await adapters.refundGateway.issueRefund(orderId, amount, idempotencyKey);
       }
 
       onEvent?.('refund_processed', receipt);
       return {
         status: 'approved_and_processed',
         refundId: (receipt as any).refundId || (receipt as any).creditId,
-        orderId: rawOrderId,
-        amountINR: amount,
-        currency: 'INR',
+        orderId,
+        amount,
+        currency: profile.currency.code,
         type: refundType,
-        message: `Successfully processed ${refundType === 'store_credit' ? 'wallet credit' : 'instant refund'} of ₹${amount} for Order #${rawOrderId}.`
+        message: `Successfully processed ${refundType === 'store_credit' ? 'wallet credit' : 'instant refund'} of ${money(amount)} for Order #${orderId}.`
       };
     }
 
     case 'file_complaint': {
       const complaintText = String(args.complaintText || '');
-      const rawOrderId = args.orderId ? String(args.orderId).toLowerCase().trim() : undefined;
-      const dishName = args.dishName ? String(args.dishName) : undefined;
-      const claimedAmount = args.claimedAmount ? Number(args.claimedAmount) : undefined;
-      const branchId = args.branchId ? String(args.branchId) : undefined;
+      const orderId = args.orderId ? normalizeOrderId(String(args.orderId), profile) : undefined;
+      const resourceId = args.resourceId ? String(args.resourceId) : undefined;
 
       const input: CustomerInput = {
         id: `voice_cmp_${Date.now()}`,
         channel: 'voice',
         rawText: complaintText,
-        orderId: rawOrderId,
+        orderId,
         customerId,
-        branchId,
+        resourceId,
         timestamp: new Date()
       };
 
@@ -287,7 +294,7 @@ export async function executeVoiceTool(
               title: result.correlation.incident.title,
               summary: result.correlation.incident.summary,
               complaintCount: result.correlation.incident.complaintCount,
-              delayRatio: result.correlation.incident.delayRatio
+              signal: result.correlation.incident.signal ?? null
             }
           : null,
         resolutionAction: result.resolution.actions.length > 0 ? result.resolution.actions[0] : null,
@@ -297,16 +304,16 @@ export async function executeVoiceTool(
     }
 
     case 'escalate_to_human': {
-      const rawOrderId = args.orderId ? String(args.orderId).toLowerCase().trim() : undefined;
+      const orderId = args.orderId ? normalizeOrderId(String(args.orderId), profile) : undefined;
       const reason = String(args.reason || 'Customer requested human agent');
       const urgency = (args.urgency as string) || 'high';
       const customerNotes = args.customerNotes ? String(args.customerNotes) : '';
 
       const ticket = {
         id: `esc_${Date.now()}`,
-        complaintId: `cmp_${rawOrderId || 'voice'}`,
+        complaintId: `cmp_${orderId || 'voice'}`,
         customerId,
-        orderId: rawOrderId,
+        orderId,
         title: `🎙️ Voice Escalation: ${reason}`,
         description: `Urgent supervisor transfer requested via Voice. Notes: ${customerNotes}`,
         category: 'human_escalation',
@@ -328,12 +335,15 @@ export async function executeVoiceTool(
     }
 
     case 'check_incident_status': {
-      const branchId = String(args.branchId || 'branch_cp_02');
-      const incidents = pipeline.getCorrelateEngine().getIncidents().filter(inc => inc.branchId === branchId);
-      const clusters = pipeline.getCorrelateEngine().getClusters().filter(c => c.branchId === branchId);
+      const resourceId = args.resourceId ? String(args.resourceId) : '';
+      if (!resourceId) {
+        return { error: `A ${profile.labels.resource.toLowerCase()} ID is required to check incident status.` };
+      }
+      const incidents = pipeline.getCorrelateEngine().getIncidents().filter(inc => inc.resourceId === resourceId);
+      const clusters = pipeline.getCorrelateEngine().getClusters().filter(c => c.resourceId === resourceId);
 
       return {
-        branchId,
+        resourceId,
         hasActiveIncidents: incidents.length > 0,
         activeIncidentsCount: incidents.length,
         incidents: incidents.map(inc => ({
@@ -341,14 +351,14 @@ export async function executeVoiceTool(
           title: inc.title,
           summary: inc.summary,
           complaintCount: inc.complaintCount,
-          delayRatio: inc.delayRatio,
-          dishDisabled: inc.dishDisabled
+          signal: inc.signal ?? null,
+          itemDisabled: inc.itemDisabled
         })),
         activeClusters: clusters.map(c => ({
           category: c.category,
-          dishName: c.dishName,
+          itemName: c.itemName,
           count: c.count,
-          avgKitchenPrepMinutes: c.avgKitchenPrepMinutes
+          signal: c.signal ?? null
         }))
       };
     }

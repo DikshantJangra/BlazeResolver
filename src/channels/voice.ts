@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { BlazeResolverPipeline } from '../core/pipeline/index.js';
 import { CustomerInput } from '../core/types.js';
+import { extractOrderId, formatMoney, matchesKeywords, normalizeOrderId } from '../core/domain.js';
 import { getVoiceToolDeclarations, executeVoiceTool } from './voice/tools.js';
 import { generateTonePcm24k, bufferToBase64 } from './voice/pcm-utils.js';
 
@@ -19,11 +20,15 @@ export class VoiceChannelBridge {
   }
 
   public handleConnection(clientWs: WebSocket, queryParams?: URLSearchParams) {
-    const activeUserId = queryParams?.get('user_id') || 'cust_amit_01';
-    const activeOrderId = queryParams?.get('order_id') || 'ord-1021';
+    const profile = this.pipeline.getProfile();
+    const money = (amount: number) => formatMoney(amount, profile.currency);
+    const threshold = this.pipeline.getResolutionEngine().getAutoApproveThreshold();
+    const activeUserId = queryParams?.get('user_id') || 'guest';
+    const requestedOrderId = queryParams?.get('order_id');
+    const activeOrderId = requestedOrderId ? normalizeOrderId(requestedOrderId, profile) : undefined;
     const apiKey = queryParams?.get('api_key') || process.env.GEMINI_API_KEY;
 
-    console.log(`🎙️ [VoiceBridge] Client connected. (User: ${activeUserId}, Order: ${activeOrderId})`);
+    console.log(`🎙️ [VoiceBridge] Client connected. (User: ${activeUserId}, Order: ${activeOrderId ?? 'none'})`);
 
     // Notify client that connection is open
     clientWs.send(JSON.stringify({
@@ -39,29 +44,31 @@ export class VoiceChannelBridge {
 
     // Build system instructions for the voice agent
     const buildSystemInstruction = (userId: string) => {
-      return `You are Blazzy, the real-time AI voice resolution assistant for BlazeResolver (food delivery & restaurant operations).
+      const issueTypes = profile.categories.map((c) => c.label.toLowerCase()).join(', ');
+      return `You are Blazzy, the real-time AI voice resolution assistant for BlazeResolver, supporting customers of a ${profile.labels.business}.
 You speak naturally, empathetically, concisely, and with a fast conversational cadence — like an expert phone customer support agent.
-Your primary goal is to resolve customer issues accurately, enforce restaurant policy guardrails, and minimize unnecessary refunds while keeping customer satisfaction high.
+Your primary goal is to resolve customer issues accurately, enforce policy guardrails, and minimize unnecessary refunds while keeping customer satisfaction high.
 
 ## REFUND RULES (STRICT MONEY-GATE)
-1. Orders delivered within 2 hours are eligible for resolution.
-2. Auto-refunds under ₹300 are processed instantly through the gateway.
-3. High-value refunds (e.g. ₹1,450 party orders) require supervisor approval — the system will automatically place them in the Supervisor HITL priority queue for 1-click approval.
-4. When a customer reports a food issue (cold food, delayed delivery, missing items, wrong dish), ALWAYS dispatch tools mid-conversation:
+1. Refunds and credits up to ${money(threshold)} are processed instantly through the gateway.
+2. Larger refunds require supervisor approval — the system will automatically place them in the Supervisor HITL priority queue for 1-click approval.
+3. When a customer reports a problem with an order (${issueTypes}), ALWAYS dispatch tools mid-conversation:
    - First lookup order details or user profile.
-   - Run 'file_complaint' to correlate kitchen prep timestamps with KDS bottlenecks.
+   - Run 'file_complaint' so the correlation engine can detect systemic operational issues.
    - Run 'initiate_refund' or 'process_refund' to resolve eligible requests.
    - Run 'escalate_to_human' if the customer demands a human supervisor or there is a critical dispute.
 
 ## CONVERSATION STYLE
-- Use quick fillers before tool calls: "Let me check that order for you", "One moment please", "Pulling up your kitchen ticket".
-- Always state refund amounts clearly in Indian Rupees (₹).
+- Use quick fillers before tool calls: "Let me check that order for you", "One moment please".
+- Always state refund amounts clearly in ${profile.currency.code} (${profile.currency.symbol}).
 - Keep voice answers brief, empathetic, and clear.
 
 Current connected customer ID: ${userId}.`;
     };
 
     // Tool declarations formatted for Gemini Live API
+    const itemLabel = profile.labels.item.toLowerCase();
+    const resourceLabel = profile.labels.resource.toLowerCase();
     const toolDeclarations = [
       {
         name: 'get_user_profile',
@@ -76,7 +83,7 @@ Current connected customer ID: ${userId}.`;
       },
       {
         name: 'check_order_status',
-        description: 'Lists all customer orders with status, amount, and KDS kitchen prep timings.',
+        description: 'Looks up an order with its status, amount, and live operational signal.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -87,18 +94,18 @@ Current connected customer ID: ${userId}.`;
       },
       {
         name: 'get_order_details',
-        description: 'Look up specific order line items, branch, total price, and kitchen timing.',
+        description: `Look up specific order line items, ${resourceLabel}, total price, and operational signal.`,
         parameters: {
           type: 'OBJECT',
           properties: {
-            order_id: { type: 'STRING', description: 'The order ID (e.g. ord-1021, ord-1030, ord-1044)' }
+            order_id: { type: 'STRING', description: 'The order ID the customer mentioned' }
           },
           required: ['order_id']
         }
       },
       {
         name: 'lookup_order',
-        description: 'Alias to lookup full order information, items, pricing, branch, and bottleneck status.',
+        description: `Alias to lookup full order information, items, pricing, ${resourceLabel}, and bottleneck status.`,
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -109,12 +116,12 @@ Current connected customer ID: ${userId}.`;
       },
       {
         name: 'initiate_refund',
-        description: 'Process a refund or store credit. Enforces MoneyGate policy (auto-approves <= ₹300, queues > ₹300 for HITL approval).',
+        description: `Process a refund or store credit. Enforces MoneyGate policy (auto-approves <= ${money(threshold)}, queues larger amounts for HITL approval).`,
         parameters: {
           type: 'OBJECT',
           properties: {
             order_id: { type: 'STRING', description: 'The order ID' },
-            amount: { type: 'NUMBER', description: 'Refund amount in INR' },
+            amount: { type: 'NUMBER', description: `Refund amount in ${profile.currency.code}` },
             reason: { type: 'STRING', description: 'Reason for refund' }
           },
           required: ['order_id', 'amount', 'reason']
@@ -127,7 +134,7 @@ Current connected customer ID: ${userId}.`;
           type: 'OBJECT',
           properties: {
             orderId: { type: 'STRING', description: 'Order ID' },
-            amount: { type: 'NUMBER', description: 'Refund amount in INR' },
+            amount: { type: 'NUMBER', description: `Refund amount in ${profile.currency.code}` },
             reason: { type: 'STRING', description: 'Reason for refund' }
           },
           required: ['orderId', 'amount', 'reason']
@@ -135,13 +142,13 @@ Current connected customer ID: ${userId}.`;
       },
       {
         name: 'file_complaint',
-        description: 'File complaint and run through BlazeResolver correlation engine to detect systemic branch kitchen bottlenecks.',
+        description: `File complaint and run through BlazeResolver correlation engine to detect systemic ${resourceLabel} bottlenecks.`,
         parameters: {
           type: 'OBJECT',
           properties: {
             complaintText: { type: 'STRING', description: 'Detailed customer complaint text' },
             orderId: { type: 'STRING', description: 'Associated order ID' },
-            dishName: { type: 'STRING', description: 'Affected dish name' }
+            itemName: { type: 'STRING', description: `Affected ${itemLabel} name` }
           },
           required: ['complaintText']
         }
@@ -160,13 +167,13 @@ Current connected customer ID: ${userId}.`;
       },
       {
         name: 'check_incident_status',
-        description: 'Check active systemic incidents and kitchen bottlenecks at a restaurant branch.',
+        description: `Check active systemic incidents and operational bottlenecks at a ${resourceLabel}.`,
         parameters: {
           type: 'OBJECT',
           properties: {
-            branchId: { type: 'STRING', description: 'Restaurant branch ID' }
+            resourceId: { type: 'STRING', description: `${profile.labels.resource} ID` }
           },
-          required: ['branchId']
+          required: ['resourceId']
         }
       }
     ];
@@ -174,7 +181,8 @@ Current connected customer ID: ${userId}.`;
     // Tool dispatcher execution helper
     const dispatchTool = async (name: string, args: Record<string, unknown>): Promise<string> => {
       const adapters = this.pipeline.getAdapters();
-      const orderId = String(args.order_id || args.orderId || activeOrderId).toLowerCase();
+      const requested = args.order_id || args.orderId || activeOrderId;
+      const orderId = requested ? normalizeOrderId(String(requested), profile) : '';
       const uid = String(args.user_id || activeUserId);
 
       clientWs.send(JSON.stringify({
@@ -191,34 +199,40 @@ Current connected customer ID: ${userId}.`;
             userId: uid,
             name: orders[0]?.customerName || 'Valued Customer',
             totalOrders: orders.length,
-            lifetimeSpendINR: totalSpend,
-            tier: totalSpend >= 1000 ? 'Loyal Tier' : 'Standard Tier',
+            lifetimeSpend: totalSpend,
+            currency: profile.currency.code,
+            tier: totalSpend >= profile.moneyPolicy.loyalCustomerSpend ? 'Loyal Tier' : 'Standard Tier',
             activeOrders: orders.map(o => ({ id: o.id, amount: o.totalAmount, status: o.status }))
           });
         }
 
         if (name === 'check_order_status' || name === 'get_order_details' || name === 'lookup_order') {
+          if (!orderId) return JSON.stringify({ error: 'No order ID provided. Ask the customer for their order number.' });
           const order = await adapters.orderSource.getOrder(orderId);
           if (!order) return JSON.stringify({ error: `Order #${orderId} not found` });
-          const timing = await adapters.orderSource.getKitchenTiming(orderId);
+          const signal = adapters.signalSource ? await adapters.signalSource.getOrderSignal(orderId) : null;
           return JSON.stringify({
             orderId: order.id,
             customerName: order.customerName,
-            branchId: order.branchId,
-            items: order.items.map(i => `${i.name} (x${i.quantity}) - ₹${i.totalPrice}`),
-            totalAmountINR: order.totalAmount,
+            resourceId: order.resourceId,
+            items: order.items.map(i => `${i.name} (x${i.quantity}) - ${money(i.totalPrice)}`),
+            totalAmount: order.totalAmount,
+            currency: order.currency,
             status: order.status,
-            kitchenTiming: timing ? {
-              prepMinutes: timing.prepMinutes,
-              baselineMinutes: timing.baselineMinutes,
-              isBottleneck: timing.isBottleneck,
-              chefNotes: timing.chefNotes
+            operationalSignal: signal ? {
+              label: signal.label,
+              value: signal.value,
+              baseline: signal.baseline,
+              unit: signal.unit,
+              isAnomalous: signal.isAnomalous,
+              notes: signal.notes
             } : null
           });
         }
 
         if (name === 'initiate_refund' || name === 'process_refund') {
-          const amount = Number(args.amount || 280);
+          const order = orderId ? await adapters.orderSource.getOrder(orderId) : null;
+          const amount = Number(args.amount) || order?.totalAmount || 0;
           const reason = String(args.reason || 'Voice complaint');
           const res = await executeVoiceTool('process_refund', { orderId, amount, reason }, {
             pipeline: this.pipeline,
@@ -230,11 +244,11 @@ Current connected customer ID: ${userId}.`;
 
         if (name === 'file_complaint') {
           const complaintText = String(args.complaintText || args.description || 'Voice complaint');
-          const dishName = args.dishName ? String(args.dishName) : undefined;
+          const itemName = args.itemName ? String(args.itemName) : undefined;
           const res = await executeVoiceTool('file_complaint', {
             complaintText,
-            orderId,
-            dishName
+            orderId: orderId || undefined,
+            itemName
           }, {
             pipeline: this.pipeline,
             adapters,
@@ -245,7 +259,7 @@ Current connected customer ID: ${userId}.`;
 
         if (name === 'escalate_to_human') {
           const reason = String(args.reason || 'Customer requested human agent');
-          const res = await executeVoiceTool('escalate_to_human', { orderId, reason, urgency: 'high' }, {
+          const res = await executeVoiceTool('escalate_to_human', { orderId: orderId || undefined, reason, urgency: 'high' }, {
             pipeline: this.pipeline,
             adapters,
             customerId: uid
@@ -254,8 +268,7 @@ Current connected customer ID: ${userId}.`;
         }
 
         if (name === 'check_incident_status') {
-          const branchId = String(args.branchId || 'branch_cp_02');
-          const res = await executeVoiceTool('check_incident_status', { branchId }, {
+          const res = await executeVoiceTool('check_incident_status', { resourceId: args.resourceId }, {
             pipeline: this.pipeline,
             adapters,
             customerId: uid
@@ -487,31 +500,50 @@ Current connected customer ID: ${userId}.`;
    */
   private async handleSimulatorTurn(
     text: string,
-    activeOrderId: string,
+    activeOrderId: string | undefined,
     activeUserId: string,
     clientWs: WebSocket,
     dispatchTool: (name: string, args: Record<string, unknown>) => Promise<string>
   ): Promise<void> {
+    const profile = this.pipeline.getProfile();
+    const money = (amount: number) => formatMoney(amount, profile.currency);
     const lower = text.toLowerCase();
-    const orderMatch = lower.match(/ord-\d+/);
-    const orderId = orderMatch ? orderMatch[0] : activeOrderId;
+    const mentionedOrderId = extractOrderId(text, profile);
+    const orderId = mentionedOrderId ?? activeOrderId;
+    const isComplaint =
+      lower.includes('refund') ||
+      lower.includes('complaint') ||
+      profile.categories.some((category) => matchesKeywords(lower, category.keywords));
 
     // 1. Order status / Details lookup
-    if (lower.includes('order') || lower.includes('status') || lower.includes('where') || orderMatch) {
+    if (lower.includes('order') || lower.includes('status') || lower.includes('where') || mentionedOrderId) {
+      if (!orderId) {
+        const spokenText = 'I can help with that. Could you tell me your order number?';
+        clientWs.send(JSON.stringify({ type: 'transcript', role: 'model', text: spokenText }));
+        clientWs.send(generateTonePcm24k(500, 500));
+        return;
+      }
+
       const orderJsonStr = await dispatchTool('get_order_details', { order_id: orderId });
       const order = JSON.parse(orderJsonStr);
 
-      if (lower.includes('cold') || lower.includes('delayed') || lower.includes('late') || lower.includes('spill') || lower.includes('refund') || lower.includes('complaint')) {
+      if (order.error) {
+        const spokenText = `I couldn't find order #${orderId}. Could you double-check the order number for me?`;
+        clientWs.send(JSON.stringify({ type: 'transcript', role: 'model', text: spokenText }));
+        clientWs.send(generateTonePcm24k(500, 500));
+        return;
+      }
+
+      if (isComplaint) {
         // Dispatch complaint correlation
-        const cmpStr = await dispatchTool('file_complaint', {
+        await dispatchTool('file_complaint', {
           complaintText: text,
           orderId,
-          dishName: order.items?.[0]
+          itemName: order.items?.[0]
         });
-        const cmpResult = JSON.parse(cmpStr);
 
         // Dispatch refund
-        const amount = order.totalAmountINR || 280;
+        const amount = order.totalAmount;
         const refStr = await dispatchTool('initiate_refund', {
           order_id: orderId,
           amount,
@@ -521,9 +553,9 @@ Current connected customer ID: ${userId}.`;
 
         let spokenText = '';
         if (refResult.status === 'hitl_gated') {
-          spokenText = `I looked up Order #${orderId}. Because this is a high-value order of ₹${amount}, I have escalated it directly to our Senior Supervisor Queue for instant 1-click approval. You will receive an SMS confirmation in a few minutes.`;
+          spokenText = `I looked up Order #${orderId}. Because this is a high-value order of ${money(amount)}, I have escalated it directly to our Senior Supervisor Queue for instant 1-click approval. You will receive an SMS confirmation in a few minutes.`;
         } else {
-          spokenText = `I apologize for the issue with your order #${orderId}. I have processed an instant refund of ₹${amount} back to your original payment method. Is there anything else I can assist you with?`;
+          spokenText = `I apologize for the issue with your order #${orderId}. I have processed an instant refund of ${money(amount)} back to your original payment method. Is there anything else I can assist you with?`;
         }
 
         clientWs.send(JSON.stringify({
@@ -538,7 +570,7 @@ Current connected customer ID: ${userId}.`;
         return;
       }
 
-      const spokenText = `I pulled up Order #${orderId} for you. It contains ${order.items?.join(', ') || 'items'} totaling ₹${order.totalAmountINR || 280}. Status is currently ${order.status || 'delivered'}. How can I assist you with this order?`;
+      const spokenText = `I pulled up Order #${orderId} for you. It contains ${order.items?.join(', ') || 'items'} totaling ${money(order.totalAmount)}. Status is currently ${order.status}. How can I assist you with this order?`;
       clientWs.send(JSON.stringify({
         type: 'transcript',
         role: 'model',
@@ -568,7 +600,7 @@ Current connected customer ID: ${userId}.`;
     }
 
     // Default conversational response
-    const spokenText = `Hello! I'm Blazzy, your AI voice resolution assistant. If you have an issue with your meal, need a refund, or want to check order status, please tell me your order number or what happened!`;
+    const spokenText = `Hello! I'm Blazzy, your AI voice resolution assistant. If you have an issue with an order, need a refund, or want to check order status, please tell me your order number or what happened!`;
     clientWs.send(JSON.stringify({
       type: 'transcript',
       role: 'model',

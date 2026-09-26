@@ -3,8 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { BlazeResolverPipeline } from './core/pipeline/index.js';
-import { createRestaurantAdapters } from './examples/restaurant/index.js';
-import { SEED_COMPLAINTS } from './examples/restaurant/seed.js';
+import { loadExample } from './examples/index.js';
 import { VoiceChannelBridge } from './channels/voice.js';
 import { getAgentToolSchemas, createAgentToolExecutor } from './channels/byo-agent.js';
 import { CustomerInput } from './core/types.js';
@@ -15,12 +14,19 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Initialize Adapter Reference & Pipeline
-let adapters = createRestaurantAdapters();
-let pipeline = new BlazeResolverPipeline(adapters, {
-  autoRefundThresholdINR: 300,
-  correlationSlidingWindowHours: 24
-});
+// Initialize the example business (BLAZE_EXAMPLE=restaurant | ecommerce), its adapters & the pipeline
+const example = loadExample(process.env.BLAZE_EXAMPLE);
+const profile = example.profile;
+
+function createPipeline() {
+  const freshAdapters = example.createAdapters();
+  return {
+    adapters: freshAdapters,
+    pipeline: new BlazeResolverPipeline(freshAdapters, { profile, correlationSlidingWindowHours: 24 })
+  };
+}
+
+let { adapters, pipeline } = createPipeline();
 
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
@@ -61,7 +67,7 @@ export function broadcastLiveEvent(eventType: string, data: unknown) {
 // 1. Process Single Complaint
 app.post('/api/pipeline/process', async (req, res) => {
   try {
-    const { rawText, channel = 'text', orderId, customerId, branchId } = req.body;
+    const { rawText, channel = 'text', orderId, customerId, resourceId, itemId } = req.body;
     if (!rawText) {
       return res.status(400).json({ error: 'rawText is required' });
     }
@@ -72,7 +78,8 @@ app.post('/api/pipeline/process', async (req, res) => {
       rawText,
       orderId,
       customerId,
-      branchId,
+      resourceId,
+      itemId,
       timestamp: new Date()
     };
 
@@ -109,7 +116,8 @@ app.post('/api/inbound', async (req, res) => {
       rawText: message,
       orderId,
       customerId,
-      branchId: resourceId,
+      resourceId,
+      itemId,
       timestamp: new Date()
     };
 
@@ -123,17 +131,17 @@ app.post('/api/inbound', async (req, res) => {
       actionId: hitlActions[0].id,
       type: hitlActions[0].actionType,
       amount: hitlActions[0].amount,
-      currency: 'INR',
+      currency: profile.currency.code,
       reason: hitlActions[0].reason,
-      resourceId: result.triage.branchId || resourceId,
-      itemId: result.triage.dishId || itemId,
+      resourceId: result.triage.resourceId || resourceId,
+      itemId: result.triage.itemId || itemId,
       orderId: result.triage.orderId || orderId,
       requiresSupervisorReview: true,
       autoExecutable: false
     } : {
       type: result.resolution.actions[0]?.actionType || 'none',
       amount: result.resolution.actions[0]?.amount,
-      currency: 'INR',
+      currency: profile.currency.code,
       reason: result.resolution.actions[0]?.reason || 'Autonomous resolution',
       autoExecutable: true
     };
@@ -159,11 +167,11 @@ app.post('/api/inbound', async (req, res) => {
   }
 });
 
-// 2. Run All 20 Seed Complaints sequentially
+// 2. Run the example's seed complaints sequentially
 app.post('/api/pipeline/seed', async (req, res) => {
   try {
     const results = [];
-    for (const input of SEED_COMPLAINTS) {
+    for (const input of example.seedComplaints) {
       const result = await pipeline.processComplaint({
         ...input,
         timestamp: new Date()
@@ -185,11 +193,7 @@ app.post('/api/pipeline/seed', async (req, res) => {
 
 // 3. Reset pipeline & adapters state
 app.post('/api/pipeline/reset', (req, res) => {
-  adapters = createRestaurantAdapters();
-  pipeline = new BlazeResolverPipeline(adapters, {
-    autoRefundThresholdINR: 300,
-    correlationSlidingWindowHours: 24
-  });
+  ({ adapters, pipeline } = createPipeline());
   voiceBridge = new VoiceChannelBridge(pipeline);
   broadcastLiveEvent('pipeline_reset', { timestamp: new Date() });
   return res.json({ success: true, message: 'BlazeResolver pipeline and adapter stores reset to fresh state' });
@@ -251,14 +255,28 @@ app.get('/api/adapters/overview', async (req, res) => {
   const currentOrderSource = adapters.orderSource as any;
   const currentRefundGateway = adapters.refundGateway as any;
   const currentTicketSink = adapters.ticketSink as any;
-  const currentMenuControl = adapters.menuControl as any;
 
   return res.json({
     orders: currentOrderSource.getAllOrders ? currentOrderSource.getAllOrders() : [],
     refunds: currentRefundGateway.getAllRefunds ? currentRefundGateway.getAllRefunds() : [],
     credits: currentRefundGateway.getAllCredits ? currentRefundGateway.getAllCredits() : [],
     incidents: currentTicketSink.getAllIncidents ? currentTicketSink.getAllIncidents() : [],
-    disabledDishes: await currentMenuControl.getDisabledDishes()
+    disabledItems: adapters.availabilityControl ? await adapters.availabilityControl.getDisabledItems() : []
+  });
+});
+
+// 8b. Active domain profile: labels, currency and demo content for the dashboard
+app.get('/api/profile', (req, res) => {
+  return res.json({
+    id: profile.id,
+    name: profile.name,
+    labels: profile.labels,
+    currency: profile.currency,
+    moneyPolicy: profile.moneyPolicy,
+    categories: profile.categories.map((c) => ({ id: c.id, label: c.label })),
+    items: profile.items.map((i) => ({ id: i.id, name: i.name })),
+    resources: profile.resources.map((r) => ({ id: r.id, name: r.name })),
+    demo: example.demo
   });
 });
 
@@ -276,12 +294,13 @@ app.get('/api/health', (req, res) => {
     status: 'healthy',
     system: 'BlazeResolver Engine',
     version: '1.0.0',
+    profile: profile.id,
     uptime: process.uptime()
   });
 });
 
 server.listen(PORT, () => {
-  console.log(`\n🚀 BlazeResolver Server running on http://localhost:${PORT}`);
+  console.log(`\n🚀 BlazeResolver Server running on http://localhost:${PORT} (profile: ${profile.name})`);
   console.log(`🎙️ Voice WebSocket Bridge listening on ws://localhost:${PORT}/ws`);
   console.log(`⚡ Ready to triage, correlate, resolve, and respond!\n`);
 });

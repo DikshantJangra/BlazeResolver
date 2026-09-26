@@ -1,5 +1,6 @@
 import { CustomerInput, TriagedComplaint, ResolutionAction, PolicyDecision } from '../types.js';
 import { ResolverAdapters } from '../../adapters/contracts.js';
+import { CurrencyConfig, formatMoney } from '../domain.js';
 
 export interface GuardrailCheckResult {
   passed: boolean;
@@ -16,7 +17,7 @@ export class PromptInjectionGuard {
     /override\s+policy/i,
     /disregard\s+rules/i,
     /bypass\s+(guardrails|limits|verification)/i,
-    /give\s+me\s+a\s+refund\s+of\s+₹?\s*(10000|50000|999999)/i,
+    /give\s+me\s+a\s+refund\s+of\s+\S{0,3}\s*(10000|50000|999999)/i,
     /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
     /drop\s+table/i,
     /union\s+select/i,
@@ -44,12 +45,20 @@ export class PromptInjectionGuard {
   }
 }
 
+export interface ToolExecutionLimits {
+  maxCreditAmount: number;
+  currency: CurrencyConfig;
+}
+
 export class ToolExecutionGuard {
   public static async validateAction(
     action: ResolutionAction,
     triage: TriagedComplaint,
-    adapters: ResolverAdapters
+    adapters: ResolverAdapters,
+    limits: ToolExecutionLimits
   ): Promise<{ valid: boolean; reason?: string }> {
+    const money = (amount: number) => formatMoney(amount, limits.currency);
+
     // 1. Prompt injections can never execute financial mutations
     if (triage.isPromptInjection && (action.actionType === 'refund' || action.actionType === 'credit')) {
       return {
@@ -75,7 +84,7 @@ export class ToolExecutionGuard {
       if (action.amount > order.totalAmount) {
         return {
           valid: false,
-          reason: `Refund amount ₹${action.amount} exceeds order total ₹${order.totalAmount}`
+          reason: `Refund amount ${money(action.amount)} exceeds order total ${money(order.totalAmount)}`
         };
       }
     }
@@ -87,14 +96,17 @@ export class ToolExecutionGuard {
       if (!action.amount || action.amount <= 0) {
         return { valid: false, reason: 'Credit amount must be greater than zero' };
       }
-      if (action.amount > 1000) {
-        return { valid: false, reason: 'Wallet credit exceeds safety ceiling of ₹1,000' };
+      if (action.amount > limits.maxCreditAmount) {
+        return { valid: false, reason: `Wallet credit exceeds safety ceiling of ${money(limits.maxCreditAmount)}` };
       }
     }
 
-    if (action.actionType === 'disable_dish') {
-      if (!action.dishId || !action.branchId) {
-        return { valid: false, reason: 'Dish suspension requires dishId and branchId' };
+    if (action.actionType === 'disable_item') {
+      if (!action.itemId || !action.resourceId) {
+        return { valid: false, reason: 'Item suspension requires itemId and resourceId' };
+      }
+      if (!adapters.availabilityControl) {
+        return { valid: false, reason: 'Item suspension requires an AvailabilityControl adapter' };
       }
     }
 
@@ -103,10 +115,13 @@ export class ToolExecutionGuard {
 }
 
 export class MoneyGate {
-  private thresholdINR: number;
+  constructor(
+    private threshold: number,
+    private currency: CurrencyConfig
+  ) {}
 
-  constructor(thresholdINR: number = 300) {
-    this.thresholdINR = thresholdINR;
+  public getThreshold(): number {
+    return this.threshold;
   }
 
   public evaluate(
@@ -115,6 +130,7 @@ export class MoneyGate {
     customerPastComplaintsCount: number = 0
   ): PolicyDecision {
     const amount = action.amount || 0;
+    const money = (value: number) => formatMoney(value, this.currency);
 
     // Prompt injection check
     if (triage.isPromptInjection) {
@@ -149,10 +165,10 @@ export class MoneyGate {
     }
 
     // Under threshold -> Auto-approved
-    if (amount <= this.thresholdINR) {
+    if (amount <= this.threshold) {
       return {
         allowed: true,
-        rationale: `Amount ₹${amount} is within auto-resolution threshold (≤ ₹${this.thresholdINR}). Auto-approving.`,
+        rationale: `Amount ${money(amount)} is within auto-resolution threshold (≤ ${money(this.threshold)}). Auto-approving.`,
         recommendedAction: action.actionType,
         suggestedAmount: amount,
         requiresHitl: false
@@ -162,11 +178,11 @@ export class MoneyGate {
     // Over threshold -> Gated for Human-In-The-Loop Approval
     return {
       allowed: false,
-      rationale: `Amount ₹${amount} exceeds auto-approval threshold of ₹${this.thresholdINR}. Gated for human supervisor approval.`,
+      rationale: `Amount ${money(amount)} exceeds auto-approval threshold of ${money(this.threshold)}. Gated for human supervisor approval.`,
       recommendedAction: action.actionType,
       suggestedAmount: amount,
       requiresHitl: true,
-      hitlReason: `Refund amount ₹${amount} > ₹${this.thresholdINR} threshold`
+      hitlReason: `Refund amount ${money(amount)} > ${money(this.threshold)} threshold`
     };
   }
 }
