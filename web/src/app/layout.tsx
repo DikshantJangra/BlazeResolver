@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DeepSeek Harness developer preview: Everything is a plugin",
+  title: "BlazeResolver — Open-Source Autonomous Customer Support Resolution Harness",
   description:
-    "DeepSeek Harness is now available in developer preview to developers building agent harnesses worldwide, with the source code released at the same time. Every agent capability is implemented as a plugin that can be swapped or recomposed.",
+    "Self-hostable, adapter-driven AI customer support resolution harness. Triage, correlate operational telemetry, enforce policy-gated resolutions, and resolve over voice & chat end-to-end.",
   icons: {
     icon: "/favicon.svg",
   },
@@ -17,7 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" style={{ colorScheme: "dark" }}>
-      <body className="bg-ds-page text-ds-primary antialiased">
+      <body className="bg-ds-page text-ds-primary antialiased selection:bg-[#4d6bfe] selection:text-white">
         {children}
       </body>
     </html>
