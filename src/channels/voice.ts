@@ -408,7 +408,8 @@ Current connected customer ID: ${userId}.`;
     clientWs.on('message', async (data: Buffer | string, isBinary: boolean) => {
       try {
         // 1. If binary frame: raw 16kHz PCM audio chunk from browser microphone
-        if (isBinary || Buffer.isBuffer(data)) {
+        // ws delivers text frames as Buffers too, so only the frame type tells audio from JSON.
+        if (isBinary) {
           if (geminiWs && geminiWs.readyState === WebSocket.OPEN && isGeminiConnected) {
             const b64Audio = (data as Buffer).toString('base64');
             const realtimePayload = {
