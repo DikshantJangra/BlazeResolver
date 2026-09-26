@@ -37,7 +37,8 @@ export default function StickyShowcase() {
               className="flex flex-col justify-center gap-ds-4 min-h-[30vh] py-[6vh] transition-all duration-300 cursor-pointer rounded-xl p-4 border border-transparent hover:border-white/10"
               style={{
                 opacity: activeSlide === 0 ? 1 : 0.4,
-                backgroundColor: activeSlide === 0 ? "rgba(255,255,255,0.02)" : "transparent",
+                backgroundColor:
+                  activeSlide === 0 ? "rgba(255,255,255,0.02)" : "transparent",
               }}
             >
               <div className="flex items-center gap-ds-2">
@@ -79,7 +80,12 @@ export default function StickyShowcase() {
                 >
                   LangGraph
                 </a>
-                &apos;s plugin system. Plugins provide every agent capability, including models, tools, skills, sessions, sandboxes, storage, loops, scheduling, and the UI. LangGraph services and events let the plugins work together. Developers can select, swap, or extend any capability in configuration without changing the BlazeResolver source code.
+                &apos;s plugin system. Plugins provide every agent capability,
+                including models, tools, skills, sessions, sandboxes, storage,
+                loops, scheduling, and the UI. LangGraph services and events let
+                the plugins work together. Developers can select, swap, or
+                extend any capability in configuration without changing the
+                BlazeResolver source code.
               </p>
             </div>
 
@@ -89,7 +95,8 @@ export default function StickyShowcase() {
               className="flex flex-col justify-center gap-ds-4 min-h-[30vh] py-[6vh] transition-all duration-300 cursor-pointer rounded-xl p-4 border border-transparent hover:border-white/10"
               style={{
                 opacity: activeSlide === 1 ? 1 : 0.4,
-                backgroundColor: activeSlide === 1 ? "rgba(255,255,255,0.02)" : "transparent",
+                backgroundColor:
+                  activeSlide === 1 ? "rgba(255,255,255,0.02)" : "transparent",
               }}
             >
               <div className="flex items-center gap-ds-2">
@@ -105,7 +112,13 @@ export default function StickyShowcase() {
                     viewBox="0 0 28 28"
                     fill="none"
                   >
-                    <circle cx="14" cy="14" r="9.5" stroke="currentColor" strokeWidth="1.3" />
+                    <circle
+                      cx="14"
+                      cy="14"
+                      r="9.5"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
                     <path
                       d="M12 10.5L18 14L12 17.5V10.5Z"
                       stroke="currentColor"
@@ -119,7 +132,11 @@ export default function StickyShowcase() {
                 </h3>
               </div>
               <p className="ds-text-body text-ds-description leading-[1.7]">
-                Everything the model sees is recorded in an append-only session log: system prompts, reasoning, tool calls and results, subagent scheduling, and every context injection. In the Trajectory view, you can inspect these records by source. Resume, fork, search, and replay all operate on the same event stream.
+                Everything the model sees is recorded in an append-only session
+                log: system prompts, reasoning, tool calls and results, subagent
+                scheduling, and every context injection. In the Trajectory view,
+                you can inspect these records by source. Resume, fork, search,
+                and replay all operate on the same event stream.
               </p>
             </div>
 
@@ -129,7 +146,8 @@ export default function StickyShowcase() {
               className="flex flex-col justify-center gap-ds-4 min-h-[30vh] py-[6vh] transition-all duration-300 cursor-pointer rounded-xl p-4 border border-transparent hover:border-white/10"
               style={{
                 opacity: activeSlide === 2 ? 1 : 0.4,
-                backgroundColor: activeSlide === 2 ? "rgba(255,255,255,0.02)" : "transparent",
+                backgroundColor:
+                  activeSlide === 2 ? "rgba(255,255,255,0.02)" : "transparent",
               }}
             >
               <div className="flex items-center gap-ds-2">
@@ -145,10 +163,42 @@ export default function StickyShowcase() {
                     viewBox="0 0 28 28"
                     fill="none"
                   >
-                    <rect x="4.5" y="4.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" />
-                    <rect x="15.5" y="4.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" />
-                    <rect x="4.5" y="15.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" />
-                    <rect x="15.5" y="15.5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" />
+                    <rect
+                      x="4.5"
+                      y="4.5"
+                      width="8"
+                      height="8"
+                      rx="2"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
+                    <rect
+                      x="15.5"
+                      y="4.5"
+                      width="8"
+                      height="8"
+                      rx="2"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
+                    <rect
+                      x="4.5"
+                      y="15.5"
+                      width="8"
+                      height="8"
+                      rx="2"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
+                    <rect
+                      x="15.5"
+                      y="15.5"
+                      width="8"
+                      height="8"
+                      rx="2"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
                   </svg>
                 </div>
                 <h3 className="ds-text-subtitle !text-[22px] !font-normal text-ds-primary">
@@ -156,7 +206,12 @@ export default function StickyShowcase() {
                 </h3>
               </div>
               <p className="ds-text-body text-ds-description leading-[1.7]">
-                Standard mode includes the full toolset. Code mode uses model-generated code to orchestrate multiple rounds of tool calls. Minimal mode keeps only a shell tool and a file editor for benchmarking models in a minimal environment. Creator mode lets you inspect the current runtime, test LangGraph plugins in memory, and combine them into new modes.
+                Standard mode includes the full toolset. Code mode uses
+                model-generated code to orchestrate multiple rounds of tool
+                calls. Minimal mode keeps only a shell tool and a file editor
+                for benchmarking models in a minimal environment. Creator mode
+                lets you inspect the current runtime, test LangGraph plugins in
+                memory, and combine them into new modes.
               </p>
             </div>
           </div>
@@ -222,9 +277,13 @@ export default function StickyShowcase() {
                     </div>
 
                     <div className="flex flex-col gap-2 p-3 rounded-xl bg-[#1e2024] border border-white/5">
-                      <div className="text-xs text-white/50">Describe what you want to resolve</div>
+                      <div className="text-xs text-white/50">
+                        Describe what you want to resolve
+                      </div>
                       <div className="flex items-center justify-between pt-1">
-                        <span className="text-xs text-white/70">Support adapter: voice + refund gateway</span>
+                        <span className="text-xs text-white/70">
+                          Support adapter: voice + refund gateway
+                        </span>
                         <span className="w-6 h-6 rounded-full bg-[#FF6B00] flex items-center justify-center text-white text-xs">
                           ↑
                         </span>
@@ -233,20 +292,36 @@ export default function StickyShowcase() {
 
                     <div className="grid grid-cols-2 gap-2 mt-1">
                       <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
-                        <div className="text-xs font-medium text-white">Standard mode</div>
-                        <div className="text-[11px] text-white/50 mt-0.5">Triage, correlation & chat</div>
+                        <div className="text-xs font-medium text-white">
+                          Standard mode
+                        </div>
+                        <div className="text-[11px] text-white/50 mt-0.5">
+                          Triage, correlation & chat
+                        </div>
                       </div>
                       <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
-                        <div className="text-xs font-medium text-white">Voice mode</div>
-                        <div className="text-[11px] text-white/50 mt-0.5">Real-time voice support</div>
+                        <div className="text-xs font-medium text-white">
+                          Voice mode
+                        </div>
+                        <div className="text-[11px] text-white/50 mt-0.5">
+                          Real-time voice support
+                        </div>
                       </div>
                       <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
-                        <div className="text-xs font-medium text-white">Policy mode</div>
-                        <div className="text-[11px] text-white/50 mt-0.5">Gated money & refund limits</div>
+                        <div className="text-xs font-medium text-white">
+                          Policy mode
+                        </div>
+                        <div className="text-[11px] text-white/50 mt-0.5">
+                          Gated money & refund limits
+                        </div>
                       </div>
                       <div className="p-2.5 rounded-lg bg-[#FF6B00]/10 border border-[#FF6B00]/30">
-                        <div className="text-xs font-medium text-[#FF6B00]">Creator mode</div>
-                        <div className="text-[11px] text-white/70 mt-0.5">Custom harness plugins</div>
+                        <div className="text-xs font-medium text-[#FF6B00]">
+                          Creator mode
+                        </div>
+                        <div className="text-[11px] text-white/70 mt-0.5">
+                          Custom harness plugins
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -279,23 +354,37 @@ export default function StickyShowcase() {
 
         {/* Item 1 */}
         <div className="flex flex-col gap-4">
-          <h3 className="ds-text-subtitle !text-[20px] text-ds-primary">Everything is a plugin</h3>
+          <h3 className="ds-text-subtitle !text-[20px] text-ds-primary">
+            Everything is a plugin
+          </h3>
           <p className="ds-text-body text-ds-description">
-            Plugins provide every capability: models, tools, skills, sessions, sandboxes, storage, loops, scheduling, and UI.
+            Plugins provide every capability: models, tools, skills, sessions,
+            sandboxes, storage, loops, scheduling, and UI.
           </p>
           <div className="aspect-[8/5] rounded-lg overflow-hidden border border-white/10 bg-[#101113]">
-            <img src="/images/harness/feat-plugin.en.png" alt="Feature plugin" className="w-full h-full object-contain" />
+            <img
+              src="/images/harness/feat-plugin.en.png"
+              alt="Feature plugin"
+              className="w-full h-full object-contain"
+            />
           </div>
         </div>
 
         {/* Item 2 */}
         <div className="flex flex-col gap-4">
-          <h3 className="ds-text-subtitle !text-[20px] text-ds-primary">Every run is traceable</h3>
+          <h3 className="ds-text-subtitle !text-[20px] text-ds-primary">
+            Every run is traceable
+          </h3>
           <p className="ds-text-body text-ds-description">
-            Everything the model sees is recorded in an append-only session log: system prompts, tool calls, and results.
+            Everything the model sees is recorded in an append-only session log:
+            system prompts, tool calls, and results.
           </p>
           <div className="aspect-[8/5] rounded-lg overflow-hidden border border-white/10 bg-[#101113]">
-            <img src="/images/harness/trajectory-real-view.en.png" alt="Trajectory view" className="w-full h-full object-contain" />
+            <img
+              src="/images/harness/trajectory-real-view.en.png"
+              alt="Trajectory view"
+              className="w-full h-full object-contain"
+            />
           </div>
         </div>
       </div>

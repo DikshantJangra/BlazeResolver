@@ -20,13 +20,14 @@ export default function Header() {
       <div className="ds-header-wrapper">
         <div
           className={`ds-header-bar ${isScrolled ? "is-scrolled" : ""}`}
-          style={{ maxWidth: "1280px", paddingLeft: "0px", paddingRight: "0px" }}
+          style={{
+            maxWidth: "1280px",
+            paddingLeft: "0px",
+            paddingRight: "0px",
+          }}
         >
           {/* Logo & Brand */}
-          <a
-            className="flex items-center gap-[10px] min-w-0"
-            href="/"
-          >
+          <a className="flex items-center gap-[10px] min-w-0" href="/">
             <span className="shrink-0 inline-flex items-center gap-2.5">
               <img
                 src="/blazyy.png"
@@ -78,7 +79,10 @@ export default function Header() {
             </a>
             <div className="ml-ds-1">
               <div className="ds-locale-toggle">
-                <button type="button" className="ds-locale-toggle-item cursor-pointer">
+                <button
+                  type="button"
+                  className="ds-locale-toggle-item cursor-pointer"
+                >
                   中文
                 </button>
                 <button
@@ -114,7 +118,11 @@ export default function Header() {
       <div className={`ds-mobile-menu ${mobileMenuOpen ? "is-open" : ""}`}>
         <div className="ds-mobile-menu-header">
           <a className="flex items-center gap-2.5" href="/">
-            <img src="/blazyy.png" alt="BlazeResolver" className="w-8 h-8 rounded-lg object-contain" />
+            <img
+              src="/blazyy.png"
+              alt="BlazeResolver"
+              className="w-8 h-8 rounded-lg object-contain"
+            />
             <span className="font-bold text-lg text-white font-ds-display">
               Blaze<span className="text-[#FF6B00]">Resolver</span>
             </span>
@@ -126,7 +134,12 @@ export default function Header() {
             className="flex items-center justify-center w-10 h-10 text-ds-primary cursor-pointer"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M6 6l12 12M6 18L18 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path
+                d="M6 6l12 12M6 18L18 6"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
           </button>
         </div>

@@ -31,7 +31,8 @@ export default function ArchitectureFlow() {
             The model is the soul of an agent.
           </p>
           <p className="ds-text-body text-ds-description leading-[1.75]">
-            A harness lets an agent understand its environment, use tools, and keep working in real-world settings.
+            A harness lets an agent understand its environment, use tools, and
+            keep working in real-world settings.
           </p>
         </div>
       </div>
@@ -49,7 +50,13 @@ export default function ArchitectureFlow() {
                   viewBox="0 0 72 72"
                   fill="none"
                 >
-                  <circle cx="36" cy="36" r="4" stroke="currentColor" strokeWidth="1.2" />
+                  <circle
+                    cx="36"
+                    cy="36"
+                    r="4"
+                    stroke="currentColor"
+                    strokeWidth="1.2"
+                  />
                   <circle cx="36" cy="36" r="1.5" fill="currentColor" />
                   <ellipse
                     cx="36"
@@ -94,7 +101,8 @@ export default function ArchitectureFlow() {
                 </a>
               </h3>
               <p className="ds-text-caption text-ds-description leading-[1.65]">
-                The LangGraph kernel manages plugin mounting, unmounting, and dependencies. Agent capabilities live in the plugins.
+                The LangGraph kernel manages plugin mounting, unmounting, and
+                dependencies. Agent capabilities live in the plugins.
               </p>
             </div>
           </div>
@@ -114,11 +122,31 @@ export default function ArchitectureFlow() {
                     <mask id="plugin-ring-mask">
                       <rect width="72" height="72" fill="white" />
                       <circle cx="36" cy="10" r="4.4" fill="black" />
-                      <circle cx="58.5166604983954" cy="23" r="4.4" fill="black" />
-                      <circle cx="58.51666049839541" cy="49" r="4.4" fill="black" />
+                      <circle
+                        cx="58.5166604983954"
+                        cy="23"
+                        r="4.4"
+                        fill="black"
+                      />
+                      <circle
+                        cx="58.51666049839541"
+                        cy="49"
+                        r="4.4"
+                        fill="black"
+                      />
                       <circle cx="36" cy="62" r="4.4" fill="black" />
-                      <circle cx="13.4833395016046" cy="49" r="4.4" fill="black" />
-                      <circle cx="13.483339501604597" cy="23" r="4.4" fill="black" />
+                      <circle
+                        cx="13.4833395016046"
+                        cy="49"
+                        r="4.4"
+                        fill="black"
+                      />
+                      <circle
+                        cx="13.483339501604597"
+                        cy="23"
+                        r="4.4"
+                        fill="black"
+                      />
                     </mask>
                   </defs>
                   <circle
@@ -139,20 +167,48 @@ export default function ArchitectureFlow() {
                     opacity="0.7"
                     mask="url(#plugin-ring-mask)"
                   />
-                  <circle cx="36" cy="36" r="4.5" stroke="currentColor" strokeWidth="1.2" />
+                  <circle
+                    cx="36"
+                    cy="36"
+                    r="4.5"
+                    stroke="currentColor"
+                    strokeWidth="1.2"
+                  />
                   <circle cx="36" cy="10" r="2.6" fill="currentColor" />
-                  <circle cx="58.5166604983954" cy="23" r="2.6" fill="currentColor" />
-                  <circle cx="58.51666049839541" cy="49" r="2.6" fill="currentColor" />
+                  <circle
+                    cx="58.5166604983954"
+                    cy="23"
+                    r="2.6"
+                    fill="currentColor"
+                  />
+                  <circle
+                    cx="58.51666049839541"
+                    cy="49"
+                    r="2.6"
+                    fill="currentColor"
+                  />
                   <circle cx="36" cy="62" r="2.6" fill="currentColor" />
-                  <circle cx="13.4833395016046" cy="49" r="2.6" fill="currentColor" />
-                  <circle cx="13.483339501604597" cy="23" r="2.6" fill="currentColor" />
+                  <circle
+                    cx="13.4833395016046"
+                    cy="49"
+                    r="2.6"
+                    fill="currentColor"
+                  />
+                  <circle
+                    cx="13.483339501604597"
+                    cy="23"
+                    r="2.6"
+                    fill="currentColor"
+                  />
                 </svg>
               </div>
               <h3 className="ds-text-title text-ds-primary mb-ds-2">
                 Capabilities as plugins
               </h3>
               <p className="ds-text-caption text-ds-description leading-[1.65]">
-                Plugins provide every agent capability, including models, tools, skills, sessions, sandboxes, storage, loops, scheduling, and the UI. LangGraph services and events let the plugins work together.
+                Plugins provide every agent capability, including models, tools,
+                skills, sessions, sandboxes, storage, loops, scheduling, and the
+                UI. LangGraph services and events let the plugins work together.
               </p>
             </div>
           </div>
@@ -225,7 +281,8 @@ export default function ArchitectureFlow() {
                 Compose with configuration
               </h3>
               <p className="ds-text-caption text-ds-description leading-[1.65]">
-                Developers can select, swap, or extend any capability in configuration without changing the BlazeResolver source code.
+                Developers can select, swap, or extend any capability in
+                configuration without changing the BlazeResolver source code.
               </p>
             </div>
           </div>

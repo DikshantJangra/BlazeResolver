@@ -12,7 +12,8 @@ export default function VideoSection() {
           Customize your BlazeResolver
         </h2>
         <p className="ds-text-body text-ds-description max-w-[620px] mt-ds-3">
-          Watch how you can customize resolution workflows, triage tools, and agent presets in real time.
+          Watch how you can customize resolution workflows, triage tools, and
+          agent presets in real time.
         </p>
       </div>
 
@@ -36,12 +37,23 @@ export default function VideoSection() {
             className="absolute z-20 demo-video-bigplay flex items-center justify-center cursor-pointer text-white"
           >
             {isPlaying ? (
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
                 <rect x="6" y="4" width="4" height="16" rx="1" />
                 <rect x="14" y="4" width="4" height="16" rx="1" />
               </svg>
             ) : (
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" className="ml-1">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="ml-1"
+              >
                 <path d="M8 5v14l11-7z" />
               </svg>
             )}

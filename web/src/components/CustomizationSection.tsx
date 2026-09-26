@@ -57,7 +57,9 @@ export default function CustomizationSection() {
               </code>
               <button
                 type="button"
-                onClick={() => copyText("npx blazeresolver demo --restaurant", "quick")}
+                onClick={() =>
+                  copyText("npx blazeresolver demo --restaurant", "quick")
+                }
                 className="shrink-0 font-sans text-[12px] text-ds-description hover:text-ds-primary transition-colors cursor-pointer"
               >
                 {copiedQuick ? "Copied!" : "Copy"}
@@ -69,9 +71,12 @@ export default function CustomizationSection() {
         {/* Install from source card */}
         <div className="min-w-0 flex flex-col rounded-[12px] bg-ds-surface-3 border border-ds-border-default hover:border-white/20 transition-all duration-300">
           <div className="min-w-0 flex flex-col gap-ds-3 p-ds-7">
-            <h3 className="ds-text-subtitle text-ds-primary">Install from source</h3>
+            <h3 className="ds-text-subtitle text-ds-primary">
+              Install from source
+            </h3>
             <p className="ds-text-body text-ds-description leading-[1.7]">
-              Clone the full source and follow the setup instructions in the repository.
+              Clone the full source and follow the setup instructions in the
+              repository.
             </p>
             <div className="mt-ds-2 flex items-center justify-between gap-ds-3 rounded-[10px] border border-ds-border-default bg-ds-surface-1 px-ds-4 py-[14px] font-mono text-[14px] text-ds-primary">
               <code className="min-w-0 whitespace-pre-wrap break-all">
@@ -81,7 +86,10 @@ export default function CustomizationSection() {
               <button
                 type="button"
                 onClick={() =>
-                  copyText("git clone https://github.com/DikshantJangra/BlazeResolver", "source")
+                  copyText(
+                    "git clone https://github.com/DikshantJangra/BlazeResolver",
+                    "source",
+                  )
                 }
                 className="shrink-0 font-sans text-[12px] text-ds-description hover:text-ds-primary transition-colors cursor-pointer"
               >

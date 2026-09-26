@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BlazeResolver — Open-Source Autonomous Customer Support Resolution Harness",
+  title:
+    "BlazeResolver — Open-Source Autonomous Customer Support Resolution Harness",
   description:
     "Self-hostable, adapter-driven AI customer support resolution harness. Triage customer complaints, correlate operational telemetry, enforce policy-gated money limits, and resolve over voice & chat end-to-end.",
   icons: {

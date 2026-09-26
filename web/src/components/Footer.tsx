@@ -35,7 +35,9 @@ export default function Footer() {
                   />
                 </svg>
               </span>
-              <span className="ds-text-caption whitespace-nowrap">Community channel</span>
+              <span className="ds-text-caption whitespace-nowrap">
+                Community channel
+              </span>
             </span>
 
             {/* QR Popup */}
@@ -47,7 +49,9 @@ export default function Footer() {
                     alt="Community QR Code"
                     className="w-full aspect-square rounded-ds-media object-cover"
                   />
-                  <span className="ds-text-xs text-ds-secondary text-center">Scan to join</span>
+                  <span className="ds-text-xs text-ds-secondary text-center">
+                    Scan to join
+                  </span>
                 </div>
               </div>
             )}
@@ -60,7 +64,10 @@ export default function Footer() {
         </p>
 
         {/* Right: Policies */}
-        <nav aria-label="Policies and statements" className="flex flex-wrap items-center justify-center gap-x-ds-3 gap-y-ds-2 xl:justify-self-end">
+        <nav
+          aria-label="Policies and statements"
+          className="flex flex-wrap items-center justify-center gap-x-ds-3 gap-y-ds-2 xl:justify-self-end"
+        >
           <a
             className="ds-text-caption text-ds-primary transition-opacity hover:opacity-70 whitespace-nowrap"
             href="https://github.com/DikshantJangra/BlazeResolver#readme"
@@ -69,7 +76,10 @@ export default function Footer() {
           >
             Safe Use Policy
           </a>
-          <span aria-hidden="true" className="ds-text-caption text-ds-description">
+          <span
+            aria-hidden="true"
+            className="ds-text-caption text-ds-description"
+          >
             ·
           </span>
           <a
