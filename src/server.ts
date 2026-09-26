@@ -7,12 +7,24 @@ import { loadExample } from './examples/index.js';
 import { VoiceChannelBridge } from './channels/voice.js';
 import { getAgentToolSchemas, createAgentToolExecutor } from './channels/byo-agent.js';
 import { CustomerInput } from './core/types.js';
+import { ReportSchema, anthropicComplete, triage } from './triage/index.js';
+import { ProjectRegistry, type Project } from './projects/index.js';
+import { IncidentStore, type IncidentRecord } from './incidents/index.js';
+import { ClaudeProvider } from './resolver/claude-provider.js';
+import { runFix } from './jobs/fix.js';
+import { REPO_PATTERN } from './github/index.js';
+import { sendFixedEmail } from './notify/index.js';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+app.set('trust proxy', 1); // behind a host's proxy, req.ip is the real client
+const PORT = Number(process.env.PORT) || 3001;
 
 app.use(cors());
-app.use(express.json());
+// The raw body is kept for verifying GitHub's webhook signature.
+app.use(express.json({ verify: (req, _res, buf) => void ((req as any).rawBody = buf) }));
 
 // Initialize the example business (BLAZE_EXAMPLE=restaurant | ecommerce), its adapters & the pipeline
 const example = loadExample(process.env.BLAZE_EXAMPLE);
@@ -61,6 +73,118 @@ export function broadcastLiveEvent(eventType: string, data: unknown) {
     }
   });
 }
+
+// --- Software support intake: projects, widget, reports ---
+const registry = new ProjectRegistry();
+const store = new IncidentStore();
+const isAdmin = (req: express.Request) =>
+  !!process.env.BLAZE_ADMIN_TOKEN && req.headers.authorization === `Bearer ${process.env.BLAZE_ADMIN_TOKEN}`;
+
+// Served from here, so every install picks up widget updates as soon as this server is updated.
+// Path differs between `tsx src/server.ts` and compiled `dist/src/server.js`.
+const widgetPath = ['../widget/widget.js', '../../widget/widget.js'].map((p) => fileURLToPath(new URL(p, import.meta.url))).find(existsSync)!;
+app.get('/widget.js', (_req, res) => res.type('application/javascript').set('Cache-Control', 'public, max-age=300').sendFile(widgetPath));
+
+// ponytail: fixed-window counters in memory, per process; use Redis if this ever runs on more than one instance.
+const hits = new Map<string, number[]>();
+const limited = (id: string, max: number, windowMs: number) => {
+  const now = Date.now();
+  const recent = (hits.get(id) ?? []).filter((t) => now - t < windowMs);
+  recent.push(now);
+  hits.set(id, recent);
+  return recent.length > max;
+};
+
+// The fix engine runs each repo's own tests on this machine, so it stays off on servers anyone can sign up to.
+const githubToken = process.env.BLAZE_GITHUB_TOKEN;
+const fixComplete = anthropicComplete({ maxTokens: 4096 });
+const fixEnabled = process.env.BLAZE_FIX_ENABLED === 'true' && process.env.BLAZE_OPEN_SIGNUP !== 'true' && !!githubToken && !!fixComplete;
+if (process.env.BLAZE_FIX_ENABLED === 'true' && !fixEnabled) {
+  console.warn('BLAZE_FIX_ENABLED ignored: it needs BLAZE_GITHUB_TOKEN, ANTHROPIC_API_KEY and BLAZE_OPEN_SIGNUP unset.');
+}
+
+// One fix at a time. ponytail: in-process queue, lost on restart; a real job queue when volume needs it.
+let fixQueue: Promise<unknown> = Promise.resolve();
+function enqueueFix(project: Project, incident: IncidentRecord) {
+  fixQueue = fixQueue.then(async () => {
+    store.update(incident.id, { status: 'fixing' });
+    let update: Partial<IncidentRecord>;
+    try {
+      const outcome = await runFix({
+        project,
+        incident: { id: incident.id, title: incident.title, description: incident.description, stackTrace: incident.stackTrace },
+        reportCount: store.incident(incident.id)?.reportIds.length ?? 1,
+        token: githubToken!,
+        ai: new ClaudeProvider(fixComplete!)
+      });
+      update = outcome.status === 'pr_opened' ? { status: 'pr_opened', prUrl: outcome.url } : { status: 'needs_human', issueUrl: outcome.url, failureReason: outcome.reason };
+    } catch (err) {
+      update = { status: 'needs_human', failureReason: err instanceof Error ? err.message : String(err) };
+    }
+    broadcastLiveEvent('incident_updated', store.update(incident.id, update));
+  });
+}
+
+// Signup: the admin token always works; anyone may register when BLAZE_OPEN_SIGNUP=true (5 per hour per IP).
+app.post('/api/projects', (req, res) => {
+  if (!isAdmin(req)) {
+    if (process.env.BLAZE_OPEN_SIGNUP !== 'true') return res.status(401).json({ error: 'signup is closed' });
+    if (limited(`signup:${req.ip}`, 5, 3_600_000)) return res.status(429).json({ error: 'too many signups, try later' });
+  }
+  const { repo, defaultBranch, testCommand, buildCommand } = req.body ?? {};
+  if (typeof repo !== 'string' || !REPO_PATTERN.test(repo)) return res.status(400).json({ error: 'repo must be owner/name' });
+  const text = (v: unknown, max: number) => (typeof v === 'string' && v.length > 0 && v.length <= max ? v : undefined);
+  const { project, key } = registry.register(repo, text(defaultBranch, 100), text(testCommand, 300), text(buildCommand, 300));
+  return res.status(201).json({ project: { id: project.id, repo, defaultBranch: project.defaultBranch }, key });
+});
+
+app.post('/api/report', async (req, res) => {
+  const project = registry.verify(req.header('x-blaze-key'));
+  if (!project) return res.status(401).json({ error: 'invalid project key' });
+  // The key is public inside the widget, so cap what a leaked one can spend on the model.
+  if (limited(`report:${project.id}`, 30, 60_000)) return res.status(429).json({ error: 'rate limit' });
+  const parsed = ReportSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'invalid report' });
+  const result = await triage(parsed.data);
+  const { incident, isNew } = store.addReport(project.id, parsed.data, result);
+  if (incident && isNew && fixEnabled) enqueueFix(project, incident);
+  broadcastLiveEvent('report_triaged', { projectId: project.id, triage: result });
+  // The customer only gets an acknowledgement, never the triage verdict.
+  return res.status(202).json({ received: true });
+});
+
+app.get('/api/reports', (req, res) =>
+  isAdmin(req) ? res.json({ reports: store.reports() }) : res.status(401).json({ error: 'admin token required' })
+);
+app.get('/api/incidents', (req, res) =>
+  isAdmin(req) ? res.json({ incidents: store.incidents() }) : res.status(401).json({ error: 'admin token required' })
+);
+
+// GitHub tells us when a BlazeResolver PR is merged or closed; a merge is what tells customers it is fixed.
+app.post('/api/github/webhook', (req, res) => {
+  const secret = process.env.GITHUB_WEBHOOK_SECRET;
+  const raw: Buffer | undefined = (req as any).rawBody;
+  if (!secret || !raw) return res.status(503).json({ error: 'webhook not configured' });
+  const expected = Buffer.from(`sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`);
+  const got = Buffer.from(String(req.header('x-hub-signature-256') ?? ''));
+  if (got.length !== expected.length || !timingSafeEqual(got, expected)) return res.status(401).json({ error: 'bad signature' });
+
+  const pr = req.body?.pull_request;
+  if (req.header('x-github-event') === 'pull_request' && req.body?.action === 'closed' && pr) {
+    const incident = store.byPullRequest(pr.html_url);
+    if (incident) {
+      if (pr.merged) {
+        store.update(incident.id, { status: 'merged' });
+        const emails = new Set(store.reports().filter((r) => incident.reportIds.includes(r.id) && r.email).map((r) => r.email!));
+        emails.forEach((to) => sendFixedEmail(to, incident.title).catch(() => {}));
+      } else {
+        store.update(incident.id, { status: 'needs_human' });
+      }
+      broadcastLiveEvent('incident_updated', store.incident(incident.id));
+    }
+  }
+  return res.json({ ok: true });
+});
 
 // REST Endpoints
 
@@ -299,8 +423,8 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`\n🚀 BlazeResolver Server running on http://localhost:${PORT} (profile: ${profile.name})`);
-  console.log(`🎙️ Voice WebSocket Bridge listening on ws://localhost:${PORT}/ws`);
+server.listen(PORT, '127.0.0.1', () => {
+  console.log(`\n🚀 BlazeResolver Server running on http://127.0.0.1:${PORT} (profile: ${profile.name})`);
+  console.log(`🎙️ Voice WebSocket Bridge listening on ws://127.0.0.1:${PORT}/ws`);
   console.log(`⚡ Ready to triage, correlate, resolve, and respond!\n`);
 });

@@ -1,8 +1,8 @@
 {
   "name": "blazeresolver",
-  "version": "1.0.0",
-  "description": "Open-source, business-agnostic AI harness for customer service with KDS correlate engine & policy-guarded adapters",
-  "main": "dist/index.js",
+  "version": "0.1.0",
+  "description": "Open-source AI harness that turns customer bug reports into reviewed GitHub pull requests",
+  "main": "dist/src/index.js",
   "type": "module",
   "scripts": {
     "dev:server": "tsx watch src/server.ts",
@@ -14,7 +14,8 @@
     "demo": "tsx src/cli/demo.ts",
     "demo:fix": "tsx src/cli/fix-demo.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test src/**/*.test.ts",
+    "prepublishOnly": "npm run build:server"
   },
   "keywords": [
     "ai-agent",
@@ -60,5 +61,17 @@
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vite": "^6.2.0"
+  },
+  "bin": {
+    "blazeresolver": "dist/src/cli/init.js"
+  },
+  "files": [
+    "dist/src",
+    "!dist/src/tests",
+    "!dist/**/*.map",
+    "widget"
+  ],
+  "engines": {
+    "node": ">=20"
   }
 }

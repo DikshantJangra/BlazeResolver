@@ -22,6 +22,8 @@ export interface GitWorkspaceOptions {
   commandTimeoutMs?: number;
   /** Committer identity, so commits don't depend on the host's git config. */
   author?: { name: string; email: string };
+  /** Environment for test and build commands. Defaults to this process's, so pass a minimal one for untrusted repos. */
+  env?: NodeJS.ProcessEnv;
 }
 
 export class GitWorkspaceError extends Error {
@@ -137,7 +139,7 @@ export class GitWorkspace implements WorkspaceInterface {
     return new Promise((resolvePromise) => {
       // Inherited from a node --test parent, NODE_TEST_CONTEXT makes the project's own `node --test`
       // report to that parent and exit 0 even when its tests fail.
-      const { NODE_TEST_CONTEXT, ...env } = process.env;
+      const { NODE_TEST_CONTEXT, ...env } = this.options.env ?? process.env;
       const child = spawn(command, { cwd, shell: true, env });
       let output = '';
       const append = (chunk: Buffer) => {
