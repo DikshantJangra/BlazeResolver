@@ -4,9 +4,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "BlazeResolver — Open-Source Autonomous Customer Support Resolution Harness",
   description:
-    "Self-hostable, adapter-driven AI customer support resolution harness. Triage, correlate operational telemetry, enforce policy-gated resolutions, and resolve over voice & chat end-to-end.",
+    "Self-hostable, adapter-driven AI customer support resolution harness. Triage customer complaints, correlate operational telemetry, enforce policy-gated money limits, and resolve over voice & chat end-to-end.",
   icons: {
-    icon: "/favicon.svg",
+    icon: "/blazyy.png",
+    shortcut: "/blazyy.png",
+    apple: "/blazyy.png",
   },
 };
 
@@ -17,7 +19,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" style={{ colorScheme: "dark" }}>
-      <body className="bg-ds-page text-ds-primary antialiased selection:bg-[#4d6bfe] selection:text-white">
+      <head>
+        <link rel="icon" href="/blazyy.png" type="image/png" />
+      </head>
+      <body className="bg-ds-page text-ds-primary antialiased selection:bg-[#FF6B00] selection:text-white">
         {children}
       </body>
     </html>
