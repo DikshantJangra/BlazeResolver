@@ -22,7 +22,7 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/blazyy.png" type="image/png" />
       </head>
-      <body className="bg-ds-page text-ds-primary antialiased selection:bg-[#FF6B00] selection:text-white">
+      <body className="bg-[#0a0b0e] text-[#e6e8ea] antialiased selection:bg-[#FF6B00] selection:text-white">
         {children}
       </body>
     </html>
