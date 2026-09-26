@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve, isAbsolute, posix } from 'node:path';
 import type { BuildResult, CommitResult, TestResult, Workspace, WorkspaceInterface } from './contracts.js';
@@ -24,6 +24,18 @@ export interface GitWorkspaceOptions {
   author?: { name: string; email: string };
   /** Environment for test and build commands. Defaults to this process's, so pass a minimal one for untrusted repos. */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Runs test and build commands as this dedicated unprivileged user, because they execute code nobody has reviewed yet
+   * (an AI-written fix). The user can't read this process's environment or files; the commands run in a copy of the
+   * workspace without .git, so they can't plant hooks or config that this process's git would later execute; and every
+   * process of the user is killed after each command, so nothing lingers into the next run. Needs this process to be root.
+   */
+  sandbox?: SandboxUser;
+}
+
+export interface SandboxUser {
+  uid: number;
+  gid: number;
 }
 
 export class GitWorkspaceError extends Error {
@@ -49,9 +61,14 @@ const DEFAULT_AUTHOR = { name: 'BlazeResolver', email: 'blazeresolver@users.nore
  */
 export class GitWorkspace implements WorkspaceInterface {
   private readonly workspacesDir: string;
+  /** Sandbox copy per workspace id; tests and the build after them share it, a new patch discards it. */
+  private readonly runDirs = new Map<string, string>();
 
   constructor(private options: GitWorkspaceOptions) {
     this.workspacesDir = resolve(options.workspacesDir ?? join(tmpdir(), 'blazeresolver-workspaces'));
+    if (options.sandbox?.uid === 0) {
+      throw new GitWorkspaceError('sandbox', 'the sandbox user must not be root');
+    }
   }
 
   public async createWorkspace(): Promise<Workspace> {
@@ -90,6 +107,7 @@ export class GitWorkspace implements WorkspaceInterface {
     }
     // git apply is all-or-nothing: if any hunk fails, no file is changed.
     await git('applyPatch', path, ['apply', '--index', '--whitespace=nowarn', '-'], patch);
+    await this.discardSandbox(workspace.id);
   }
 
   public async gitDiff(workspace: Workspace): Promise<string> {
@@ -97,11 +115,16 @@ export class GitWorkspace implements WorkspaceInterface {
   }
 
   public async runTests(workspace: Workspace): Promise<TestResult> {
-    return this.runCommand(this.ownedPath(workspace), this.options.testCommand);
+    return this.run(workspace, this.options.testCommand);
   }
 
   public async runBuild(workspace: Workspace): Promise<BuildResult> {
-    return this.runCommand(this.ownedPath(workspace), this.options.buildCommand);
+    return this.run(workspace, this.options.buildCommand);
+  }
+
+  /** Removes the sandbox copies. Workspaces themselves stay, for inspection. */
+  public async dispose(): Promise<void> {
+    await Promise.all([...this.runDirs.keys()].map((id) => this.discardSandbox(id)));
   }
 
   public async commit(workspace: Workspace, message: string): Promise<CommitResult> {
@@ -134,13 +157,50 @@ export class GitWorkspace implements WorkspaceInterface {
     return path;
   }
 
-  private runCommand(cwd: string, command: string): Promise<TestResult> {
+  private async run(workspace: Workspace, command: string): Promise<TestResult> {
+    const path = this.ownedPath(workspace);
+    const sandbox = this.options.sandbox;
+    if (!sandbox) {
+      return this.runCommand(path, command, this.options.env ?? process.env);
+    }
+
+    const base = await this.sandboxCopy(workspace.id, path, sandbox);
+    try {
+      const env = { ...(this.options.env ?? process.env), HOME: join(base, 'home') };
+      return await this.runCommand(join(base, 'repo'), command, env, sandbox);
+    } finally {
+      await killAllProcessesOf(sandbox);
+    }
+  }
+
+  /** The workspace's index (base plus applied patches) checked out without .git into a directory the sandbox user owns. */
+  private async sandboxCopy(id: string, path: string, sandbox: SandboxUser): Promise<string> {
+    const existing = this.runDirs.get(id);
+    if (existing) return existing;
+
+    const base = await mkdtemp(join(tmpdir(), 'blaze-run-'));
+    this.runDirs.set(id, base);
+    await git('sandbox', path, ['checkout-index', '--all', '--force', `--prefix=${join(base, 'repo')}/`]);
+    await mkdir(join(base, 'home'));
+    // -h: change symlinks themselves; following one from the repo would hand its target to the sandbox user.
+    await run('chown', ['-R', '-h', `${sandbox.uid}:${sandbox.gid}`, base]);
+    return base;
+  }
+
+  private async discardSandbox(id: string): Promise<void> {
+    const base = this.runDirs.get(id);
+    if (!base) return;
+    this.runDirs.delete(id);
+    await rm(base, { recursive: true, force: true });
+  }
+
+  private runCommand(cwd: string, command: string, baseEnv: NodeJS.ProcessEnv, user?: SandboxUser): Promise<TestResult> {
     const timeoutMs = this.options.commandTimeoutMs ?? 15 * 60 * 1000;
     return new Promise((resolvePromise) => {
       // Inherited from a node --test parent, NODE_TEST_CONTEXT makes the project's own `node --test`
       // report to that parent and exit 0 even when its tests fail.
-      const { NODE_TEST_CONTEXT, ...env } = this.options.env ?? process.env;
-      const child = spawn(command, { cwd, shell: true, env });
+      const { NODE_TEST_CONTEXT, ...env } = baseEnv;
+      const child = spawn(command, { cwd, shell: true, env, uid: user?.uid, gid: user?.gid });
       let output = '';
       const append = (chunk: Buffer) => {
         output = (output + chunk.toString('utf-8')).slice(-OUTPUT_TAIL_BYTES);
@@ -168,6 +228,27 @@ export class GitWorkspace implements WorkspaceInterface {
       });
     });
   }
+}
+
+/**
+ * Kills every process the sandbox user owns, from a shell running as that user (`kill -9 -1` reaches exactly the
+ * processes it may signal). Skipped when the sandbox user is this process's own user, where it would kill this process.
+ */
+function killAllProcessesOf(user: SandboxUser): Promise<void> {
+  if (user.uid === process.getuid?.()) return Promise.resolve();
+  return new Promise((resolvePromise) => {
+    const child = spawn('/bin/sh', ['-c', 'kill -9 -1 2>/dev/null; exit 0'], { uid: user.uid, gid: user.gid, stdio: 'ignore' });
+    child.on('close', () => resolvePromise());
+    child.on('error', () => resolvePromise());
+  });
+}
+
+function run(command: string, args: string[]): Promise<void> {
+  return new Promise((resolvePromise, reject) => {
+    execFile(command, args, (err, _stdout, stderr) =>
+      err ? reject(new GitWorkspaceError('sandbox', `${command} failed: ${stderr.trim() || err.message}`)) : resolvePromise()
+    );
+  });
 }
 
 /** Accepts a local ref, commit or tag, falling back to the remote-tracking branch of the same name. */

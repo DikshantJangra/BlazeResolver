@@ -1,6 +1,6 @@
 import type { CodebaseInterface, FileContent, TestResult, Workspace, WorkspaceInterface } from '../codebase/contracts.js';
 import type { AIProvider } from './ai-provider.js';
-import { renderPatch } from './patch.js';
+import { normalizeEditPath, renderPatch } from './patch.js';
 import type { CodeContext, FixAttempt, Incident, Investigation, ResolutionResult } from './types.js';
 
 export interface BugResolverOptions {
@@ -125,7 +125,8 @@ export class BugResolver {
     const attempt: FixAttempt = { number, workspace, proposal };
 
     const forbidden = this.options.forbiddenPaths ?? DEFAULT_FORBIDDEN_PATHS;
-    const blocked = proposal.edits.find((e) => forbidden.some((re) => re.test(e.path.replace(/^\.\//, ''))));
+    // Checked on the path the patch will write, so `src/../.github/...` is caught like `.github/...`.
+    const blocked = proposal.edits.find((e) => forbidden.some((re) => re.test(normalizeEditPath(e.path))));
     if (blocked) {
       attempt.failure = { stage: 'patch', output: `${blocked.path} is a forbidden path: a human must change it. Fix this some other way.` };
       return attempt;

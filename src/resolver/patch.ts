@@ -119,9 +119,17 @@ function range(start: number, count: number): string {
   return count === 0 ? `${start},0` : `${start + 1},${count}`;
 }
 
+/**
+ * The path an edit actually writes to: `src/../.env` writes `.env`. Every check on an edit's path must use this,
+ * or a path spelled differently slips past the check while the patch still lands on the normalized file.
+ */
+export function normalizeEditPath(path: string): string {
+  return posix.normalize(path);
+}
+
 /** Keeps edits inside the repository and to paths that need no quoting in a diff header. */
 function checkPath(path: string): string {
-  const normalized = posix.normalize(path);
+  const normalized = normalizeEditPath(path);
   if (
     !path ||
     posix.isAbsolute(normalized) ||

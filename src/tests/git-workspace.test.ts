@@ -1,7 +1,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GitWorkspace, GitWorkspaceError } from '../codebase/git-workspace.js';
@@ -98,6 +98,48 @@ describe('GitWorkspace', () => {
     const result = await nodeTests.runTests(ws);
     assert.strictEqual(result.success, false, result.output);
     assert.match(result.output, /not ok 1 - adds/);
+  });
+
+  it('with a sandbox user, runs tests and build in a copy without .git that a new patch replaces', async () => {
+    // This process's own user stands in for the sandbox user: the copy, HOME and lifecycle are the same.
+    // The separate-user isolation itself is checked in sandbox-isolation.test.ts, which needs root on Linux.
+    const sandboxed = new GitWorkspace({
+      repo,
+      workspacesDir: join(root, 'workspaces'),
+      sandbox: { uid: process.getuid!(), gid: process.getgid!() },
+      testCommand:
+        `test ! -e .git && echo "PWD=$(pwd) HOME=$HOME" && touch tests-ran.txt && ` +
+        `node -e "import('./math.js').then(m => process.exit(m.add(2, 3) === 5 ? 0 : 1))"`,
+      buildCommand: 'test -e tests-ran.txt'
+    });
+    const ws = await sandboxed.createWorkspace();
+
+    await sandboxed.applyPatch(ws, PATCH);
+    const tests = await sandboxed.runTests(ws);
+    assert.strictEqual(tests.success, true, tests.output);
+    const pwd = tests.output.match(/PWD=(\S+)/)![1];
+    const home = tests.output.match(/HOME=(\S+)/)![1];
+    assert.notStrictEqual(pwd, ws.path, 'tests do not run in the git workspace');
+    assert.match(pwd, /\/repo$/);
+    assert.strictEqual(realpathSync(home), realpathSync(join(pwd, '..', 'home')), 'HOME is the sandbox home next to the copy');
+
+    // The build runs where the tests ran; files the tests wrote never reach the diff.
+    assert.strictEqual((await sandboxed.runBuild(ws)).success, true);
+    assert.doesNotMatch(await sandboxed.gitDiff(ws), /tests-ran/);
+
+    // A new patch discards the copy, so the next run sees exactly the new index.
+    await sandboxed.applyPatch(ws, `diff --git a/extra.js b/extra.js\nnew file mode 100644\n--- /dev/null\n+++ b/extra.js\n@@ -0,0 +1 @@\n+export const extra = 1;\n`);
+    assert.strictEqual((await sandboxed.runBuild(ws)).success, false, 'the tests-ran marker went with the old copy');
+
+    await sandboxed.dispose();
+    assert.strictEqual(existsSync(join(pwd, '..')), false, 'dispose removes sandbox copies');
+  });
+
+  it('refuses root as the sandbox user', () => {
+    assert.throws(
+      () => new GitWorkspace({ repo, testCommand: 'true', buildCommand: 'true', sandbox: { uid: 0, gid: 0 } }),
+      /must not be root/
+    );
   });
 
   it('refuses workspaces it did not create', async () => {

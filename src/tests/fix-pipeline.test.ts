@@ -9,6 +9,7 @@ import { triage, type Report } from '../triage/index.js';
 import { ClaudeProvider } from '../resolver/claude-provider.js';
 import type { AIProvider } from '../resolver/ai-provider.js';
 import { runFix } from '../jobs/fix.js';
+import { redactPersonalData } from '../github/index.js';
 import {
   CHECKOUT_BUILD_COMMAND,
   CHECKOUT_INCIDENT,
@@ -139,5 +140,53 @@ describe('runFix: incident to pull request', () => {
     assert.ok(!gh.calls.some((c) => c.url.endsWith('/pulls')));
     const branches = execFileSync('git', ['--git-dir', remote, 'branch', '--list'], { encoding: 'utf8' });
     assert.doesNotMatch(branches, /blazeresolver/);
+  });
+});
+
+describe('personal data never reaches GitHub', () => {
+  it('masks emails, phone and card numbers, IPs and URL query strings', () => {
+    assert.equal(
+      redactPersonalData('Checkout fails for jane.doe+shop@example.co.uk on https://shop.example.com/checkout?email=jane%40x.com&t=abc#pay'),
+      'Checkout fails for [email] on https://shop.example.com/checkout'
+    );
+    assert.equal(redactPersonalData('call +1 (415) 555-0100 or card 4111 1111 1111 1111 from 203.0.113.9'), 'call [number] or card [number] from [ip]');
+    // A title cut at 200 characters can end mid-address.
+    assert.equal(redactPersonalData('fix: broken for jane@gmai'), 'fix: broken for [email]');
+    // Code-level text survives: versions, dates, durations, line numbers.
+    const code = 'v1.2.3 on 2026-09-27, 180.448917ms at src/pricing.js:42:7';
+    assert.equal(redactPersonalData(code), code);
+  });
+
+  const leaky = {
+    ...CHECKOUT_INCIDENT,
+    title: 'jane.doe@example.com here, checkout total is wrong, call me on +44 7700 900123',
+    description: `${CHECKOUT_INCIDENT.description}\nPage: https://shop.example.com/checkout?email=jane.doe%40example.com&session=s3cr3t`
+  };
+  const leaks = (text: string) => /jane|example\.com\b(?!\/)|7700|s3cr3t|session=/.test(text);
+
+  it('keeps it out of the PR title, body and commit message', async () => {
+    const remote = bareRemote();
+    const gh = fakeGithub();
+    await runFix({ project, incident: { ...leaky, id: 'inc_pii1' }, reportCount: 1, token: 'tok', ai: new CheckoutFixAI(), remoteUrl: remote, fetch: gh.f });
+
+    const pr = gh.calls.find((c) => c.url.endsWith('/pulls'))!.body;
+    assert.ok(!leaks(pr.title), pr.title);
+    assert.ok(!leaks(pr.body), pr.body);
+    const commit = execFileSync('git', ['--git-dir', remote, 'log', '-1', '--format=%B', 'blazeresolver/fix-inc_pii1'], { encoding: 'utf8' });
+    assert.ok(!leaks(commit), commit);
+  });
+
+  it('keeps it out of the issue title and body', async () => {
+    const gh = fakeGithub();
+    const ai: AIProvider = {
+      investigate: async () => ({ summary: 's', rootCause: 'in CI', suspectedFiles: ['src/pricing.js'], confidence: 'medium' }),
+      proposeFix: async () => ({ summary: 'edit ci', edits: [{ kind: 'create', path: '.github/workflows/ci.yml', content: 'x' }] })
+    };
+    await runFix({ project, incident: { ...leaky, id: 'inc_pii2' }, reportCount: 1, token: 'tok', ai, remoteUrl: bareRemote(), fetch: gh.f });
+
+    const issue = gh.calls.find((c) => c.url.endsWith('/issues'))!.body;
+    assert.ok(!leaks(issue.title), issue.title);
+    assert.ok(!leaks(issue.body), issue.body);
+    assert.match(issue.body, /Page: https:\/\/shop\.example\.com\/checkout\n/);
   });
 });

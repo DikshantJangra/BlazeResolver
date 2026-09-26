@@ -288,6 +288,39 @@ describe('BugResolver', () => {
     assert.deepStrictEqual(context.files.map((f) => f.path), ['src/index.js']);
   });
 
+  it('refuses forbidden paths however the path is spelled', async () => {
+    const spellings = [
+      '.github/workflows/ci.yml',
+      './.github/workflows/ci.yml',
+      'src/../.github/workflows/ci.yml',
+      'src/./../.env',
+      'src//../.env.production',
+      'lib/../package-lock.json',
+      'src/utils/../../src/auth/session.js',
+      'src/../db/migrations/001.sql'
+    ];
+    for (const path of spellings) {
+      const workspaces = new FakeWorkspaces();
+      const ai = new ScriptedAI([{ summary: 'sneaky', edits: [{ kind: 'create', path, content: 'x\n' }] }]);
+      const result = await new BugResolver({ codebase: new FakeCodebase(), workspaces, ai, maxAttempts: 1 }).resolve(INCIDENT);
+
+      assert.strictEqual(result.status, 'FAILED', path);
+      assert.strictEqual(result.attempts[0].failure?.stage, 'patch', path);
+      assert.match(result.attempts[0].failure!.output, /is a forbidden path/, path);
+      assert.strictEqual(result.attempts[0].patch, undefined, `${path}: no patch was rendered`);
+      assert.deepStrictEqual(workspaces.patches.get(result.attempts[0].workspace.id), [], `${path}: nothing applied`);
+    }
+  });
+
+  it('still allows ordinary paths that only look similar to forbidden ones', async () => {
+    const ai = new ScriptedAI([
+      { summary: 'ok', edits: [{ kind: 'create', path: '.github/../src/authors.js', content: 'x\n' }, ...CORRECT.edits] }
+    ]);
+    const result = await new BugResolver({ codebase: new FakeCodebase(), workspaces: new FakeWorkspaces(), ai }).resolve(INCIDENT);
+    assert.strictEqual(result.status, 'READY_FOR_REVIEW', result.attempts[0]?.failure?.output);
+    assert.match(result.diff!, /^\+\+\+ b\/src\/authors\.js$/m);
+  });
+
   it('truncates long failure output sent to the AI but keeps it in the result', async () => {
     const longOutput = 'x'.repeat(50_000) + 'FINAL LINE';
     const workspaces = new FakeWorkspaces({ test: (patches) => (patches.some((p) => p.includes('a + b')) ? { success: true, output: '' } : { success: false, output: longOutput }) });

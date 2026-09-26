@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { CodeGraphAdapter } from '../codebase/codegraph-adapter.js';
-import { GitWorkspace } from '../codebase/git-workspace.js';
-import { authedUrl, commentOnIssue, openIssue, openPullRequest, plainUrl, pushBranch } from '../github/index.js';
+import { GitWorkspace, type SandboxUser } from '../codebase/git-workspace.js';
+import { authedUrl, commentOnIssue, openIssue, openPullRequest, plainUrl, pushBranch, redactPersonalData } from '../github/index.js';
 import type { Project } from '../projects/index.js';
 import type { AIProvider } from '../resolver/ai-provider.js';
 import { BugResolver } from '../resolver/bug-resolver.js';
@@ -13,7 +13,7 @@ import type { Incident, ResolutionResult } from '../resolver/types.js';
 export interface FixJobOptions {
   project: Pick<Project, 'repo' | 'defaultBranch' | 'testCommand' | 'buildCommand'>;
   incident: Incident;
-  /** How many customers reported it. No personal data goes to GitHub, only this count. */
+  /** How many customers reported it. Customers are never identified on GitHub, only counted. */
   reportCount: number;
   token: string;
   ai: AIProvider;
@@ -22,6 +22,50 @@ export interface FixJobOptions {
   fetch?: typeof fetch;
   /** The GitHub issue this incident lives in: the PR closes it, and a failure is reported on it instead of a new issue. */
   issueNumber?: number;
+  /** Unprivileged user the repo's tests and builds run as (see resolveFixSandbox). */
+  sandbox?: SandboxUser;
+}
+
+export type FixSandbox = { ok: true; sandbox?: SandboxUser } | { ok: false; problem: string };
+
+function lookupUser(name: string): SandboxUser | undefined {
+  try {
+    const id = (flag: string) => Number(execFileSync('id', [flag, name], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim());
+    return { uid: id('-u'), gid: id('-g') };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether the fix engine may run, and as whom. Each fix's tests execute code no human has reviewed (the AI's patch,
+ * which a crafted customer report can influence), so they must not run as the server's user: that user can read the
+ * server's API keys and GitHub token (e.g. /proc/1/environ) and every customer report.
+ * - BLAZE_SANDBOX_USER: a dedicated unprivileged user; the server must run as root to start tests as it.
+ * - Otherwise BLAZE_ALLOW_UNSANDBOXED_FIXES=true is an explicit opt-in for a trusted local setup.
+ */
+export function resolveFixSandbox(
+  env: NodeJS.ProcessEnv = process.env,
+  serverUid: number | undefined = process.getuid?.(),
+  lookup: (name: string) => SandboxUser | undefined = lookupUser
+): FixSandbox {
+  const name = env.BLAZE_SANDBOX_USER;
+  if (name) {
+    if (serverUid !== 0) return { ok: false, problem: 'BLAZE_SANDBOX_USER needs the server to run as root, to start tests as that user.' };
+    const user = lookup(name);
+    if (!user) return { ok: false, problem: `sandbox user "${name}" does not exist.` };
+    if (user.uid === 0 || user.uid === serverUid) {
+      return { ok: false, problem: `sandbox user "${name}" must be a dedicated unprivileged user, not root or the server's user.` };
+    }
+    return { ok: true, sandbox: user };
+  }
+  if (env.BLAZE_ALLOW_UNSANDBOXED_FIXES === 'true') return { ok: true };
+  return {
+    ok: false,
+    problem:
+      "fixes run AI-written code in the repo's tests. Set BLAZE_SANDBOX_USER to a dedicated unprivileged user " +
+      '(the Docker image has blaze-sandbox), or BLAZE_ALLOW_UNSANDBOXED_FIXES=true for a trusted local setup.'
+  };
 }
 
 export type FixOutcome =
@@ -47,11 +91,24 @@ function prBody(result: ResolutionResult, reportCount: number, issueNumber?: num
 }
 
 /**
+ * Keeps the server's customer data and secrets on disk out of the sandbox user's reach: no access for other users.
+ * Paths match IncidentStore's and ProjectRegistry's defaults.
+ */
+export function lockDownServerFiles(env: NodeJS.ProcessEnv = process.env): void {
+  const dirs = new Set([env.BLAZE_DATA_DIR || '.blazeresolver', dirname(env.BLAZE_PROJECTS_FILE || '.blazeresolver/projects.json')]);
+  for (const dir of dirs) {
+    mkdirSync(dir, { recursive: true });
+    chmodSync(dir, 0o700);
+  }
+  if (existsSync('.env')) chmodSync('.env', 0o600);
+}
+
+/**
  * One incident, start to a GitHub pull request: clone, resolve in isolated workspaces, push a branch, open the PR.
  * When no fix passes, it opens an issue with the findings instead of a PR. It never merges or pushes to the default branch.
  *
- * Tests and builds get a minimal environment, so a repo's own code can't read this server's API keys or token.
- * ponytail: it still runs the repo's code on this machine; that is only safe for repos you trust or inside a container sandbox.
+ * Tests and builds get a minimal environment and, with `sandbox`, run as an unprivileged user in a copy without .git.
+ * They still have network access, so the repo's own source is what unreviewed code could send out.
  */
 export async function runFix(opts: FixJobOptions): Promise<FixOutcome> {
   const { project, incident, token, ai } = opts;
@@ -59,6 +116,7 @@ export async function runFix(opts: FixJobOptions): Promise<FixOutcome> {
   const repoDir = join(root, 'repo');
   const remote = opts.remoteUrl ?? authedUrl(project.repo, token);
   let codebase: CodeGraphAdapter | undefined;
+  let workspaces: GitWorkspace | undefined;
 
   try {
     execFileSync('git', ['clone', '--quiet', remote, repoDir], { stdio: 'pipe', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
@@ -66,19 +124,20 @@ export async function runFix(opts: FixJobOptions): Promise<FixOutcome> {
     execFileSync('git', ['remote', 'set-url', 'origin', opts.remoteUrl ?? plainUrl(project.repo)], { cwd: repoDir });
 
     codebase = new CodeGraphAdapter({ root: repoDir });
-    const workspaces = new GitWorkspace({
+    workspaces = new GitWorkspace({
       repo: repoDir,
       baseRef: project.defaultBranch,
       testCommand: project.testCommand,
       buildCommand: project.buildCommand,
       workspacesDir: join(root, 'workspaces'),
-      env: { PATH: process.env.PATH, HOME: process.env.HOME, CI: 'true', NODE_ENV: 'test' }
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, CI: 'true', NODE_ENV: 'test' },
+      sandbox: opts.sandbox
     });
     const result = await new BugResolver({ codebase, workspaces, ai }).resolve(incident);
 
     if (result.status === 'READY_FOR_REVIEW') {
       const branch = `blazeresolver/fix-${incident.id}`;
-      await workspaces.commit(result.workspace!, `fix: ${incident.title}`.slice(0, 200));
+      await workspaces.commit(result.workspace!, redactPersonalData(`fix: ${incident.title}`).slice(0, 200));
       await pushBranch(result.workspace!.path, remote, branch, token);
       const pr = await openPullRequest(
         { token, repo: project.repo, head: branch, base: project.defaultBranch, title: `fix: ${incident.title}`.slice(0, 200), body: prBody(result, opts.reportCount, opts.issueNumber) },
@@ -108,6 +167,7 @@ export async function runFix(opts: FixJobOptions): Promise<FixOutcome> {
     throw new Error(token ? message.split(token).join('***') : message);
   } finally {
     await codebase?.close().catch(() => {});
+    await workspaces?.dispose().catch(() => {});
     rmSync(root, { recursive: true, force: true });
   }
 }

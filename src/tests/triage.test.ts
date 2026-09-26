@@ -1,9 +1,9 @@
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { triage } from '../triage/index.js';
+import { anthropicComplete, triage } from '../triage/index.js';
 import { ProjectRegistry } from '../projects/index.js';
 
 describe('software triage', () => {
@@ -48,6 +48,33 @@ describe('software triage', () => {
     const bad = await triage({ message: 'the page is broken' }, async () => 'sorry, I cannot');
     assert.equal(bad.source, 'rules');
     assert.equal(bad.kind, 'bug');
+  });
+});
+
+describe('model call timeout', () => {
+  /** A model API that answers after `delayMs`, and stops when the caller aborts, like a real slow generation. */
+  function slowApi(delayMs: number) {
+    return (_url: unknown, init?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(
+          () => resolve(new Response(JSON.stringify({ content: [{ type: 'text', text: 'fix proposal' }] }))),
+          delayMs
+        );
+        init?.signal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          reject(init.signal!.reason);
+        });
+      });
+  }
+
+  it('lets a slow reply finish within the configured timeout and aborts it past the timeout', async () => {
+    mock.method(globalThis, 'fetch', slowApi(300));
+    try {
+      assert.equal(await anthropicComplete({ apiKey: 'test-key', timeoutMs: 1000 })!('system', 'user'), 'fix proposal');
+      await assert.rejects(anthropicComplete({ apiKey: 'test-key', timeoutMs: 100 })!('system', 'user'), /timeout|abort/i);
+    } finally {
+      mock.restoreAll();
+    }
   });
 });
 

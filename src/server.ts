@@ -2,13 +2,14 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { createServer } from 'http';
+import { createServer, type IncomingHttpHeaders } from 'http';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { BlazeResolverPipeline } from './core/pipeline/index.js';
 import { loadExample } from './examples/index.js';
 import { VoiceChannelBridge } from './channels/voice.js';
+import { LiveEvents, type Audience } from './channels/live-events.js';
 import { getAgentToolSchemas, createAgentToolExecutor } from './channels/byo-agent.js';
 import { buildInboundResponse } from './channels/inbound.js';
 import { CustomerInput } from './core/types.js';
@@ -16,7 +17,7 @@ import { ReportSchema, anthropicComplete, triage } from './triage/index.js';
 import { ProjectRegistry, type Project } from './projects/index.js';
 import { IncidentStore, type IncidentRecord } from './incidents/index.js';
 import { ClaudeProvider } from './resolver/claude-provider.js';
-import { runFix } from './jobs/fix.js';
+import { lockDownServerFiles, resolveFixSandbox, runFix } from './jobs/fix.js';
 import { REPO_PATTERN } from './github/index.js';
 import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -44,8 +45,13 @@ function createPipeline() {
 
 let { adapters, pipeline } = createPipeline();
 
+const hasAdminToken = (headers: IncomingHttpHeaders) =>
+  !!process.env.BLAZE_ADMIN_TOKEN && headers.authorization === `Bearer ${process.env.BLAZE_ADMIN_TOKEN}`;
+const isAdmin = (req: express.Request) => hasAdminToken(req.headers);
+
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+const liveEvents = new LiveEvents(() => wss.clients, hasAdminToken);
 let voiceBridge = new VoiceChannelBridge(pipeline);
 
 server.on('upgrade', (request, socket, head) => {
@@ -64,25 +70,19 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-wss.on('connection', (ws: any, _request: any, searchParams?: any) => {
+wss.on('connection', (ws: any, request: any, searchParams?: any) => {
+  liveEvents.register(ws, request.headers);
   voiceBridge.handleConnection(ws, searchParams);
 });
 
-// Broadcast live events to WebSocket clients
-export function broadcastLiveEvent(eventType: string, data: unknown) {
-  const message = JSON.stringify({ type: eventType, data });
-  wss.clients.forEach((client) => {
-    if (client.readyState === 1) {
-      client.send(message);
-    }
-  });
+// Broadcast live events to WebSocket clients. Events with customer data must use 'admins'.
+export function broadcastLiveEvent(eventType: string, data: unknown, audience: Audience) {
+  liveEvents.broadcast(eventType, data, audience);
 }
 
 // --- Software support intake: projects, widget, reports ---
 const registry = new ProjectRegistry();
 const store = new IncidentStore();
-const isAdmin = (req: express.Request) =>
-  !!process.env.BLAZE_ADMIN_TOKEN && req.headers.authorization === `Bearer ${process.env.BLAZE_ADMIN_TOKEN}`;
 
 // Served from here, so every install picks up widget updates as soon as this server is updated.
 // Path differs between `tsx src/server.ts` and compiled `dist/server/src/server.js`.
@@ -101,11 +101,21 @@ const limited = (id: string, max: number, windowMs: number) => {
 
 // The fix engine runs each repo's own tests on this machine, so it stays off on servers anyone can sign up to.
 const githubToken = process.env.BLAZE_GITHUB_TOKEN;
-const fixComplete = anthropicComplete({ maxTokens: 4096 });
-const fixEnabled = process.env.BLAZE_FIX_ENABLED === 'true' && process.env.BLAZE_OPEN_SIGNUP !== 'true' && !!githubToken && !!fixComplete;
+// A fix proposal can be 4,096 tokens over large file context, which takes about a minute; allow three.
+const fixComplete = anthropicComplete({ maxTokens: 4096, timeoutMs: 180_000 });
+const fixPrerequisites = process.env.BLAZE_FIX_ENABLED === 'true' && process.env.BLAZE_OPEN_SIGNUP !== 'true' && !!githubToken && !!fixComplete;
+// Each fix's tests run AI-written code nobody has reviewed yet, so they run as a separate unprivileged user.
+const fixSandbox = fixPrerequisites ? resolveFixSandbox() : undefined;
+const fixEnabled = fixSandbox?.ok === true;
 if (process.env.BLAZE_FIX_ENABLED === 'true' && !fixEnabled) {
-  console.warn('BLAZE_FIX_ENABLED ignored: it needs BLAZE_GITHUB_TOKEN, ANTHROPIC_API_KEY and BLAZE_OPEN_SIGNUP unset.');
+  console.warn(
+    fixSandbox && !fixSandbox.ok
+      ? `BLAZE_FIX_ENABLED ignored: ${fixSandbox.problem}`
+      : 'BLAZE_FIX_ENABLED ignored: it needs BLAZE_GITHUB_TOKEN, ANTHROPIC_API_KEY and BLAZE_OPEN_SIGNUP unset.'
+  );
 }
+if (fixSandbox?.ok && fixSandbox.sandbox) lockDownServerFiles();
+if (fixSandbox?.ok && !fixSandbox.sandbox) console.warn('Fix engine running WITHOUT a sandbox user (BLAZE_ALLOW_UNSANDBOXED_FIXES=true): only for repos and reporters you trust.');
 
 // One fix at a time. ponytail: in-process queue, lost on restart; a real job queue when volume needs it.
 let fixQueue: Promise<unknown> = Promise.resolve();
@@ -119,13 +129,14 @@ function enqueueFix(project: Project, incident: IncidentRecord) {
         incident: { id: incident.id, title: incident.title, description: incident.description, stackTrace: incident.stackTrace },
         reportCount: store.incident(incident.id)?.reportIds.length ?? 1,
         token: githubToken!,
-        ai: new ClaudeProvider(fixComplete!)
+        ai: new ClaudeProvider(fixComplete!),
+        sandbox: fixSandbox?.ok ? fixSandbox.sandbox : undefined
       });
       update = outcome.status === 'pr_opened' ? { status: 'pr_opened', prUrl: outcome.url } : { status: 'needs_human', issueUrl: outcome.url, failureReason: outcome.reason };
     } catch (err) {
       update = { status: 'needs_human', failureReason: err instanceof Error ? err.message : String(err) };
     }
-    broadcastLiveEvent('incident_updated', store.update(incident.id, update));
+    broadcastLiveEvent('incident_updated', store.update(incident.id, update), 'admins');
   });
 }
 
@@ -152,7 +163,7 @@ app.post('/api/report', async (req, res) => {
   const result = await triage(parsed.data);
   const { incident, isNew } = store.addReport(project.id, parsed.data, result);
   if (incident && isNew && fixEnabled) enqueueFix(project, incident);
-  broadcastLiveEvent('report_triaged', { projectId: project.id, triage: result });
+  broadcastLiveEvent('report_triaged', { projectId: project.id, triage: result }, 'admins');
   // The customer only gets an acknowledgement, never the triage verdict.
   return res.status(202).json({ received: true });
 });
@@ -184,7 +195,7 @@ app.post('/api/github/webhook', (req, res) => {
       } else {
         store.update(incident.id, { status: 'needs_human' });
       }
-      broadcastLiveEvent('incident_updated', store.incident(incident.id));
+      broadcastLiveEvent('incident_updated', store.incident(incident.id), 'admins');
     }
   }
   return res.json({ ok: true });
@@ -212,7 +223,7 @@ app.post('/api/pipeline/process', async (req, res) => {
     };
 
     const result = await pipeline.processComplaint(input);
-    broadcastLiveEvent('pipeline_result', result);
+    broadcastLiveEvent('pipeline_result', result, 'everyone');
 
     return res.json({ success: true, result });
   } catch (err: unknown) {
@@ -250,7 +261,7 @@ app.post('/api/inbound', async (req, res) => {
     };
 
     const result = await pipeline.processComplaint(input);
-    broadcastLiveEvent('pipeline_result', result);
+    broadcastLiveEvent('pipeline_result', result, 'everyone');
 
     return res.json(buildInboundResponse(result, profile, { orderId, resourceId, itemId }));
   } catch (err: unknown) {
@@ -268,7 +279,7 @@ app.post('/api/pipeline/seed', async (req, res) => {
         timestamp: new Date()
       });
       results.push(result);
-      broadcastLiveEvent('pipeline_result', result);
+      broadcastLiveEvent('pipeline_result', result, 'everyone');
     }
 
     return res.json({
@@ -286,7 +297,7 @@ app.post('/api/pipeline/seed', async (req, res) => {
 app.post('/api/pipeline/reset', (req, res) => {
   ({ adapters, pipeline } = createPipeline());
   voiceBridge = new VoiceChannelBridge(pipeline);
-  broadcastLiveEvent('pipeline_reset', { timestamp: new Date() });
+  broadcastLiveEvent('pipeline_reset', { timestamp: new Date() }, 'everyone');
   return res.json({ success: true, message: 'BlazeResolver pipeline and adapter stores reset to fresh state' });
 });
 
@@ -334,7 +345,7 @@ app.post('/api/hitl/action', async (req, res) => {
       return res.status(404).json({ error: 'Action not found or already processed' });
     }
 
-    broadcastLiveEvent('hitl_updated', updatedAction);
+    broadcastLiveEvent('hitl_updated', updatedAction, 'everyone');
     return res.json({ success: true, action: updatedAction });
   } catch (err: unknown) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

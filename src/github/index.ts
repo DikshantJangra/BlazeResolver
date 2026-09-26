@@ -6,6 +6,30 @@ export const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 export const authedUrl = (repo: string, token: string) => `https://x-access-token:${token}@github.com/${repo}.git`;
 export const plainUrl = (repo: string) => `https://github.com/${repo}.git`;
 
+/**
+ * Strips personal data from text bound for GitHub, where a public repo makes it public.
+ * URLs keep only origin and path (query strings and fragments carry emails and session ids), then emails,
+ * IP addresses and long digit runs (phone and card numbers) are masked.
+ * ponytail: pattern-based, so a name or street address written in free text still gets through.
+ */
+export function redactPersonalData(text: string): string {
+  return text
+    .replace(/\bhttps?:\/\/[^\s<>"'`)\]]+/gi, (raw) => {
+      try {
+        const url = new URL(raw);
+        return `${url.origin}${url.pathname}`;
+      } catch {
+        return '[url]';
+      }
+    })
+    .replace(/[\w.%+-]+@[\w-]+(?:\.[\w-]+)*/g, '[email]')
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '[ip]')
+    .replace(/\+?\d[\d\s().-]{8,}\d/g, (run) => {
+      const digits = run.replace(/\D/g, '').length;
+      return digits >= 10 && digits <= 19 ? '[number]' : run;
+    });
+}
+
 async function call<T = { html_url: string; number: number }>(
   token: string,
   method: 'GET' | 'POST',
@@ -65,7 +89,7 @@ export async function listComments(token: string, repo: string, number: number, 
 }
 
 export async function commentOnIssue(token: string, repo: string, number: number, body: string, f: typeof fetch = fetch): Promise<void> {
-  await api(token, `/repos/${repo}/issues/${number}/comments`, { body }, f);
+  await api(token, `/repos/${repo}/issues/${number}/comments`, { body: redactPersonalData(body) }, f);
 }
 
 export async function addLabels(token: string, repo: string, number: number, labels: string[], f: typeof fetch = fetch): Promise<void> {
@@ -83,7 +107,7 @@ export interface PullRequestInput {
 
 export async function openPullRequest(input: PullRequestInput, f: typeof fetch = fetch): Promise<{ url: string; number: number }> {
   const { token, repo, head, base, title, body } = input;
-  const pr = await api(token, `/repos/${repo}/pulls`, { title, head, base, body }, f);
+  const pr = await api(token, `/repos/${repo}/pulls`, { title: redactPersonalData(title), head, base, body: redactPersonalData(body) }, f);
   try {
     await api(token, `/repos/${repo}/issues/${pr.number}/labels`, { labels: ['blazeresolver'] }, f);
   } catch {
@@ -97,7 +121,12 @@ export async function openIssue(
   input: { token: string; repo: string; title: string; body: string; labels?: string[] },
   f: typeof fetch = fetch
 ): Promise<{ url: string; number: number }> {
-  const issue = await api(input.token, `/repos/${input.repo}/issues`, { title: input.title, body: input.body, labels: input.labels ?? ['blazeresolver'] }, f);
+  const issue = await api(
+    input.token,
+    `/repos/${input.repo}/issues`,
+    { title: redactPersonalData(input.title), body: redactPersonalData(input.body), labels: input.labels ?? ['blazeresolver'] },
+    f
+  );
   return { url: issue.html_url, number: issue.number };
 }
 

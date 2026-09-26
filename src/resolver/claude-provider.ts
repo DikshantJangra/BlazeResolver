@@ -49,7 +49,7 @@ function parseJson(text: string): unknown {
 
 /**
  * The model behind the fix engine. It only reads and proposes; the resolver applies, tests and reviews every edit.
- * `complete` needs a generous token limit: `anthropicComplete({ maxTokens: 4096 })`.
+ * `complete` needs a generous token limit and a timeout to match: `anthropicComplete({ maxTokens: 4096, timeoutMs: 180_000 })`.
  */
 export class ClaudeProvider implements AIProvider {
   constructor(private complete: Complete) {}
