@@ -1,12 +1,14 @@
 /*
- * BlazeResolver support widget. Served by the BlazeResolver server, so updating the server updates every install.
- *   <script src="https://YOUR-SERVER/widget.js" data-key="blz_..." data-app-version="1.4.2"></script>
- * No frontend framework? No problem. Building your own UI? POST to /api/report with the x-blaze-key header instead.
+ * BlazeResolver support widget. Loaded from a CDN, so every install picks up updates on its own.
+ *   <script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js" data-endpoint="/api/blaze" data-app-version="1.4.2"></script>
+ * data-endpoint is the report handler in your own backend (`npx blazeresolver init` sets it up).
+ * Building your own UI? POST {message, pageUrl, appVersion, userId, email, consoleErrors} to that endpoint.
+ * data-key is only for the hosted-server mode: with it the default endpoint is <script origin>/api/report.
  */
 (function () {
   var s = document.currentScript;
-  var server = new URL(s.src).origin;
   var key = s.getAttribute('data-key');
+  var endpoint = s.getAttribute('data-endpoint') || (new URL(s.src).origin + '/api/report');
   var version = s.getAttribute('data-app-version') || undefined;
   var userId = s.getAttribute('data-user-id') || undefined;
   var email = s.getAttribute('data-user-email') || undefined;
@@ -35,9 +37,11 @@
     var box = root.querySelector('textarea');
     if (!box.value.trim()) return;
     msg.textContent = 'Sending...';
-    fetch(server + '/api/report', {
+    var headers = { 'content-type': 'application/json' };
+    if (key) headers['x-blaze-key'] = key;
+    fetch(endpoint, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-blaze-key': key },
+      headers: headers,
       body: JSON.stringify({ message: box.value, pageUrl: location.href, appVersion: version, userId: userId, email: email, consoleErrors: errors })
     }).then(function (r) {
       if (!r.ok) throw new Error(r.status);

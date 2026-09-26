@@ -136,6 +136,30 @@ npm run dev
 
 ---
 
+## Use BlazeResolver in your own project
+
+No server to host. Everything runs in your repo and on GitHub.
+
+```bash
+npx blazeresolver init
+```
+
+`init` reads your repo from git and adds three things:
+
+| File | What it does |
+| :--- | :--- |
+| `src/app/api/blaze/route.ts` (Next.js; other backends get a 2-line snippet) | Receives reports from the widget, triages them, files a GitHub issue. Same bug reported again = a comment, not a new issue. |
+| `.github/workflows/blazeresolver.yml` | On a `blazeresolver` issue, runs the fix engine on GitHub's runner, opens a PR that closes the issue. On merge, emails customers who opted in. |
+| `blazeresolver.config.json` | Repo, default branch, test and build commands. |
+
+Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo) and `ANTHROPIC_API_KEY`, run `gh secret set ANTHROPIC_API_KEY`, allow Actions to create pull requests, protect your default branch, and paste the widget tag `init` prints. A human always reviews and merges the PR.
+
+Updates are automatic: the widget loads from a CDN and the workflow runs `blazeresolver@latest`.
+
+Safety: customer text is data, never instructions. Fixes never touch CI config, secrets, lockfiles, auth, payments or migrations. Tests run on a throwaway GitHub runner with a minimal environment. Customer emails are stored only if you set `BLAZE_NOTIFY_CUSTOMERS=true` (use a private repo).
+
+---
+
 ## 7. Demo Script for Judges
 
 1. **Ingest 20-Messy Claims**: Click **"Run 20-Demo Script"** on the dashboard.

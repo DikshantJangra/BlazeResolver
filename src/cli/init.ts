@@ -1,64 +1,115 @@
-#!/usr/bin/env node
-/**
- * Registers the current project with a BlazeResolver server and prints the widget snippet.
- *   npx blazeresolver init
- * Repo and branch come from git; server from BLAZE_SERVER (default http://localhost:3001); token (only for closed servers) from BLAZE_ADMIN_TOKEN.
- * Any of them can be overridden: --server --repo --branch --admin-token --test --build.
- * Writes blazeresolver.config.json (commit it) and appends BLAZE_KEY to .env (do not commit it).
- */
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, writeFileSync } from 'node:fs';
-import { parseArgs } from 'node:util';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { REPO_PATTERN } from '../github/index.js';
+import { WORKFLOW, routeFile, widgetTag } from './templates.js';
 
-const { values } = parseArgs({
-  allowPositionals: true, // the word "init"
-  options: {
-    server: { type: 'string' },
-    repo: { type: 'string' },
-    branch: { type: 'string' },
-    test: { type: 'string', default: 'npm ci && npm test' },
-    build: { type: 'string', default: 'npm run build --if-present' },
-    'admin-token': { type: 'string', default: process.env.BLAZE_ADMIN_TOKEN }
-  }
-});
+export interface InitOptions {
+  cwd: string;
+  repo?: string;
+  branch?: string;
+  test?: string;
+  build?: string;
+  /** Overwrite files that already exist. */
+  force?: boolean;
+  /** Skip `npm install blazeresolver`. */
+  noInstall?: boolean;
+  log?: (line: string) => void;
+}
 
-// ponytail: set to the hosted URL once deployed, so `npx blazeresolver init` needs no configuration.
-const DEFAULT_SERVER = 'http://localhost:3001';
-
-const git = (...args: string[]) => {
+const git = (cwd: string, ...args: string[]) => {
   try {
-    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return '';
   }
 };
-// git@github.com:owner/name.git and https://github.com/owner/name(.git) both end in owner/name
-const repo = values.repo ?? git('remote', 'get-url', 'origin').match(/([\w.-]+\/[\w.-]+?)(?:\.git)?$/)?.[1];
-const branch = values.branch ?? (git('symbolic-ref', '--short', 'HEAD') || 'main');
-const server = (values.server ?? process.env.BLAZE_SERVER ?? DEFAULT_SERVER).replace(/\/$/, '');
 
-if (!repo) {
-  console.error('Could not find a git remote. Run inside your repo, or pass --repo owner/name.');
-  process.exit(1);
+/** The package manager and the commands that install, test and build this project. */
+export function detectCommands(cwd: string): { install: string; test: string; build: string; hasTests: boolean } {
+  const pkg = existsSync(join(cwd, 'package.json')) ? JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) : {};
+  const scripts = pkg.scripts ?? {};
+  const [pm, install] = existsSync(join(cwd, 'pnpm-lock.yaml'))
+    ? ['pnpm', 'pnpm install --frozen-lockfile']
+    : existsSync(join(cwd, 'yarn.lock'))
+      ? ['yarn', 'yarn install --frozen-lockfile']
+      : ['npm', 'npm ci'];
+  return {
+    install,
+    test: `${install} && ${pm} test`,
+    build: scripts.build ? `${pm} run build` : 'true',
+    hasTests: !!scripts.test
+  };
 }
 
-const res = await fetch(`${server}/api/projects`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json', ...(values['admin-token'] && { authorization: `Bearer ${values['admin-token']}` }) },
-  body: JSON.stringify({ repo, defaultBranch: branch, testCommand: values.test, buildCommand: values.build })
-}).catch(() => {
-  console.error(`Could not reach ${server}. Set BLAZE_SERVER or pass --server <url>.`);
-  process.exit(1);
-});
-if (!res.ok) {
-  console.error(`registration failed: ${res.status} ${await res.text()}`);
-  process.exit(1);
+/** Where a Next.js App Router project keeps its routes, or undefined for any other project. */
+function nextRouteDir(cwd: string): string | undefined {
+  const pkgFile = join(cwd, 'package.json');
+  if (!existsSync(pkgFile)) return undefined;
+  const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'));
+  if (!{ ...pkg.dependencies, ...pkg.devDependencies }.next) return undefined;
+  return ['src/app', 'app'].find((d) => existsSync(join(cwd, d)));
 }
-const { project, key } = (await res.json()) as { project: { id: string }; key: string };
 
-writeFileSync('blazeresolver.config.json', JSON.stringify({ server, projectId: project.id, repo, defaultBranch: branch }, null, 2) + '\n');
-appendFileSync('.env', `\nBLAZE_KEY=${key}\n`);
+function write(cwd: string, file: string, content: string, force: boolean | undefined, log: (l: string) => void): boolean {
+  const path = join(cwd, file);
+  if (existsSync(path) && !force) {
+    log(`  kept   ${file} (already exists, use --force to overwrite)`);
+    return false;
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content);
+  log(`  wrote  ${file}`);
+  return true;
+}
 
-console.log(`Registered ${repo} as ${project.id}. Paste this before </body> in your app:\n`);
-console.log(`<script src="${server}/widget.js" data-key="${key}" data-app-version="YOUR_VERSION"></script>\n`);
-console.log('Custom UI instead? POST {message, pageUrl, appVersion, userId, consoleErrors} to /api/report with header x-blaze-key.');
+/**
+ * Sets a project up: config, the GitHub workflow that fixes bugs, and the handler that receives widget reports.
+ * Everything lands in the user's own repo. Nothing is registered anywhere and nothing is hosted by us.
+ */
+export function runInit(opts: InitOptions): { repo: string; handlerFile?: string } {
+  const { cwd } = opts;
+  const log = opts.log ?? console.log;
+
+  const repo = opts.repo ?? git(cwd, 'remote', 'get-url', 'origin').match(/([\w.-]+\/[\w.-]+?)(?:\.git)?$/)?.[1];
+  if (!repo || !REPO_PATTERN.test(repo)) throw new Error('Could not find a GitHub remote. Run inside your repo, or pass --repo owner/name.');
+  const branch = opts.branch ?? (git(cwd, 'symbolic-ref', '--short', 'HEAD') || 'main');
+  const cmds = detectCommands(cwd);
+
+  log(`\nBlazeResolver for ${repo} (default branch ${branch})\n`);
+  write(cwd, 'blazeresolver.config.json', JSON.stringify({ repo, defaultBranch: branch, testCommand: opts.test ?? cmds.test, buildCommand: opts.build ?? cmds.build }, null, 2) + '\n', opts.force, log);
+  write(cwd, '.github/workflows/blazeresolver.yml', WORKFLOW, opts.force, log);
+
+  let handlerFile: string | undefined;
+  const routeDir = nextRouteDir(cwd);
+  if (routeDir) {
+    handlerFile = `${routeDir}/api/blaze/route.${existsSync(join(cwd, 'tsconfig.json')) ? 'ts' : 'js'}`;
+    write(cwd, handlerFile, routeFile(repo), opts.force, log);
+  }
+
+  if (existsSync(join(cwd, 'package.json')) && !opts.noInstall) {
+    log('  running npm install blazeresolver ...');
+    try {
+      execFileSync('npm', ['install', 'blazeresolver'], { cwd, stdio: 'ignore' });
+    } catch {
+      log('  could not install blazeresolver; run `npm install blazeresolver` yourself');
+    }
+  }
+
+  log('\nNext steps:');
+  let step = 1;
+  if (!cmds.hasTests) log(`  ${step++}. This project has no "test" script. BlazeResolver verifies every fix with your tests, so add some or fixes will go to a human.`);
+  if (!handlerFile) {
+    log(`  ${step++}. Add the report endpoint to your backend (Express shown; any Request/Response runtime can use createHandler directly):\n`);
+    log(`       import { createHandler, nodeHandler } from 'blazeresolver/handler';`);
+    log(`       app.post('/api/blaze', nodeHandler(createHandler({ repo: '${repo}' })));\n`);
+  }
+  log(`  ${step++}. Create a fine-grained GitHub token with Issues: read and write on ${repo} only.`);
+  log(`     Give it to your backend as BLAZE_GITHUB_TOKEN, along with ANTHROPIC_API_KEY (optional; without it triage uses keyword rules).`);
+  log(`  ${step++}. Add the repo secret the fix workflow needs:   gh secret set ANTHROPIC_API_KEY`);
+  log(`  ${step++}. GitHub, Settings, Actions, General: turn on "Allow GitHub Actions to create and approve pull requests".`);
+  log(`  ${step++}. Protect ${branch} (Settings, Branches) so every fix needs a human review.`);
+  log(`  ${step++}. Paste this before </body> in your app:\n\n       ${widgetTag('/api/blaze')}\n`);
+  log('Then commit the new files. Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest.');
+  return { repo, handlerFile };
+}
