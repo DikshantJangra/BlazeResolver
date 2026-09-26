@@ -9,6 +9,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    // The server compiles into dist/server; keep the dashboard out of its way.
+    outDir: 'dist/client',
+  },
   server: {
     port: 5173,
     proxy: {

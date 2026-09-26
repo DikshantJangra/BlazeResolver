@@ -2,7 +2,7 @@
   "name": "blazeresolver",
   "version": "1.0.0",
   "description": "Open-source, business-agnostic AI harness for customer service with KDS correlate engine & policy-guarded adapters",
-  "main": "dist/index.js",
+  "main": "dist/server/src/index.js",
   "type": "module",
   "scripts": {
     "dev:server": "tsx watch src/server.ts",
@@ -11,6 +11,7 @@
     "build:server": "tsc -p tsconfig.server.json",
     "build:client": "vite build",
     "build": "npm run build:server && npm run build:client",
+    "start": "node dist/server/src/server.js",
     "demo": "tsx src/cli/demo.ts",
     "demo:fix": "tsx src/cli/fix-demo.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",

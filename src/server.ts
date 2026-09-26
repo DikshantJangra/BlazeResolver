@@ -1,6 +1,10 @@
+// Loads .env before anything reads process.env.
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { BlazeResolverPipeline } from './core/pipeline/index.js';
 import { loadExample } from './examples/index.js';
@@ -298,6 +302,13 @@ app.get('/api/health', (req, res) => {
     uptime: process.uptime()
   });
 });
+
+// Dashboard: after `npm run build`, serve it from the same port. In development Vite serves it instead.
+const clientDir = resolve('dist/client');
+if (existsSync(join(clientDir, 'index.html'))) {
+  app.use(express.static(clientDir));
+  app.get(/^\/(?!api\/|ws).*/, (req, res) => res.sendFile(join(clientDir, 'index.html')));
+}
 
 server.listen(PORT, () => {
   console.log(`\n🚀 BlazeResolver Server running on http://localhost:${PORT} (profile: ${profile.name})`);
