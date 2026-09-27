@@ -1,6 +1,6 @@
 {
   "name": "blazeresolver",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Open-source AI harness that turns customer bug reports into reviewed GitHub pull requests",
   "main": "dist/server/src/index.js",
   "type": "module",
@@ -11,13 +11,14 @@
     "build:server": "tsc -p tsconfig.server.json",
     "build:client": "vite build",
     "build:react": "tsc -p tsconfig.react.json",
-    "build": "npm run build:server && npm run build:cjs && npm run build:react && npm run build:client",
+    "build:css": "tailwindcss -i ./client/index.css -o ./dist/react/styles.css --minify",
+    "build": "npm run build:server && npm run build:cjs && npm run build:react && npm run build:css && npm run build:client",
     "start": "node dist/server/src/server.js",
     "demo": "tsx src/cli/demo.ts",
     "demo:fix": "tsx src/cli/fix-demo.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.react.json",
     "test": "tsx --test src/**/*.test.ts",
-    "prepublishOnly": "npm run build:server && npm run build:cjs && npm run build:react",
+    "prepublishOnly": "npm run build:server && npm run build:cjs && npm run build:react && npm run build:css",
     "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/cjs-marker.mjs"
   },
   "keywords": [
@@ -116,6 +117,7 @@
       "types": "./dist/react/react.d.ts",
       "default": "./dist/react/react.js"
     },
+    "./styles.css": "./dist/react/styles.css",
     "./widget.js": "./widget/widget.js",
     "./assets/blazyy.svg": "./assets/blazyy.svg",
     "./package.json": "./package.json"

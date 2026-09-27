@@ -274,7 +274,16 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
   };
 
   return (
-    <div className="flex-1 flex min-h-0 overflow-hidden bg-gray-50/50">
+    <div
+      className="blaze-customer-portal w-full flex-1 flex min-h-0 overflow-hidden bg-gray-50/50"
+      style={{
+        minHeight: '100vh',
+        height: '100%',
+        color: '#111827',
+        backgroundColor: '#f9fafb',
+        fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+      }}
+    >
       {/* Left Sidebar: My Support Tickets */}
       <div className="w-80 lg:w-96 bg-white border-r border-gray-200 flex flex-col min-h-0 overflow-hidden shrink-0">
         <div className="p-3.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/80">

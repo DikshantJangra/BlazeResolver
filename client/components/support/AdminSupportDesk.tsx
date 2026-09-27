@@ -442,7 +442,16 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
   };
 
   return (
-    <div className="w-full h-full flex-1 flex flex-col min-h-0 overflow-hidden bg-white text-gray-900 rounded-none border-0 shadow-none">
+    <div
+      className={`blaze-support-desk w-full flex-1 flex flex-col min-h-0 overflow-hidden bg-white text-gray-900 rounded-none border-0 shadow-none ${className}`}
+      style={{
+        minHeight: '100vh',
+        height: '100%',
+        color: '#111827',
+        backgroundColor: '#ffffff',
+        fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+      }}
+    >
       {/* Top Header */}
       <SupportHeader
         mode={viewMode}
