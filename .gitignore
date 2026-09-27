@@ -91,4 +91,3 @@ __pycache__/
 
 # BlazeResolver local project registry
 .blazeresolver/
-blazeresolver.config.json

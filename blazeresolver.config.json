@@ -1,0 +1,9 @@
+{
+  "repo": "DikshantJangra/BlazeResolver",
+  "defaultBranch": "main",
+  "installCommand": "npm ci",
+  "testCommand": "npm test",
+  "buildCommand": "npm run build",
+  "sandbox": "docker",
+  "sandboxImage": "node:22-bookworm-slim"
+}

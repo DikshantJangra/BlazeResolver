@@ -28,7 +28,7 @@ export const workflow = ({ pin, app }: WorkflowOptions = {}) => {
 };
 
 /**
- * The full 4-job workflow: fix+AGY-sidecar, AGY-triage, AGY-pr-review, notify.
+ * The full 4-job workflow: fix, AGY-triage, AGY-pr-review, notify.
  * This is what init writes — the complete pipeline, nothing stripped out.
  */
 export const workflowFull = ({ pin, app }: WorkflowOptions = {}) => {
@@ -70,7 +70,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ── 1. Fix job (Node resolver + AGY sidecar) ─────────────────────────────
+  # ── 1. Fix job (Node resolver) ───────────────────────────────────────────
   fix:
     # Only issues the BlazeResolver handler filed (label) and that someone with write access opened.
     # Reacts to a new issue or the blazeresolver label only. Labels the job itself adds (fixing, pr-opened, ...)
@@ -93,25 +93,9 @@ ${appStep}      - uses: ${ACTIONS.checkout}
           node-version: 22
       - run: corepack enable
 
-      # ── Antigravity sidecar (Python) ───────────────────────────────────────
-      - uses: ${ACTIONS.setupPython}
-        with:
-          python-version: "3.12"
-      - name: Install Antigravity SDK
-        run: pip install google-antigravity
-      - name: Start AGY sidecar (background)
-        run: |
-          python agents/blaze_resolver_agent.py \\
-            --issue \${{ github.event.issue.number }} \\
-            --repo-root . \\
-            --sidecar &
-          sleep 3
-        env:
-          GEMINI_API_KEY: \${{ secrets.GEMINI_API_KEY }}
-          GITHUB_TOKEN: ${token}
-          AGY_SIDECAR_PORT: "7391"
-
-      # ── Node fix engine ────────────────────────────────────────────────────
+      # The Node engine is the only thing that writes here: every fix it pushes passed its guards, tests and build.
+      # Never start a second agent in this job (e.g. agents/blaze_resolver_agent.py): it would push to the same
+      # branch without those guards, and run AI-written code with this job's token in its environment.
       - name: Run BlazeResolver fix engine
         run: npx --yes blazeresolver@${version} fix
         env:
@@ -122,7 +106,6 @@ ${appStep}      - uses: ${ACTIONS.checkout}
           GEMINI_API_KEY: \${{ secrets.GEMINI_API_KEY }}
           BLAZE_PROVIDER: \${{ vars.BLAZE_PROVIDER }}
           BLAZE_MODEL: \${{ vars.BLAZE_MODEL }}
-          AGY_SIDECAR_PORT: "7391"
 ${tokenNote}
           GITHUB_TOKEN: ${token}
 

@@ -318,6 +318,24 @@ describe('at scale', () => {
     const { WORKFLOW } = await import('../cli/templates.js');
     assert.match(WORKFLOW, /github\.event\.action == 'opened' \|\| github\.event\.label\.name == 'blazeresolver'/);
   });
+
+  it('runs no second agent in the fix job, which would push unguarded code to the same branch', async () => {
+    const { workflow } = await import('../cli/templates.js');
+    const ours = readFileSync(new URL('../../.github/workflows/blazeresolver.yml', import.meta.url), 'utf8');
+    for (const [name, text] of [['template', workflow()], ['template (app)', workflow({ app: true })], ['this repo', ours]]) {
+      const fix = text
+        .slice(text.indexOf('\n  fix:\n'), text.indexOf('\n  agy-triage:\n'))
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('#'))
+        .join('\n');
+      assert.ok(fix.length > 100, `${name}: fix job not found`);
+      assert.doesNotMatch(fix, /python|pip install|sidecar|blaze_resolver_agent/i, name);
+      assert.match(fix, /persist-credentials: false/, name);
+      assert.match(fix, /npx --yes blazeresolver@\S+ fix/, name);
+      // write access is granted to the fix job only, never workflow-wide
+      assert.match(text.slice(0, text.indexOf('\njobs:')), /permissions:\n  contents: read\n/, name);
+    }
+  });
 });
 
 describe('audit fixes', () => {
