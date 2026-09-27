@@ -90,6 +90,24 @@ export default function Header() {
             >
               Docs
             </Link>
+            <Link
+              href="/customer"
+              className="text-sm font-medium text-fg/70 hover:text-fg transition-colors"
+            >
+              Customer
+            </Link>
+            <Link
+              href="/timeline"
+              className="text-sm font-medium text-fg/70 hover:text-fg transition-colors"
+            >
+              Timeline
+            </Link>
+            <Link
+              href="/admin"
+              className="text-sm font-medium text-fg/70 hover:text-fg transition-colors"
+            >
+              Admin Desk
+            </Link>
             <a
               href="https://github.com/DikshantJangra/BlazeResolver/discussions"
               target="_blank"
@@ -189,9 +207,31 @@ export default function Header() {
           </a>
           <Link
             href="/docs"
+            onClick={() => setMobileMenuOpen(false)}
             className="ds-mobile-menu-item"
           >
             Documentation
+          </Link>
+          <Link
+            href="/customer"
+            onClick={() => setMobileMenuOpen(false)}
+            className="ds-mobile-menu-item"
+          >
+            Customer Support Chat
+          </Link>
+          <Link
+            href="/timeline"
+            onClick={() => setMobileMenuOpen(false)}
+            className="ds-mobile-menu-item"
+          >
+            BlazeTimeline
+          </Link>
+          <Link
+            href="/admin"
+            onClick={() => setMobileMenuOpen(false)}
+            className="ds-mobile-menu-item"
+          >
+            Admin Support Desk
           </Link>
           <a
             href="https://github.com/DikshantJangra/BlazeResolver/discussions"

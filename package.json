@@ -1,6 +1,6 @@
 {
   "name": "blazeresolver",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Open-source AI harness that turns customer bug reports into reviewed GitHub pull requests",
   "main": "dist/server/src/index.js",
   "type": "module",
@@ -101,30 +101,31 @@
   "exports": {
     ".": {
       "types": "./dist/server/src/index.d.ts",
+      "import": "./dist/server/src/index.js",
       "default": "./dist/server/src/index.js"
     },
     "./handler": {
-      "import": {
-        "types": "./dist/server/src/handler/index.d.ts",
-        "default": "./dist/server/src/handler/index.js"
-      },
-      "require": {
-        "types": "./dist/cjs/src/handler/index.d.ts",
-        "default": "./dist/cjs/src/handler/index.js"
-      }
+      "types": "./dist/server/src/handler/index.d.ts",
+      "import": "./dist/server/src/handler/index.js",
+      "require": "./dist/cjs/src/handler/index.js",
+      "default": "./dist/server/src/handler/index.js"
     },
     "./support": {
-      "import": {
-        "types": "./dist/server/src/support/index.d.ts",
-        "default": "./dist/server/src/support/index.js"
-      },
-      "require": {
-        "types": "./dist/cjs/src/support/index.d.ts",
-        "default": "./dist/cjs/src/support/index.js"
-      }
+      "types": "./dist/server/src/support/index.d.ts",
+      "import": "./dist/server/src/support/index.js",
+      "require": "./dist/cjs/src/support/index.js",
+      "default": "./dist/server/src/support/index.js"
+    },
+    "./timeline": {
+      "types": "./dist/server/src/timeline/index.d.ts",
+      "import": "./dist/server/src/timeline/index.js",
+      "require": "./dist/cjs/src/timeline/index.js",
+      "default": "./dist/server/src/timeline/index.js"
     },
     "./react": {
       "types": "./dist/react/react.d.ts",
+      "import": "./dist/react/react.js",
+      "require": "./dist/react/react.js",
       "default": "./dist/react/react.js"
     },
     "./styles.css": "./dist/react/styles.css",
@@ -140,6 +141,9 @@
       ],
       "support": [
         "dist/server/src/support/index.d.ts"
+      ],
+      "timeline": [
+        "dist/server/src/timeline/index.d.ts"
       ],
       "react": [
         "dist/react/react.d.ts"

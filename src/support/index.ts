@@ -28,6 +28,10 @@ export interface SupportTicket {
   lastMessageAt: string;
   isEscalated?: boolean;
   pulseStatus?: string;
+  githubIssueUrl?: string;
+  githubIssueNumber?: number;
+  githubBranch?: string;
+  githubPullRequestUrl?: string;
   isHumanTakeover?: boolean;
   humanTakeoverReason?: string | null;
   aiAssisted?: boolean;
@@ -432,15 +436,14 @@ export class SupportStore {
       (t) => t.customerId === customerIdOrOutletId || t.outletId === customerIdOrOutletId
     );
 
+    const first = tickets[0];
     return {
       userId: customerIdOrOutletId,
-      name: tickets[0]?.customerName || 'Customer Profile',
-      email: tickets[0]?.customerEmail || 'customer@example.com',
-      phone: tickets[0]?.customerPhone || '+91 98765 43210',
-      planName: 'Enterprise Diamond Diner',
-      outletName: tickets[0]?.outletName || 'Downtown Kitchen Hub',
-      isVip: true,
-      lifetimeSpendPaise: 3840000,
+      name: first?.customerName || '',
+      email: first?.customerEmail || '',
+      phone: first?.customerPhone || '',
+      outletName: first?.outletName || '',
+      isVip: false,
       recentTickets: tickets.slice(0, 5).map((t) => ({
         id: t.id,
         ticketNumber: t.ticketNumber,
@@ -448,26 +451,7 @@ export class SupportStore {
         status: t.status,
         createdAt: t.createdAt
       })),
-      recentOrders: [
-        {
-          id: 'ORD-9821',
-          orderNumber: '9821',
-          totalPaise: 45000,
-          status: 'delivered',
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-          itemsSummary: '1x Margherita Pizza, 1x Caesar Salad, 2x Cold Beverage',
-          outletName: 'Downtown Kitchen Hub'
-        },
-        {
-          id: 'ORD-9844',
-          orderNumber: '9844',
-          totalPaise: 89000,
-          status: 'delivered',
-          createdAt: new Date(Date.now() - 7200000).toISOString(),
-          itemsSummary: '2x Truffle Burger, 1x Large Seasoned Fries',
-          outletName: 'Downtown Kitchen Hub'
-        }
-      ]
+      recentOrders: []
     };
   }
 

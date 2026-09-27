@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   RiUser3Line,
   RiBuilding2Line,
@@ -13,7 +12,12 @@ import {
   RiAlertLine,
   RiPulseLine,
   RiCheckDoubleLine,
-  RiTimerLine
+  RiTimerLine,
+  RiGitPullRequestLine,
+  RiGitBranchLine,
+  RiExternalLinkLine,
+  RiTerminalLine,
+  RiSparklingLine
 } from 'react-icons/ri';
 import { BlazzyIcon } from './BlazzyMascot.js';
 import type { CustomerContext, SupportMessage, SupportTicket, TicketRating } from './types.js';
@@ -71,6 +75,80 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
           <p className="text-[11px] text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-5">
             {firstCustomerMessage?.body || firstCustomerMessage?.content || selectedTicket.subject}
           </p>
+        </div>
+      )}
+
+      {/* BlazeResolver Automated Fix Pipeline Task Card */}
+      {selectedTicket && (selectedTicket.isEscalated || selectedTicket.githubIssueUrl || aiReport?.triageCategory === 'bug' || aiReport?.intent?.includes('Bug')) && (
+        <div className="bg-gradient-to-br from-orange-50/90 to-amber-50/50 p-3.5 rounded-2xl border border-orange-200 shadow-2xs flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-bold text-gray-900 text-xs">
+              <RiSparklingLine className="w-4 h-4 text-orange-600" />
+              <span>BlazeResolver Fix Task</span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-orange-200 text-orange-950 font-bold text-[10px] uppercase tracking-wider">
+              {selectedTicket.pulseStatus === 'investigating' ? '⚡ In Progress' : 'Queued'}
+            </span>
+          </div>
+
+          <div className="bg-white/80 p-2.5 rounded-xl border border-orange-100 flex flex-col gap-1.5 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 text-[10.5px]">GitHub Tracking:</span>
+              {selectedTicket.githubIssueUrl ? (
+                <a
+                  href={selectedTicket.githubIssueUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-orange-700 hover:text-orange-900 flex items-center gap-1 text-[11px]"
+                >
+                  <span>Issue #{selectedTicket.githubIssueNumber || 'Linked'}</span>
+                  <RiExternalLinkLine className="w-3 h-3" />
+                </a>
+              ) : (
+                <span className="font-mono text-gray-700 text-[10.5px]">Issue Registered</span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 text-[10.5px]">Fix Engine Branch:</span>
+              <span className="font-mono text-[10px] font-semibold text-gray-800 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 flex items-center gap-1">
+                <RiGitBranchLine className="w-3 h-3 text-gray-500" />
+                <span>{selectedTicket.githubBranch || `blazeresolver/fix-${selectedTicket.ticketNumber?.toLowerCase() || 'task'}`}</span>
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 text-[10.5px]">Resolution Target:</span>
+              {selectedTicket.githubPullRequestUrl ? (
+                <a
+                  href={selectedTicket.githubPullRequestUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 text-[11px]"
+                >
+                  <RiGitPullRequestLine className="w-3.5 h-3.5 text-purple-600" />
+                  <span>View Pull Request</span>
+                  <RiExternalLinkLine className="w-3 h-3" />
+                </a>
+              ) : (
+                <span className="font-semibold text-gray-800 flex items-center gap-1">
+                  <RiGitPullRequestLine className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Reviewed PR</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-gray-900 text-gray-200 p-2 rounded-xl text-[10px] font-mono flex flex-col gap-1">
+            <div className="flex items-center justify-between text-gray-400 text-[9px] uppercase tracking-wider font-sans font-bold">
+              <span className="flex items-center gap-1">
+                <RiTerminalLine className="w-3 h-3 text-orange-400" /> Local Fix Command
+              </span>
+            </div>
+            <code className="text-orange-300 break-all select-all">
+              npx blazeresolver try --title &quot;{selectedTicket.subject.slice(0, 32)}&quot; --description &quot;{selectedTicket.subject}&quot;
+            </code>
+          </div>
         </div>
       )}
 
@@ -338,7 +416,7 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
                     )}
                     <div className="flex items-center justify-between text-gray-500 text-[10px] pt-0.5">
                       <span className="capitalize font-semibold text-gray-700">{ord.status}</span>
-                      <span>{ord.outletName || 'Downtown Kitchen'}</span>
+                      {ord.outletName && <span>{ord.outletName}</span>}
                     </div>
                   </div>
                 ))}

@@ -1,10 +1,16 @@
 // Loads .env before anything reads process.env.
 import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
-import { createServer, type IncomingHttpHeaders } from 'http';
+import { config as dotenvConfig } from 'dotenv';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+
+// Discover .env from web/.env or workspace roots if not in current cwd
+[join(process.cwd(), '.env'), join(process.cwd(), 'web/.env'), join(process.cwd(), '../.env')].forEach((envPath) => {
+  if (existsSync(envPath)) dotenvConfig({ path: envPath, override: false });
+});
+import express from 'express';
+import cors from 'cors';
+import { createServer, type IncomingHttpHeaders } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { BlazeResolverPipeline } from './core/pipeline/index.js';
 import { loadExample } from './examples/index.js';
@@ -27,6 +33,7 @@ import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { DEMO_SAVED_REPLIES, SupportStore } from './support/index.js';
+import { fetchTimelineEvents } from './timeline/index.js';
 
 const app = express();
 app.set('trust proxy', 1); // behind a host's proxy, req.ip is the real client
@@ -1162,7 +1169,43 @@ app.post('/api/support/tickets/:id/ws-token', (req, res) => {
   return res.json({ token: `ws_tok_${Date.now()}` });
 });
 
-// 10. Health check
+// ── BlazeTimeline Endpoints (Live Git Commits & Repository Events) ──
+
+const handleTimelineEvents = async (req: express.Request, res: express.Response) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+    const source = req.query.source ? String(req.query.source) : undefined;
+    let events = await fetchTimelineEvents(limit, false, false);
+    if (source && source !== 'all') {
+      events = events.filter((e) => e.source === source);
+    }
+    return res.json({ success: true, data: events });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+};
+app.get('/api/timeline/events', handleTimelineEvents);
+app.get('/api/pulse/events', handleTimelineEvents);
+app.get('/api/admin/timeline/events', handleTimelineEvents);
+app.get('/api/admin/pulse/events', handleTimelineEvents);
+
+const handleSyncTimelineCommits = async (req: express.Request, res: express.Response) => {
+  try {
+    const full = req.query.full === 'true' || req.query.full === '1';
+    const limit = full ? 100 : 50;
+    const commits = await fetchTimelineEvents(limit, true, full);
+    broadcastLiveEvent('timeline_commits_synced', { count: commits.length, timestamp: Date.now() }, 'everyone');
+    return res.json({ success: true, count: commits.length, data: commits });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+};
+app.post('/api/timeline/sync-github-commits', handleSyncTimelineCommits);
+app.post('/api/pulse/sync-github-commits', handleSyncTimelineCommits);
+app.post('/api/admin/timeline/sync-github-commits', handleSyncTimelineCommits);
+app.post('/api/admin/pulse/sync-github-commits', handleSyncTimelineCommits);
+
+// 12. Health check
 app.get('/api/health', (req, res) => {
   return res.json({
     status: 'healthy',

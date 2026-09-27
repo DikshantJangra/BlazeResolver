@@ -6,7 +6,7 @@ import { CustomerContextPanel } from './CustomerContextPanel.js';
 import { CannedResponsesDrawer } from './CannedResponsesDrawer.js';
 import { CloseTicketModal } from './CloseTicketModal.js';
 import { EscalateTicketModal } from './EscalateTicketModal.js';
-import { CustomerSupportPortal } from './CustomerSupportPortal.js';
+import { BlazeTimeline } from '../timeline/BlazeTimeline.js';
 import type { SupportTicket, SupportMessage, CustomerContext, SupportCannedResponse, TicketRating } from './types.js';
 
 export interface AdminSupportDeskProps {
@@ -14,7 +14,7 @@ export interface AdminSupportDeskProps {
   wsUrl?: string;
   adminToken?: string;
   className?: string;
-  initialViewMode?: 'admin' | 'customer';
+  initialViewMode?: 'admin' | 'timeline';
 }
 
 export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
@@ -25,7 +25,25 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
   initialViewMode = 'admin'
 }) => {
   const baseUrl = apiBaseUrl ? apiBaseUrl.replace(/\/$/, '') : '';
-  const [viewMode, setViewMode] = useState<'admin' | 'customer'>(initialViewMode);
+  const [viewMode, setViewMode] = useState<'admin' | 'timeline'>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlView = params.get('view') || params.get('tab') || params.get('mode');
+      if (urlView === 'timeline') return 'timeline';
+      if (urlView === 'admin') return 'admin';
+    }
+    return initialViewMode;
+  });
+
+  const handleModeChange = (mode: 'admin' | 'timeline') => {
+    setViewMode(mode);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', mode);
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
+
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
@@ -542,8 +560,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
     <div
       className={`blaze-support-desk w-full flex-1 flex flex-col min-h-0 overflow-hidden bg-white text-gray-900 rounded-none border-0 shadow-none ${className}`}
       style={{
-        minHeight: '100vh',
-        height: '100%',
+        height: '100vh',
+        maxHeight: '100vh',
         color: '#111827',
         backgroundColor: '#ffffff',
         fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
@@ -552,7 +570,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
       {/* Top Header */}
       <SupportHeader
         mode={viewMode}
-        onModeChange={setViewMode}
+        onModeChange={handleModeChange}
         onOpenCannedModal={() => setShowCannedModal(true)}
       />
 
@@ -606,7 +624,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
           )}
         </div>
       ) : (
-        <CustomerSupportPortal />
+        <BlazeTimeline apiBaseUrl={baseUrl} />
       )}
 
       {/* Canned Responses Library Drawer */}

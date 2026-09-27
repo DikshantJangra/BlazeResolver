@@ -22,6 +22,7 @@ export interface BlazzySupportWidgetProps {
   orderId?: string;
   title?: string;
   subtitle?: string;
+  logoSrc?: string;
 }
 
 export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
@@ -31,7 +32,8 @@ export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
   customerEmail = '',
   orderId,
   title = 'BlazeResolver',
-  subtitle = 'Autonomous AI resolution & support'
+  subtitle = 'Autonomous AI resolution & support',
+  logoSrc = '/blazyy.svg'
 }) => {
   const baseUrl = apiBaseUrl.replace(/\/$/, '');
   const [isOpen, setIsOpen] = useState(false);
@@ -225,93 +227,193 @@ export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
   const isLeft = defaultPosition === 'bottom-left';
 
   return (
-    <div className="blazzy-widget-root fixed z-50 font-sans" style={{ [isLeft ? 'left' : 'right']: '24px', bottom: '24px' }}>
+    <div
+      className="blazzy-widget-root fixed z-50 font-sans"
+      style={{
+        [isLeft ? 'left' : 'right']: '24px',
+        bottom: '24px',
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      }}
+    >
       {isOpen && (
         <section
           aria-label="BlazeResolver support"
-          className="blazzy-dialog mb-4 w-[380px] max-w-[calc(100vw-32px)] h-[560px] max-h-[calc(100vh-120px)] bg-white rounded-3xl shadow-2xl border border-gray-200/80 flex flex-col overflow-hidden text-gray-900"
+          style={{
+            backgroundColor: '#ffffff',
+            color: '#111827',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            borderColor: '#E5E7EB',
+          }}
+          className="blazzy-dialog mb-4 w-[380px] max-w-[calc(100vw-32px)] h-[560px] max-h-[calc(100vh-120px)] rounded-3xl border flex flex-col overflow-hidden text-gray-900"
         >
-          <header className="bg-gradient-to-r from-orange-500 via-[#FF7A00] to-amber-500 p-4 text-white flex items-center justify-between shrink-0">
+          <header
+            style={{
+              background: 'linear-gradient(135deg, #ff7a00 0%, #ea580c 100%)',
+              color: '#ffffff',
+            }}
+            className="p-4 flex items-center justify-between shrink-0"
+          >
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-white p-1 flex items-center justify-center shrink-0">
-                <BlazzyIcon className="w-8 h-8" />
+              <div
+                style={{ backgroundColor: '#ffffff' }}
+                className="w-10 h-10 rounded-2xl p-1 flex items-center justify-center shrink-0 shadow-sm"
+              >
+                <BlazzyIcon src={logoSrc} className="w-8 h-8" />
               </div>
               <div className="min-w-0">
-                <h3 className="font-bold text-base leading-tight truncate">{title}</h3>
-                <p className="text-xs text-white/90 mt-0.5 truncate">{subtitle}</p>
+                <h3 style={{ color: '#ffffff' }} className="font-bold text-base leading-tight truncate">{title}</h3>
+                <p style={{ color: 'rgba(255, 255, 255, 0.9)' }} className="text-xs mt-0.5 truncate">{subtitle}</p>
               </div>
             </div>
-            <button type="button" onClick={() => setIsOpen(false)} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center" aria-label="Close support">
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)', color: '#ffffff' }}
+              className="w-8 h-8 rounded-full hover:opacity-80 flex items-center justify-center transition-opacity cursor-pointer"
+              aria-label="Close support"
+            >
               <RiCloseLine className="w-5 h-5" />
             </button>
           </header>
 
           {!identityReady ? (
-            <form onSubmit={handleStart} className="flex-1 flex flex-col justify-center p-6 gap-4 bg-gray-50/70">
+            <form onSubmit={handleStart} style={{ backgroundColor: '#F9FAFB', color: '#111827' }} className="flex-1 flex flex-col justify-center p-6 gap-4">
               <div className="text-center">
-                <BlazzyIcon className="w-11 h-11 mx-auto mb-2" />
-                <h4 className="font-bold text-sm text-gray-900">Start a support chat</h4>
-                <p className="text-xs text-gray-500 mt-1">Just your name and email. Tell us what you need in chat.</p>
+                <BlazzyIcon src={logoSrc} className="w-12 h-12 mx-auto mb-2" />
+                <h4 style={{ color: '#111827' }} className="font-bold text-base">Start a support chat</h4>
+                <p style={{ color: '#6B7280' }} className="text-xs mt-1">Just your name and email. Tell us what you need in chat.</p>
               </div>
-              <label className="text-xs font-semibold text-gray-700">
+              <label style={{ color: '#374151' }} className="text-xs font-semibold">
                 Name
-                <input required autoComplete="name" value={userName} onChange={(e) => setUserName(e.target.value)} className="mt-1 w-full bg-white border border-gray-200 focus:border-orange-400 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <input
+                  required
+                  autoComplete="name"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  style={{ backgroundColor: '#ffffff', color: '#111827', borderColor: '#D1D5DB' }}
+                  className="mt-1 w-full border focus:border-orange-500 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
+                  placeholder="Your name"
+                />
               </label>
-              <label className="text-xs font-semibold text-gray-700">
+              <label style={{ color: '#374151' }} className="text-xs font-semibold">
                 Email
-                <input required type="email" autoComplete="email" value={userEmail} onChange={(e) => setUserEmail(e.target.value)} className="mt-1 w-full bg-white border border-gray-200 focus:border-orange-400 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                <input
+                  required
+                  type="email"
+                  autoComplete="email"
+                  value={userEmail}
+                  onChange={(e) => setUserEmail(e.target.value)}
+                  style={{ backgroundColor: '#ffffff', color: '#111827', borderColor: '#D1D5DB' }}
+                  className="mt-1 w-full border focus:border-orange-500 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
+                  placeholder="your.email@example.com"
+                />
               </label>
-              {statusMsg && <p role="alert" className="text-xs text-red-600">{statusMsg}</p>}
-              <button type="submit" className="w-full py-2.5 rounded-xl bg-[#FF7A00] hover:bg-[#E66E00] text-white text-xs font-bold">Continue to chat</button>
+              {statusMsg && <p role="alert" style={{ color: '#DC2626' }} className="text-xs">{statusMsg}</p>}
+              <button
+                type="submit"
+                style={{ backgroundColor: '#FF7A00', color: '#ffffff' }}
+                className="w-full py-2.5 rounded-xl hover:opacity-95 text-xs font-bold transition-opacity cursor-pointer shadow-sm"
+              >
+                Continue to chat
+              </button>
             </form>
           ) : (
             <>
-              <nav className="bg-orange-50/60 p-1.5 flex gap-1 border-b border-orange-100/60 shrink-0" aria-label="Support views">
-                <button type="button" onClick={() => setActiveTab('chat')} className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${activeTab === 'chat' ? 'bg-white text-orange-950 shadow-sm border border-orange-200/60' : 'text-gray-600 hover:text-gray-900'}`}>
-                  <RiSparklingLine className="w-3.5 h-3.5 text-[#FF7A00]" /> Chat
+              <nav style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }} className="p-1.5 flex gap-1 border-b shrink-0" aria-label="Support views">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('chat')}
+                  style={
+                    activeTab === 'chat'
+                      ? { backgroundColor: '#ffffff', color: '#431407', borderColor: '#FDBA74', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }
+                      : { color: '#4B5563', borderColor: 'transparent' }
+                  }
+                  className="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border cursor-pointer"
+                >
+                  <RiSparklingLine style={{ color: '#FF7A00', width: 14, height: 14 }} /> Chat
                 </button>
-                <button type="button" onClick={() => setActiveTab('requests')} className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${activeTab === 'requests' ? 'bg-white text-orange-950 shadow-sm border border-orange-200/60' : 'text-gray-600 hover:text-gray-900'}`}>
-                  <RiQuestionAnswerLine className="w-3.5 h-3.5 text-[#FF7A00]" /> My requests
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('requests')}
+                  style={
+                    activeTab === 'requests'
+                      ? { backgroundColor: '#ffffff', color: '#431407', borderColor: '#FDBA74', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }
+                      : { color: '#4B5563', borderColor: 'transparent' }
+                  }
+                  className="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border cursor-pointer"
+                >
+                  <RiQuestionAnswerLine style={{ color: '#FF7A00', width: 14, height: 14 }} /> My requests
                 </button>
               </nav>
 
               {activeTab === 'chat' ? (
-                <div className="flex-1 min-h-0 flex flex-col bg-gray-50/50">
-                  <div className="p-2.5 bg-white border-b border-gray-100 flex items-center justify-between gap-2">
+                <div style={{ backgroundColor: '#F9FAFB' }} className="flex-1 min-h-0 flex flex-col">
+                  <div style={{ backgroundColor: '#ffffff', borderColor: '#F3F4F6' }} className="p-2.5 border-b flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-gray-900 truncate">{activeTicket?.subject || 'New conversation'}</p>
-                      <p className="text-[10px] text-gray-500">{activeTicket ? `${activeTicket.ticketNumber} · ${activeTicket.status}` : 'Your first message opens a request'}</p>
+                      <p style={{ color: '#111827' }} className="text-xs font-semibold truncate">{activeTicket?.subject || 'New conversation'}</p>
+                      <p style={{ color: '#6B7280' }} className="text-[10px]">{activeTicket ? `${activeTicket.ticketNumber} · ${activeTicket.status}` : 'Your first message opens a request'}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {activeTicket && !activeTicket.isHumanTakeover && activeTicket.status !== 'closed' && (
-                        <button type="button" onClick={handleHumanRequest} disabled={isSending} className="px-2 py-1.5 rounded-lg border border-gray-200 text-gray-700 text-[10px] font-semibold hover:bg-gray-50 disabled:opacity-50" title="Request a human specialist">
-                          <RiUserVoiceLine className="w-3.5 h-3.5 inline mr-1" />Human
+                        <button
+                          type="button"
+                          onClick={handleHumanRequest}
+                          disabled={isSending}
+                          style={{ borderColor: '#E5E7EB', color: '#374151', backgroundColor: '#ffffff' }}
+                          className="px-2 py-1.5 rounded-lg border text-[10px] font-semibold hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+                          title="Request a human specialist"
+                        >
+                          <RiUserVoiceLine className="w-3.5 h-3.5 inline mr-1 text-orange-600" />Human
                         </button>
                       )}
-                      {activeTicket && <button type="button" onClick={handleNewChat} className="px-2 py-1.5 rounded-lg bg-orange-50 text-orange-800 text-[10px] font-semibold hover:bg-orange-100">New chat</button>}
+                      {activeTicket && (
+                        <button
+                          type="button"
+                          onClick={handleNewChat}
+                          style={{ backgroundColor: '#FFF7ED', color: '#9A3412' }}
+                          className="px-2 py-1.5 rounded-lg text-[10px] font-semibold hover:opacity-90 cursor-pointer"
+                        >
+                          New chat
+                        </button>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
                     {!messages.length && (
                       <div className="flex gap-2.5 max-w-[90%]">
-                        <div className="w-7 h-7 rounded-xl bg-orange-100 flex items-center justify-center shrink-0 border border-orange-200"><BlazzyIcon className="w-5 h-5" /></div>
-                        <div className="bg-white p-3 rounded-2xl rounded-tl-sm border border-gray-200 text-xs text-gray-700">
-                          <p className="font-semibold text-gray-900">Hi {userName || 'there'}!</p>
-                          <p className="mt-1">Ask a question or tell us what happened. You can track the request and replies here.</p>
+                        <div style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }} className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 border">
+                          <BlazzyIcon src={logoSrc} className="w-5 h-5" />
+                        </div>
+                        <div style={{ backgroundColor: '#ffffff', borderColor: '#E5E7EB', color: '#374151' }} className="p-3 rounded-2xl rounded-tl-sm border text-xs shadow-xs">
+                          <p style={{ color: '#111827' }} className="font-semibold">Hi {userName || 'there'}!</p>
+                          <p className="mt-1 leading-relaxed">Ask a question or tell us what happened. You can track the request and replies here.</p>
                         </div>
                       </div>
                     )}
                     {messages.filter((message) => !message.internalNote).map((message) => {
                       const isUser = message.role === 'user' || message.senderType === 'user';
                       const isSystem = message.role === 'system' || message.senderType === 'system';
-                      if (isSystem) return <p key={message.id} className="text-center text-[10px] text-gray-500">{message.body || message.content}</p>;
+                      if (isSystem) return <p key={message.id} style={{ color: '#6B7280' }} className="text-center text-[10px]">{message.body || message.content}</p>;
                       return (
                         <div key={message.id} className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
-                          {!isUser && <div className="w-7 h-7 rounded-xl bg-orange-100 flex items-center justify-center shrink-0 border border-orange-200"><BlazzyIcon className="w-5 h-5" /></div>}
-                          <div className={`max-w-[85%] p-3 rounded-2xl text-xs shadow-sm ${isUser ? 'bg-[#FF7A00] text-white rounded-tr-sm' : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'}`}>
+                          {!isUser && (
+                            <div style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }} className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 border">
+                              <BlazzyIcon src={logoSrc} className="w-5 h-5" />
+                            </div>
+                          )}
+                          <div
+                            style={
+                              isUser
+                                ? { backgroundColor: '#FF7A00', color: '#ffffff' }
+                                : { backgroundColor: '#ffffff', color: '#1F2937', borderColor: '#E5E7EB' }
+                            }
+                            className={`max-w-[85%] p-3 rounded-2xl text-xs shadow-xs ${isUser ? 'rounded-tr-sm' : 'border rounded-tl-sm'}`}
+                          >
                             <p className="whitespace-pre-wrap leading-relaxed">{message.body || message.content}</p>
-                            <span className={`block text-[9.5px] mt-1 text-right ${isUser ? 'text-white/75' : 'text-gray-400'}`}>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span style={{ color: isUser ? 'rgba(255, 255, 255, 0.75)' : '#9CA3AF' }} className="block text-[9.5px] mt-1 text-right">
+                              {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </div>
                         </div>
                       );
@@ -320,47 +422,103 @@ export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
                   </div>
 
                   {activeTicket && (
-                    <div className="px-3 py-2 border-t border-amber-100 bg-amber-50/70">
+                    <div style={{ backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }} className="px-3 py-2 border-t">
                       {ratingSubmitted ? (
-                        <p className="text-[10px] text-emerald-800 font-semibold flex items-center gap-1"><RiCheckDoubleLine className="w-3.5 h-3.5" />Thanks for rating your support.</p>
+                        <p style={{ color: '#065F46' }} className="text-[10px] font-semibold flex items-center gap-1">
+                          <RiCheckDoubleLine className="w-3.5 h-3.5" />Thanks for rating your support.
+                        </p>
                       ) : (
                         <div className="flex items-center gap-2">
                           <div className="flex items-center" aria-label={`Rating ${userStars} out of 5`}>
-                            {[1, 2, 3, 4, 5].map((star) => <button key={star} type="button" onClick={() => setUserStars(star)} aria-label={`${star} stars`} className="p-0.5"><RiStarFill className={`w-3.5 h-3.5 ${star <= userStars ? 'text-amber-500' : 'text-gray-300'}`} /></button>)}
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <button key={star} type="button" onClick={() => setUserStars(star)} aria-label={`${star} stars`} className="p-0.5 cursor-pointer">
+                                <RiStarFill className={`w-3.5 h-3.5 ${star <= userStars ? 'text-amber-500' : 'text-gray-300'}`} />
+                              </button>
+                            ))}
                           </div>
-                          <input value={userComment} onChange={(event) => setUserComment(event.target.value)} placeholder="Optional feedback" className="min-w-0 flex-1 px-2 py-1.5 rounded-lg border border-amber-200 bg-white text-[10px] outline-none" />
-                          <button type="button" onClick={handleSubmitRating} disabled={isSending} className="px-2 py-1.5 rounded-lg bg-amber-600 text-white text-[10px] font-bold disabled:opacity-50">Rate</button>
+                          <input
+                            value={userComment}
+                            onChange={(event) => setUserComment(event.target.value)}
+                            placeholder="Optional feedback"
+                            style={{ backgroundColor: '#ffffff', color: '#111827', borderColor: '#FDE68A' }}
+                            className="min-w-0 flex-1 px-2 py-1.5 rounded-lg border text-[10px] outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSubmitRating}
+                            disabled={isSending}
+                            style={{ backgroundColor: '#D97706', color: '#ffffff' }}
+                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold disabled:opacity-50 cursor-pointer shadow-xs"
+                          >
+                            Rate
+                          </button>
                         </div>
                       )}
                     </div>
                   )}
 
-                  <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-gray-200">
-                    {statusMsg && <p role="alert" className="text-xs text-red-600 mb-2">{statusMsg}</p>}
+                  <form onSubmit={handleSendMessage} style={{ backgroundColor: '#ffffff', borderColor: '#E5E7EB' }} className="p-3 border-t">
+                    {statusMsg && <p role="alert" style={{ color: '#DC2626' }} className="text-xs mb-2">{statusMsg}</p>}
                     {activeTicket?.status === 'closed' ? (
-                      <p className="text-xs text-gray-500 text-center">This request is closed. Start a new chat to contact support.</p>
+                      <p style={{ color: '#6B7280' }} className="text-xs text-center">This request is closed. Start a new chat to contact support.</p>
                     ) : (
                       <div className="flex gap-2">
-                        <input type="text" value={inputMessage} onChange={(event) => setInputMessage(event.target.value)} placeholder="Type your message..." aria-label="Message" className="min-w-0 flex-1 bg-gray-100 border border-transparent focus:border-orange-400 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs outline-none" />
-                        <button type="submit" disabled={!inputMessage.trim() || isSending} aria-label="Send message" className="w-10 h-10 rounded-xl bg-[#FF7A00] hover:bg-[#E66E00] disabled:opacity-50 text-white flex items-center justify-center shrink-0"><RiSendPlaneFill className="w-4 h-4" /></button>
+                        <input
+                          type="text"
+                          value={inputMessage}
+                          onChange={(event) => setInputMessage(event.target.value)}
+                          placeholder="Type your message..."
+                          aria-label="Message"
+                          style={{ backgroundColor: '#F3F4F6', color: '#111827', borderColor: '#E5E7EB' }}
+                          className="min-w-0 flex-1 rounded-xl px-3.5 py-2.5 text-xs outline-none focus:bg-white focus:border-orange-500 border transition-colors"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!inputMessage.trim() || isSending}
+                          aria-label="Send message"
+                          style={{ backgroundColor: '#FF7A00', color: '#ffffff' }}
+                          className="w-10 h-10 rounded-xl hover:opacity-95 disabled:opacity-50 flex items-center justify-center shrink-0 cursor-pointer shadow-xs"
+                        >
+                          <RiSendPlaneFill className="w-4 h-4" />
+                        </button>
                       </div>
                     )}
                   </form>
                 </div>
               ) : (
-                <div className="flex-1 min-h-0 overflow-y-auto p-3 bg-gray-50/50">
-                  <button type="button" onClick={handleNewChat} className="w-full mb-3 p-2.5 rounded-xl bg-[#FF7A00] text-white text-xs font-bold hover:bg-[#E66E00]">Start a new chat</button>
+                <div style={{ backgroundColor: '#F9FAFB' }} className="flex-1 min-h-0 overflow-y-auto p-3">
+                  <button
+                    type="button"
+                    onClick={handleNewChat}
+                    style={{ backgroundColor: '#FF7A00', color: '#ffffff' }}
+                    className="w-full mb-3 p-2.5 rounded-xl text-xs font-bold hover:opacity-95 cursor-pointer shadow-xs"
+                  >
+                    Start a new chat
+                  </button>
                   {tickets.length ? (
                     <div className="space-y-2">
                       {tickets.map((ticket) => (
-                        <button key={ticket.id} type="button" onClick={() => { setActiveTicket(ticket); setIsNewChat(false); setActiveTab('chat'); }} className={`w-full text-left p-3 rounded-xl border ${activeTicket?.id === ticket.id ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200 hover:border-orange-200'}`}>
-                          <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-mono text-gray-500">{ticket.ticketNumber}</span><span className="text-[10px] capitalize text-gray-500">{ticket.status}</span></div>
-                          <p className="mt-1 text-xs font-semibold text-gray-900 line-clamp-2">{ticket.subject}</p>
-                          <p className="mt-1 text-[10px] text-gray-400">{new Date(ticket.lastMessageAt || ticket.createdAt).toLocaleDateString()}</p>
+                        <button
+                          key={ticket.id}
+                          type="button"
+                          onClick={() => { setActiveTicket(ticket); setIsNewChat(false); setActiveTab('chat'); }}
+                          style={
+                            activeTicket?.id === ticket.id
+                              ? { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' }
+                              : { backgroundColor: '#ffffff', borderColor: '#E5E7EB' }
+                          }
+                          className="w-full text-left p-3 rounded-xl border hover:border-orange-300 transition-colors cursor-pointer shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span style={{ color: '#6B7280' }} className="text-[10px] font-mono">{ticket.ticketNumber}</span>
+                            <span style={{ color: ticket.status === 'open' ? '#047857' : '#6B7280' }} className="text-[10px] capitalize font-medium">{ticket.status}</span>
+                          </div>
+                          <p style={{ color: '#111827' }} className="mt-1 text-xs font-semibold line-clamp-2">{ticket.subject}</p>
+                          <p style={{ color: '#9CA3AF' }} className="mt-1 text-[10px]">{new Date(ticket.lastMessageAt || ticket.createdAt).toLocaleDateString()}</p>
                         </button>
                       ))}
                     </div>
-                  ) : <div className="py-12 text-center text-xs text-gray-500">No support requests yet.</div>}
+                  ) : <div style={{ color: '#6B7280' }} className="py-12 text-center text-xs">No support requests yet.</div>}
                 </div>
               )}
             </>
@@ -368,8 +526,18 @@ export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
         </section>
       )}
 
-      <button type="button" onClick={() => setIsOpen((open) => !open)} className="w-14 h-14 rounded-full bg-[#FFF7ED] hover:bg-orange-100 border-2 border-[#FF7A00] shadow-xl flex items-center justify-center transition-transform hover:scale-105" aria-label={isOpen ? 'Close Blazzy Support' : 'Open Blazzy Support'}>
-        {isOpen ? <RiCloseLine className="w-7 h-7 text-[#FF7A00]" /> : <BlazzyIcon className="w-9 h-9" />}
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        style={{
+          backgroundColor: '#ffffff',
+          borderColor: '#FF7A00',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+        }}
+        className="w-14 h-14 rounded-full border-2 flex items-center justify-center transition-transform hover:scale-105 cursor-pointer text-[#FF7A00]"
+        aria-label={isOpen ? 'Close Blazzy Support' : 'Open Blazzy Support'}
+      >
+        {isOpen ? <RiCloseLine style={{ width: 28, height: 28, color: '#FF7A00' }} /> : <BlazzyIcon src={logoSrc} className="w-9 h-9" />}
       </button>
     </div>
   );

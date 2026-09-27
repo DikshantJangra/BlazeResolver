@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import "../globals.css";
-import Script from 'next/script'; // blazeresolver:managed
+import "blazeresolver/styles.css";
 import { THEME_SCRIPT } from "@/components/theme";
-import { asset, widgetEndpoint } from "@/lib/site";
+import { asset } from "@/lib/site";
+import FloatingSupportWidget from "@/components/FloatingSupportWidget";
 
 export const metadata: Metadata = {
   title: "BlazeResolver: customer bug reports in, reviewed pull requests out",
@@ -37,7 +38,7 @@ export default function RootLayout({
       </head>
       <body className="bg-page text-body antialiased selection:bg-[#FF6B00] selection:text-white">
         {children}
-        {widgetEndpoint && <Script src={asset("/widget.js")} data-endpoint={widgetEndpoint} strategy="afterInteractive" />} {/* blazeresolver:managed */}
+        <FloatingSupportWidget />
       </body>
     </html>
   );

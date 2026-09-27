@@ -1,3 +1,4 @@
+import path from "path";
 import type { NextConfig } from "next";
 import { createMDX } from "fumadocs-mdx/next";
 
@@ -7,7 +8,7 @@ const basePath = pages ? (process.env.PAGES_BASE_PATH ?? "") : "";
 
 const nextConfig: NextConfig = {
   turbopack: {
-    root: __dirname,
+    root: path.resolve(__dirname, ".."),
   },
   ...(pages && {
     output: "export",

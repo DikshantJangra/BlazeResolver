@@ -1,5 +1,6 @@
 export { AdminSupportDesk, type AdminSupportDeskProps } from './components/support/AdminSupportDesk.js';
 export { CustomerSupportPortal, type CustomerSupportPortalProps } from './components/support/CustomerSupportPortal.js';
+export { BlazeTimeline, ActivityTimeline, type BlazeTimelineProps } from './components/timeline/BlazeTimeline.js';
 export { TicketChatThread } from './components/support/TicketChatThread.js';
 export { TicketFeed } from './components/support/TicketFeed.js';
 export { CustomerContextPanel } from './components/support/CustomerContextPanel.js';
@@ -9,6 +10,7 @@ export { EscalateTicketModal } from './components/support/EscalateTicketModal.js
 export { SupportHeader } from './components/support/SupportHeader.js';
 export { BlazzyIcon, BlazzyBadge, BlazzyIcon as BlazzyMascot } from './components/support/BlazzyMascot.js';
 export { BlazzySupportWidget, type BlazzySupportWidgetProps } from './components/support/BlazzySupportWidget.js';
+export type { TimelineEvent, DevEvent } from './components/timeline/types.js';
 export type {
   SupportTicket,
   SupportMessage,
@@ -16,3 +18,4 @@ export type {
   SupportCannedResponse,
   TicketRating
 } from './components/support/types.js';
+

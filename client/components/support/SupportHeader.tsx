@@ -1,10 +1,10 @@
 import React from 'react';
-import { RiBookmarkLine, RiAddLine, RiUserSmileLine, RiShieldUserLine } from 'react-icons/ri';
+import { RiBookmarkLine, RiAddLine, RiHistoryLine, RiShieldUserLine } from 'react-icons/ri';
 import { BlazzyIcon, BlazzyBadge } from './BlazzyMascot.js';
 
 interface SupportHeaderProps {
-  mode: 'admin' | 'customer';
-  onModeChange: (mode: 'admin' | 'customer') => void;
+  mode: 'admin' | 'timeline';
+  onModeChange: (mode: 'admin' | 'timeline') => void;
   onOpenCannedModal: () => void;
   onOpenNewTicketModal?: () => void;
 }
@@ -16,17 +16,20 @@ export const SupportHeader: React.FC<SupportHeaderProps> = ({
   onOpenNewTicketModal
 }) => {
   return (
-    <div className="bg-white border-b border-gray-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
+    <div
+      style={{ backgroundColor: '#ffffff', borderColor: '#E5E7EB', color: '#111827' }}
+      className="border-b px-5 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0"
+    >
       <div>
         <div className="flex items-center gap-2.5">
           <BlazzyIcon className="w-8 h-8 rounded-lg object-contain border border-orange-200 bg-orange-50 p-1 shadow-2xs" />
           <div>
-            <h1 className="text-lg font-bold text-gray-900 tracking-tight flex items-center gap-2 m-0 leading-tight">
-              <span>BlazeResolver Customer Support</span>
+            <h1 style={{ color: '#111827' }} className="text-lg font-bold tracking-tight flex items-center gap-2 m-0 leading-tight">
+              <span>BlazeResolver Customer Resolution Desk</span>
               <BlazzyBadge text="AI Triage Active" />
             </h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Autonomous AI Triage, policy auto-resolution, live human handoff & diagnostic audit desk.
+            <p style={{ color: '#6B7280' }} className="text-xs mt-0.5">
+              Autonomous AI Triage, policy auto-resolution, live git timeline & self-healing audit desk.
             </p>
           </div>
         </div>
@@ -34,52 +37,46 @@ export const SupportHeader: React.FC<SupportHeaderProps> = ({
 
       <div className="flex items-center gap-2">
         {/* Mode Switcher */}
-        <div className="bg-gray-100 p-1 rounded-xl flex items-center gap-1 border border-gray-200 text-xs">
+        <div style={{ backgroundColor: '#F3F4F6', borderColor: '#E5E7EB' }} className="p-1 rounded-xl flex items-center gap-1 border text-xs">
           <button
             type="button"
             onClick={() => onModeChange('admin')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
+            style={
               mode === 'admin'
-                ? 'bg-white text-gray-900 shadow-xs border border-gray-200'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+                ? { backgroundColor: '#ffffff', color: '#111827', borderColor: '#E5E7EB', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }
+                : { color: '#4B5563', borderColor: 'transparent' }
+            }
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all border cursor-pointer"
           >
             <RiShieldUserLine className="w-4 h-4 text-orange-600" />
             <span>Admin Helpdesk</span>
           </button>
           <button
             type="button"
-            onClick={() => onModeChange('customer')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
-              mode === 'customer'
-                ? 'bg-white text-gray-900 shadow-xs border border-gray-200'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            onClick={() => onModeChange('timeline')}
+            style={
+              mode === 'timeline'
+                ? { backgroundColor: '#ffffff', color: '#111827', borderColor: '#E5E7EB', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }
+                : { color: '#4B5563', borderColor: 'transparent' }
+            }
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all border cursor-pointer"
           >
-            <RiUserSmileLine className="w-4 h-4 text-blue-600" />
-            <span>User Support Portal</span>
+            <RiHistoryLine className="w-4 h-4 text-purple-600" />
+            <span>BlazeTimeline</span>
           </button>
         </div>
 
-        {mode === 'admin' ? (
+        {mode === 'admin' && (
           <button
             type="button"
             onClick={onOpenCannedModal}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors shadow-2xs"
+            style={{ backgroundColor: '#ffffff', color: '#374151', borderColor: '#E5E7EB' }}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold border hover:bg-gray-50 transition-colors shadow-2xs cursor-pointer"
           >
             <RiBookmarkLine className="w-4 h-4 text-gray-500" />
             <span>Canned Responses</span>
           </button>
-        ) : onOpenNewTicketModal ? (
-          <button
-            type="button"
-            onClick={onOpenNewTicketModal}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-[#FF7A00] hover:bg-[#E66E00] transition-colors shadow-2xs"
-          >
-            <RiAddLine className="w-4 h-4" />
-            <span>Submit New Ticket</span>
-          </button>
-        ) : null}
+        )}
       </div>
     </div>
   );
