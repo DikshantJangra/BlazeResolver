@@ -131,7 +131,7 @@ export default function HeroSection() {
           <h1 className="hero-main-headline font-ds-display text-fg max-w-[980px]">
             It doesn&apos;t just chat.{" "}
             <span className="bg-gradient-to-r from-brand via-brand-soft to-brand-light bg-clip-text text-transparent">
-              It resloves.
+              It resolves.
             </span>
           </h1>
 

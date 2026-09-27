@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { asset } from "@/lib/site";
 import {
   FaComments,
   FaGithub,
@@ -84,7 +85,7 @@ export default function ArchitectureFlow() {
     >
       <div className="max-w-[880px] mx-auto flex flex-col items-center gap-6 text-center">
         <img
-          src="/blazyy.png"
+          src={asset("/blazyy.png")}
           alt="BlazeResolver"
           width={160}
           height={160}
