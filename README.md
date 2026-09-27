@@ -142,6 +142,8 @@ No server to host. Everything runs in your repo and on GitHub.
 
 ```bash
 npx blazeresolver init      # set it up
+npx blazeresolver app       # optional: a GitHub App for the fix job (short-lived, one-repo tokens; PRs trigger your CI)
+npx blazeresolver harden    # optional: branch protection, CODEOWNERS, safe Actions defaults, secret scanning
 npx blazeresolver remove    # take it all back out
 ```
 
@@ -176,6 +178,24 @@ API_KEYS=sk-ant-...,gsk_...,nvapi-...     # Anthropic, Groq and NVIDIA NIM, in o
 With several keys, the first provider in priority order answers and the others take over automatically when it fails (outage, rate limit, bad key); a provider that just failed sits out for a minute. Several keys for one provider rotate round-robin. `BLAZE_MODEL` goes only to providers that serve that model (a Claude model name never reaches Groq), and the provider that owns it goes first. `BLAZE_PROVIDER` pins a single provider.
 
 See what was recognized, in failover order, keys masked: `npx blazeresolver providers`. The server prints the same at startup. Without any key, triage falls back to keyword rules and the fix engine stays off.
+
+### How the fix runs safely
+
+**The AI proposes, the harness executes.** The model is never given a shell, a token or a clone. It returns JSON (a root cause, then file edits); BlazeResolver's own code applies the edits, runs your tests, commits, pushes and opens the PR. A crafted customer report can steer what the model *writes*, never what it is *allowed to do*.
+
+| Layer | What it does |
+| :--- | :--- |
+| Your own runner | The fix job runs on a fresh GitHub-hosted VM, destroyed afterwards. Your keys live in your repo's secrets; nobody else holds them. |
+| Offline tests | Dependencies install from your lockfile (with network), then tests and build run in a container with `--network none`, no capabilities, no privilege escalation, a non-root user, and none of the runner's environment. AI-written test code cannot phone home. Needs Docker (GitHub's runners have it); fails closed without it. Opt out with `--no-sandbox`. |
+| Edit guards | A fix is refused if it touches CI config, secrets, lockfiles, `auth`/`payments`/`billing`/`migrations`, install config (`.npmrc`...) or test-runner config; changes `dependencies`, `scripts` or any install-time field of `package.json`; removes assertions from an existing test; or exceeds 400 lines. It goes to a human instead. |
+| Secret scan | Every added line is checked for credential formats and for the exact value of this job's own keys, before the tests and again on the final diff. Nothing is pushed if one is found. |
+| Least privilege | Per-job workflow permissions, read-only by default. With `npx blazeresolver app`, the built-in token can only read and a repo-scoped App token that lives minutes does the writing. Third-party actions are pinned to full commit SHAs. |
+| Human in the loop | The bot opens PRs and never merges. `npx blazeresolver harden` makes GitHub enforce that: PRs need an approval and a code owner's review, no force pushes, no branch deletion. |
+| Audit trail | Every PR gets a comment written by the harness: engine version, providers, attempts, files changed, tests before and after, how isolated the tests were, which checks passed. |
+
+`--pin <version>` locks the workflow and widget to one release instead of `latest`: you trade automatic updates for a supply chain you control.
+
+What no sandbox can catch, and stays yours: a fix that is wrong but passes weak tests. Review the diff, and write tests worth passing.
 
 Updates are automatic: the widget loads from a CDN and the workflow runs `blazeresolver@latest`.
 

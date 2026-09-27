@@ -88,8 +88,12 @@ describe('init finds frontend and backend by what they are, not what they are ca
     assert.equal(r.manifest.dependency?.dir, 'api');
 
     const config = JSON.parse(read(dir, 'blazeresolver.config.json'));
-    assert.match(config.testCommand, /^\(cd api && npm ci && npm test\)$/);
-    assert.match(config.buildCommand, /^\(cd ui && npm run build\)$/);
+    // install needs network and runs first; tests and build then run offline in a container
+    assert.equal(config.installCommand, '(cd api && npm ci) && (cd ui && npm install)');
+    assert.equal(config.testCommand, '(cd api && npm test)');
+    assert.equal(config.buildCommand, '(cd ui && npm run build)');
+    assert.equal(config.sandbox, 'docker');
+    assert.equal(config.sandboxImage, 'node:22-bookworm-slim');
     execFileSync('node', ['--check', join(dir, 'api/src/server.js')]);
 
     await runRemove({ cwd: dir, yes: true, noUninstall: true, log: () => {} });
@@ -183,7 +187,8 @@ describe('init finds frontend and backend by what they are, not what they are ca
     assert.ok(existsSync(join(dir, 'apps/web/app/api/blaze/route.js')));
     assert.ok(existsSync(join(dir, '.github/workflows/blazeresolver.yml')));
     const config = JSON.parse(read(dir, 'blazeresolver.config.json'));
-    assert.equal(config.testCommand, 'npm ci && npm test');
+    assert.equal(config.installCommand, 'npm ci');
+    assert.equal(config.testCommand, 'npm test');
     assert.equal(config.buildCommand, 'npm run build');
     assert.deepEqual(r.manifest.dependency, { dir: 'apps/web', pm: 'npm', workspace: 'apps/web' });
   });
@@ -270,6 +275,68 @@ describe('init safety', () => {
       const idx = Math.max(0, text.split('\n').length - 2);
       assert.equal(stripManaged(insertAfter(text, idx, '// blazeresolver:managed')), text);
     }
+  });
+});
+
+describe('sandbox, pin and app options', () => {
+  const next = (extra: Record<string, string> = {}, pkg: object = {}) =>
+    repo({ 'package.json': pj({ dependencies: { next: '15' }, scripts: { test: 'vitest' }, ...pkg }), 'app/layout.jsx': '<html><body>{children}</body></html>\n', ...extra });
+
+  it('picks the container image from the Node version the project declares', async () => {
+    const image = async (dir: string) => JSON.parse(read(dir, 'blazeresolver.config.json')).sandboxImage;
+    const nvm = next({ '.nvmrc': 'v20.11.1\n' });
+    await runInit({ cwd: nvm, ...quiet });
+    assert.equal(await image(nvm), 'node:20-bookworm-slim');
+    const engines = next({}, { engines: { node: '>=18.17' } });
+    await runInit({ cwd: engines, ...quiet });
+    assert.equal(await image(engines), 'node:18-bookworm-slim');
+    const custom = next();
+    await runInit({ cwd: custom, ...quiet, sandboxImage: 'my/image:1' });
+    assert.equal(await image(custom), 'my/image:1');
+  });
+
+  it('--no-sandbox is an explicit opt-out, recorded in the config', async () => {
+    const dir = next();
+    await runInit({ cwd: dir, ...quiet, noSandbox: true });
+    const config = JSON.parse(read(dir, 'blazeresolver.config.json'));
+    assert.equal(config.sandbox, 'none');
+    assert.equal(config.sandboxImage, undefined);
+  });
+
+  it('--pin locks the workflow and the widget to one version instead of latest', async () => {
+    const dir = next();
+    await runInit({ cwd: dir, ...quiet, pin: '0.5.0' });
+    const wf = read(dir, '.github/workflows/blazeresolver.yml');
+    assert.match(wf, /blazeresolver@0\.5\.0 fix/);
+    assert.match(wf, /blazeresolver@0\.5\.0 notify/);
+    assert.doesNotMatch(wf, /blazeresolver@latest/);
+    assert.match(read(dir, 'app/layout.jsx'), /blazeresolver@0\.5\.0\/widget\/widget\.js/);
+    assert.equal(JSON.parse(read(dir, 'blazeresolver.config.json')).pin, '0.5.0');
+  });
+
+  it('the default workflow pins every third-party action to a commit, with least-privilege permissions per job', async () => {
+    const dir = next();
+    await runInit({ cwd: dir, ...quiet });
+    const wf = read(dir, '.github/workflows/blazeresolver.yml');
+    const uses = [...wf.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
+    assert.ok(uses.length >= 4);
+    for (const u of uses) assert.match(u, /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/, `${u} must be pinned to a full commit SHA`);
+    assert.match(wf, /^permissions:\n  contents: read$/m, 'read-only by default');
+    assert.match(wf, /persist-credentials: false/);
+  });
+
+  it('--app gives the fix job a short-lived App token, and the built-in token can then only read', async () => {
+    const dir = next();
+    await runInit({ cwd: dir, ...quiet, app: true });
+    const wf = read(dir, '.github/workflows/blazeresolver.yml');
+    assert.match(wf, /uses: actions\/create-github-app-token@[0-9a-f]{40}/);
+    assert.match(wf, /GITHUB_TOKEN: \$\{\{ steps\.app\.outputs\.token \}\}/);
+    assert.match(wf, /permission-pull-requests: write/);
+    const fixPerms = wf.slice(wf.indexOf('  fix:'), wf.indexOf('  notify:')).match(/permissions:\n((?: {6}.+\n)+)/)![1];
+    assert.equal(fixPerms.trim(), 'contents: read');
+    // re-running init keeps App mode
+    await runInit({ cwd: dir, ...quiet, force: true });
+    assert.match(read(dir, '.github/workflows/blazeresolver.yml'), /create-github-app-token/);
   });
 });
 

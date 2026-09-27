@@ -2,15 +2,26 @@ import { readFileSync } from 'node:fs';
 import { addLabels, commentOnIssue, getIssue, listComments } from '../github/index.js';
 import { parseIssueBody } from '../handler/issue.js';
 import { runFix } from '../jobs/fix.js';
+import { secretValuesFromEnv } from '../resolver/guards.js';
 import type { AIProvider } from '../resolver/ai-provider.js';
 import { ClaudeProvider } from '../resolver/claude-provider.js';
-import { resolveComplete } from '../triage/index.js';
+import { describeProviders, listProviders, resolveComplete } from '../triage/index.js';
 
 export interface ProjectConfig {
   repo: string;
   defaultBranch: string;
   testCommand: string;
   buildCommand: string;
+  /** Installs dependencies with network; tests and build then run offline in a container. Absent in configs from before offline tests. */
+  installCommand?: string;
+  sandbox?: 'docker' | 'none';
+  sandboxImage?: string;
+}
+
+/** Names of the AI providers configured, in failover order. Never keys. */
+function providerNames(env: Record<string, string | undefined>): string[] {
+  const known = new Set(listProviders().map((p) => p.name));
+  return describeProviders(env as NodeJS.ProcessEnv).map((l) => l.split(':')[0]).filter((n) => known.has(n));
 }
 
 /** Labels that mean this issue was already worked on, so a repeated workflow run does nothing. */
@@ -25,6 +36,8 @@ export interface FixCommandOptions {
   ai?: AIProvider;
   fetch?: typeof fetch;
   remoteUrl?: string;
+  /** Tests: whether Docker is usable. */
+  dockerUp?: () => boolean;
 }
 
 /**
@@ -48,14 +61,18 @@ export async function runFixCommand(opts: FixCommandOptions): Promise<string> {
   if (HANDLED.some((l) => issue.labels.includes(l))) return 'already handled, skipping';
   if (!TRUSTED.includes(issue.author_association)) return `issue author is ${issue.author_association}, not a collaborator: skipping`;
 
+  let modelCalls = 0;
   const ai =
     opts.ai ??
     (() => {
-      const complete = resolveComplete({ env, maxTokens: 4096 });
+      const complete = resolveComplete({ env, maxTokens: 4096, timeoutMs: 180_000 });
       if (!complete) {
         throw new Error('No AI key is set. Add any provider\'s key as the API_KEYS repo secret (several, comma-separated, for failover); the provider is recognized automatically.');
       }
-      return new ClaudeProvider(complete);
+      return new ClaudeProvider(async (system, user) => {
+        modelCalls++;
+        return complete(system, user);
+      });
     })();
 
   await addLabels(token, repo, number, ['blazeresolver:fixing'], f);
@@ -72,7 +89,10 @@ export async function runFixCommand(opts: FixCommandOptions): Promise<string> {
       ai,
       issueNumber: number,
       remoteUrl: opts.remoteUrl,
-      fetch: f
+      fetch: f,
+      dockerUp: opts.dockerUp,
+      secretValues: secretValuesFromEnv(env, [token]),
+      audit: { providers: opts.ai ? undefined : providerNames(env), modelCalls: opts.ai ? undefined : () => modelCalls, maxAttempts: 3 }
     });
     if (outcome.status === 'pr_opened') {
       await addLabels(token, repo, number, ['blazeresolver:pr-opened'], f);

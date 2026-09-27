@@ -8,7 +8,7 @@ import {
   git, isNext, needsJsExtension, pickLayout, repoRoot, usesTypeScript
 } from './detect.js';
 import { MARK, hasManaged, indentOf, insertAfter, insertBefore, insertInline, lastImportLine } from './edit.js';
-import { WORKFLOW, expressRouterFile, pagesFile, routeFile, widgetTag, type ModuleStyle } from './templates.js';
+import { expressRouterFile, pagesFile, routeFile, widgetTag, workflow, type ModuleStyle } from './templates.js';
 
 /** Everything `init` changed, so `remove` can undo exactly that and nothing else. */
 export interface Manifest {
@@ -19,6 +19,10 @@ export interface Manifest {
   dependency?: { dir: string; pm: PackageManager; workspace?: string };
   /** The exact text init put in a .env file, so remove can take back precisely that and never a value you typed. */
   env?: { file: string; created: boolean; added: string };
+  /** Text appended to other files (CODEOWNERS), same idea: exact text, so remove takes back precisely that. */
+  appended?: { file: string; created: boolean; added: string }[];
+  /** Repo secrets set by `blazeresolver app` (BLAZE_APP_ID and the private key), so remove can delete them. */
+  secrets?: string[];
 }
 
 export const CONFIG_FILE = 'blazeresolver.config.json';
@@ -29,6 +33,16 @@ export interface InitOptions {
   branch?: string;
   test?: string;
   build?: string;
+  /** Installs dependencies (with network) before tests, which then run offline. Detected when omitted. */
+  install?: string;
+  /** Run tests with network access instead of offline in a container. */
+  noSandbox?: boolean;
+  /** Container image for offline tests. Defaults to node:<your Node major>-bookworm-slim. */
+  sandboxImage?: string;
+  /** Run this blazeresolver version in the workflow and widget instead of `latest`. */
+  pin?: string;
+  /** The fix job uses a GitHub App token (run `blazeresolver app` to create one). */
+  app?: boolean;
   /** Folder of the backend / frontend, relative to the repo root. Detected when omitted. */
   backend?: string;
   frontend?: string;
@@ -98,7 +112,7 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
   const branch = opts.branch ?? (git(root, 'symbolic-ref', '--short', 'HEAD') || 'main');
 
   const configPath = join(root, CONFIG_FILE);
-  const existing = existsSync(configPath) ? (JSON.parse(readFileSync(configPath, 'utf8')) as { installed?: Manifest }) : undefined;
+  const existing = existsSync(configPath) ? (JSON.parse(readFileSync(configPath, 'utf8')) as { installed?: Manifest; app?: boolean; pin?: string }) : undefined;
   if (existing?.installed && !opts.force) {
     throw new Error('BlazeResolver is already set up in this repo. Run `npx blazeresolver remove` first, or use --force to set it up again.');
   }
@@ -153,8 +167,14 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     const config = {
       repo,
       defaultBranch: branch,
+      installCommand: opts.install ?? cmds.install,
       testCommand: opts.test ?? cmds.test,
       buildCommand: opts.build ?? cmds.build,
+      // Tests run offline in a container by default; the only code that ever had network is the lockfile's own.
+      sandbox: opts.noSandbox ? 'none' : 'docker',
+      ...(opts.noSandbox ? {} : { sandboxImage: opts.sandboxImage ?? `node:${cmds.nodeMajor ?? 22}-bookworm-slim` }),
+      ...(opts.pin ? { pin: opts.pin } : {}),
+      ...(opts.app || existing?.app ? { app: true } : {}),
       layout: { frontend: layout.frontend?.dir, backend: layout.backend?.dir, handler: layout.handler },
       installed: manifest
     };
@@ -167,19 +187,19 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     const existingText = existsSync(path) ? readFileSync(path, 'utf8') : undefined;
     const addition = envAddition(existingText);
     if (!addition) {
-      if (existingText !== undefined) say("  kept   .env (already has BlazeResolver's variables)");
+      if (existingText !== undefined) say(`  kept   ${rel} (already has BlazeResolver's variables)`);
       return;
     }
     if (existingText === undefined) {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, addition);
       manifest.env = { file: rel, created: true, added: addition };
-      say('  wrote  .env');
+      say(`  wrote  ${rel}`);
     } else {
       const sep = existingText.endsWith('\n\n') ? '' : existingText.endsWith('\n') ? '\n' : '\n\n';
       writeFileSync(path, existingText + sep + addition);
       manifest.env = { file: rel, created: false, added: sep + addition };
-      say('  edited .env (appended missing BlazeResolver variables)');
+      say(`  edited ${rel} (appended missing BlazeResolver variables)`);
     }
     try {
       execFileSync('git', ['check-ignore', '-q', rel], { cwd: root, stdio: 'ignore' });
@@ -309,13 +329,13 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
           const i = parts.findIndex((l) => /<\/body>/i.test(l));
           // </body> alone on its line: add a line before it. Sharing a line with other markup: insert inline.
           return /^\s*<\/body>\s*\r?$/i.test(parts[i])
-            ? insertBefore(text, i, `${indentOf(parts[i])}${widgetTag(endpoint)}<!-- ${MARK} -->`)
-            : insertInline(text, i, parts[i].match(/<\/body>/i)![0], widgetTag(endpoint), 'html');
+            ? insertBefore(text, i, `${indentOf(parts[i])}${widgetTag(endpoint, opts.pin)}<!-- ${MARK} -->`)
+            : insertInline(text, i, parts[i].match(/<\/body>/i)![0], widgetTag(endpoint, opts.pin), 'html');
         });
         return endpoint;
       }
     }
-    manual.push(`Could not find where your page HTML ends in ${fe.dir || '.'}. Paste this before </body>:\n\n       ${widgetTag(endpoint)}`);
+    manual.push(`Could not find where your page HTML ends in ${fe.dir || '.'}. Paste this before </body>:\n\n       ${widgetTag(endpoint, opts.pin)}`);
     return endpoint;
   }
 
@@ -329,7 +349,7 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     return editFile(rel, (t) => {
       const parts = t.split('\n');
       const body = parts.findIndex((l) => /<\/body>/.test(l));
-      const element = `<${name} src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js" data-endpoint="${endpoint}" strategy="afterInteractive" />`;
+      const element = `<${name} src="https://cdn.jsdelivr.net/npm/blazeresolver@${opts.pin ?? 'latest'}/widget/widget.js" data-endpoint="${endpoint}" strategy="afterInteractive" />`;
       let next = /^\s*<\/body>\s*\r?$/.test(parts[body])
         ? insertBefore(t, body, `${indentOf(parts[body])}  ${element} {/* ${MARK} */}`)
         : insertInline(t, body, '</body>', element, 'jsx'); // <body>{children}</body> on one line
@@ -373,9 +393,9 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     say(`  ${step++}. Give the fix workflow the same keys:   gh secret set API_KEYS`);
     say(`  ${step++}. GitHub, Settings, Actions, General: turn on "Allow GitHub Actions to create and approve pull requests".`);
     say(`  ${step++}. Protect ${branch} (Settings, Branches) so every fix needs a human review.`);
-    if (!layout.frontend) say(`  ${step++}. Widget tag for your page: ${widgetTag(endpoint)}`);
+    if (!layout.frontend) say(`  ${step++}. Widget tag for your page: ${widgetTag(endpoint, opts.pin)}`);
     say('\nThen commit the new files (not .env). Undo everything with `npx blazeresolver remove`.');
-    say('Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest.');
+    say(opts.pin ? `Pinned to blazeresolver@${opts.pin}: nothing changes until you re-run init with a newer --pin.` : 'Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest (use --pin <version> to lock it).');
   }
 
   say(`\nBlazeResolver for ${repo} (default branch ${branch})`);
@@ -388,7 +408,7 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     placeHandler();
     ensureEnv((installTarget ?? layout.handlerPkg)?.dir ?? '');
     const endpoint = placeWidget();
-    createFile('.github/workflows/blazeresolver.yml', WORKFLOW);
+    createFile('.github/workflows/blazeresolver.yml', workflow({ pin: opts.pin ?? existing?.pin, app: opts.app || existing?.app }));
     installDependency();
     if (!cmds.hasTests && !opts.test) {
       manual.push('No "test" script found. BlazeResolver only opens a fix that passes your tests, so add tests (or pass --test "<command>"), or every fix will go to a human.');

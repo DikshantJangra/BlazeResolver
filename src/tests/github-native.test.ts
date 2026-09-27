@@ -214,3 +214,22 @@ describe('notify command', () => {
     assert.equal(sent.length, 2);
   });
 });
+
+describe('fix command fails closed on the sandbox', () => {
+  it('stops before cloning anything, and tells the issue why, when offline tests are configured but Docker is missing', async () => {
+    const root = tmp();
+    const eventPath = join(root, 'event.json');
+    writeFileSync(eventPath, JSON.stringify({ issue: { number: 5 } }));
+    const body = renderIssueBody({ message: 'checkout is wrong' }, { kind: 'bug', severity: 'high', summary: 'Checkout wrong', steps: [], source: 'rules', injection: false, enterFixLoop: true }, 'checkout');
+    const gh = fakeGithub([{ number: 5, title: '[bug] Checkout wrong', body, labels: ['blazeresolver'] }]);
+    const config = { repo: 'acme/shop', defaultBranch: 'main', installCommand: 'npm ci', testCommand: 'npm test', buildCommand: 'true', sandbox: 'docker' as const };
+
+    await assert.rejects(
+      runFixCommand({ env: { GITHUB_TOKEN: 'tok', GITHUB_EVENT_PATH: eventPath }, config, ai: new CheckoutFixAI(), fetch: gh.f, dockerUp: () => false }),
+      /Docker is not available/
+    );
+    assert.ok(gh.issues[0].labels.includes('blazeresolver:needs-human'));
+    assert.match(gh.issues[0].comments.join('\n'), /Docker is not available here/);
+    assert.ok(!gh.calls.some((c) => c.includes('/pulls')), 'no PR');
+  });
+});

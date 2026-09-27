@@ -231,27 +231,57 @@ export function detectPm(root: string, pkg: Pkg): { pm: PackageManager; locked: 
 const installCommand = (pm: PackageManager, locked: boolean) =>
   pm === 'pnpm' ? `pnpm install${locked ? ' --frozen-lockfile' : ''}` : pm === 'yarn' ? `yarn install${locked ? ' --frozen-lockfile' : ''}` : locked ? 'npm ci' : 'npm install';
 
+/** The Node major a project targets: .nvmrc, .node-version, then engines.node. Undefined when it says nothing usable. */
+export function detectNodeMajor(root: string, packages: Pkg[]): number | undefined {
+  for (const dir of [...packages.map((p) => p.dir), '']) {
+    for (const file of ['.nvmrc', '.node-version']) {
+      const path = join(root, dir, file);
+      if (existsSync(path)) {
+        const major = Number(readFileSync(path, 'utf8').trim().replace(/^v/, '').split('.')[0]);
+        if (Number.isInteger(major) && major >= 16) return major;
+      }
+    }
+    try {
+      const engines = JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8')).engines?.node as string | undefined;
+      const range = engines?.match(/\d+/);
+      const major = range ? Number(range[0]) : NaN;
+      // ">=18" means 18 or newer: the oldest is what it was written for, and works on the newer ones we default to.
+      if (Number.isInteger(major) && major >= 16 && !/[<]/.test(engines ?? '')) return major;
+    } catch {
+      // no package.json here
+    }
+  }
+  return undefined;
+}
+
 /**
- * The commands the fix engine runs in a fresh clone. In a monorepo with workspaces that is the root's own scripts.
- * Otherwise it is the tests and build of each package that has them, each run from its own folder.
+ * The commands the fix engine runs in a fresh clone, split so tests can run offline: `install` needs network and runs
+ * first, `test` and `build` then need none. In a monorepo with workspaces they are the root's own scripts. Otherwise they
+ * are the install, tests and build of each package that has them, each run from its own folder.
  */
-export function buildCommands(root: string, packages: Pkg[], chosen: Pkg[]): { test: string; build: string; hasTests: boolean } {
+export function buildCommands(root: string, packages: Pkg[], chosen: Pkg[]): { install: string; test: string; build: string; hasTests: boolean; nodeMajor?: number } {
   const rootPkg = packages.find((p) => p.dir === '');
   const targets = rootPkg?.workspaces ? [rootPkg] : [...new Set(chosen)];
   const cd = (p: Pkg, cmd: string) => (p.dir ? `(cd ${p.dir} && ${cmd})` : cmd);
 
-  const tests = targets.filter((p) => p.scripts.test).map((p) => {
+  const withTests = targets.filter((p) => p.scripts.test);
+  const withBuild = targets.filter((p) => p.scripts.build);
+  const needInstall = [...new Set([...withTests, ...withBuild])];
+  const installs = needInstall.map((p) => {
     const { pm, locked } = detectPm(root, p);
-    return cd(p, `${installCommand(pm, locked)} && ${pm} test`);
+    return cd(p, installCommand(pm, locked));
   });
-  const builds = targets.filter((p) => p.scripts.build).map((p) => cd(p, `${detectPm(root, p).pm} run build`));
+  const tests = withTests.map((p) => cd(p, `${detectPm(root, p).pm} test`));
+  const builds = withBuild.map((p) => cd(p, `${detectPm(root, p).pm} run build`));
 
   const fallback = targets[0] ?? rootPkg;
   const fb = fallback ? detectPm(root, fallback) : { pm: 'npm' as const, locked: false };
   return {
+    install: installs.length ? installs.join(' && ') : installCommand(fb.pm, fb.locked),
     // With no test script this fails on purpose: BlazeResolver only opens a fix that passes real tests.
-    test: tests.length ? tests.join(' && ') : `${installCommand(fb.pm, fb.locked)} && ${fb.pm} test`,
+    test: tests.length ? tests.join(' && ') : `${fb.pm} test`,
     build: builds.length ? builds.join(' && ') : 'true',
-    hasTests: tests.length > 0
+    hasTests: tests.length > 0,
+    nodeMajor: detectNodeMajor(root, targets)
   };
 }

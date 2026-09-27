@@ -1,5 +1,6 @@
 import type { CodebaseInterface, FileContent, TestResult, Workspace, WorkspaceInterface } from '../codebase/contracts.js';
 import type { AIProvider } from './ai-provider.js';
+import { addedLines, findSecrets, guardEdits } from './guards.js';
 import { normalizeEditPath, renderPatch } from './patch.js';
 import type { CodeContext, FixAttempt, Incident, Investigation, ResolutionResult } from './types.js';
 
@@ -13,6 +14,8 @@ export interface BugResolverOptions {
   maxAttempts?: number;
   /** Edits to matching paths are refused, so a human has to make them. Defaults to DEFAULT_FORBIDDEN_PATHS. */
   forbiddenPaths?: RegExp[];
+  /** Exact secret values (the server's own keys and token). A fix that contains one is refused. Known credential formats always are. */
+  secretValues?: string[];
 }
 
 /** CI config, secrets, lockfiles, and the code where a wrong fix costs the most: auth, payments, migrations. */
@@ -20,7 +23,12 @@ export const DEFAULT_FORBIDDEN_PATHS: RegExp[] = [
   /^\.github\//,
   /(^|\/)\.env(\.|$)/,
   /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/,
-  /(^|\/)(migrations?|auth|payments?|billing|secrets?)(\/|$)/i
+  /(^|\/)(migrations?|auth|payments?|billing|secrets?)(\/|$)/i,
+  // Install and package-manager config: where a malicious registry or script would be planted.
+  /(^|\/)(\.npmrc|\.yarnrc(\.yml)?|\.pnpmfile\.cjs|pnpm-workspace\.yaml|\.nvmrc|\.node-version)$/,
+  // Test runner config: a fix could "pass" by switching tests off.
+  /(^|\/)(jest|vitest|vite|playwright|cypress|karma|ava|mocha|nyc|c8)\.config\.[cm]?[jt]s$/,
+  /(^|\/)\.(mocharc|nycrc|c8rc)(\.\w+)?$/
 ];
 
 /** A fix bigger than this is a redesign, not a bug fix; it goes to a human. */
@@ -132,8 +140,16 @@ export class BugResolver {
       return attempt;
     }
 
+    const refused = await guardEdits(proposal.edits, (path) => workspaces.readFile(workspace, path));
+    if (refused) {
+      attempt.failure = { stage: 'patch', output: refused };
+      return attempt;
+    }
+
     try {
       attempt.patch = await renderPatch(proposal.edits, (path) => workspaces.readFile(workspace, path));
+      const leaked = findSecrets(addedLines(attempt.patch), this.options.secretValues);
+      if (leaked.length) throw new Error(`the patch contains what looks like a secret (${leaked.join(', ')}); a fix must never add credentials`);
       if (attempt.patch.split('\n').length > MAX_PATCH_LINES) {
         throw new Error(`the patch is over ${MAX_PATCH_LINES} lines; make the smallest change that fixes the bug`);
       }

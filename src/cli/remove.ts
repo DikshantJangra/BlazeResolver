@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync
 import { dirname, join, posix } from 'node:path';
 import { detectPm, findPackages, repoRoot } from './detect.js';
 import { stripManaged } from './edit.js';
+import { gh, type Gh } from './app.js';
 import { CONFIG_FILE, uninstallArgs, type Manifest } from './init.js';
 
 export interface RemoveOptions {
@@ -14,6 +15,8 @@ export interface RemoveOptions {
   log?: (line: string) => void;
   /** Asked before anything is deleted. Omit to go ahead (scripts, tests). */
   confirm?: (question: string) => Promise<boolean>;
+  /** Runs the GitHub CLI, to delete the repo secrets `blazeresolver app` created. */
+  run?: Gh;
 }
 
 export interface RemoveResult {
@@ -22,6 +25,8 @@ export interface RemoveResult {
   stripped: string[];
   /** Files init created that were changed by hand since, so they were left alone. */
   kept: string[];
+  /** Repo secrets deleted (the ones `blazeresolver app` set). */
+  secretsDeleted?: string[];
   /** .env handling: what happened to the variables init added. */
   env?: 'deleted' | 'cleaned' | 'kept';
   uninstalled: boolean;
@@ -63,7 +68,7 @@ export async function runRemove(opts: RemoveOptions): Promise<RemoveResult> {
   const files = manifest.files.filter((f) => f !== CONFIG_FILE);
 
   if (!opts.yes && opts.confirm) {
-    const what = [...files, ...(manifest.env ? [`${manifest.env.file} (only the variables init added)`] : []), ...manifest.edits.map((f) => `${f} (marked lines only)`), ...(manifest.dependency && !opts.noUninstall ? ['the blazeresolver package'] : []), CONFIG_FILE];
+    const what = [...files, ...(manifest.appended ?? []).map((a) => `${a.file} (only the block init added)`), ...(manifest.secrets ?? []).map((n) => `repo secret ${n}`), ...(manifest.env ? [`${manifest.env.file} (only the variables init added)`] : []), ...manifest.edits.map((f) => `${f} (marked lines only)`), ...(manifest.dependency && !opts.noUninstall ? ['the blazeresolver package'] : []), CONFIG_FILE];
     if (!(await opts.confirm(`Remove BlazeResolver? This deletes:\n  ${what.join('\n  ')}\nContinue?`))) {
       log('Cancelled. Nothing was changed.');
       return { cancelled: true, removed: [], stripped: [], kept: [], uninstalled: false };
@@ -124,6 +129,26 @@ export async function runRemove(opts: RemoveOptions): Promise<RemoveResult> {
     }
   }
 
+  // Text appended to other files (CODEOWNERS): exactly that text, or the whole file if init created it.
+  for (const { file, created, added } of manifest.appended ?? []) {
+    const path = join(root, file);
+    if (!existsSync(path)) continue;
+    const text = readFileSync(path, 'utf8');
+    if (created && text === added) {
+      rmSync(path);
+      log(`  removed  ${file}`);
+      for (let dir = dirname(path); dir !== root && dir.startsWith(root); dir = dirname(dir)) {
+        if (readdirSync(dir).length) break;
+        rmdirSync(dir);
+      }
+    } else if (text.includes(added)) {
+      writeFileSync(path, text.replace(added, ''));
+      log(`  cleaned  ${file}`);
+    } else {
+      log(`  kept     ${file} (it has changed since; delete the BlazeResolver block by hand)`);
+    }
+  }
+
   const dep = manifest.dependency;
   if (dep && !opts.noUninstall) {
     const [cmd, args, cwd] = uninstallArgs(dep.pm, dep.dir, dep.workspace, root);
@@ -136,11 +161,28 @@ export async function runRemove(opts: RemoveOptions): Promise<RemoveResult> {
     }
   }
 
+  // Repo secrets that `blazeresolver app` stored. They only make sense with BlazeResolver, so they go with it.
+  if (manifest.secrets?.length) {
+    const repo = (config as { repo?: string }).repo;
+    const run = opts.run ?? gh;
+    result.secretsDeleted = [];
+    for (const name of manifest.secrets) {
+      if (repo && (await run(['secret', 'delete', name, '--repo', repo])).ok) {
+        result.secretsDeleted.push(name);
+        log(`  deleted  repo secret ${name}`);
+      } else {
+        log(`  could not delete repo secret ${name}; remove it in Settings, Secrets and variables, Actions`);
+      }
+    }
+  }
+
   rmSync(configPath);
   log(`  removed  ${CONFIG_FILE}`);
   log('\nBlazeResolver is removed from this repo. On GitHub you may also want to delete:');
-  log('  - the repo secrets ANTHROPIC_API_KEY and BLAZE_GITHUB_TOKEN, and BLAZE_GITHUB_TOKEN from your backend host');
+  log('  - the repo secrets API_KEYS (or ANTHROPIC_API_KEY) and BLAZE_GITHUB_TOKEN, and BLAZE_GITHUB_TOKEN from your backend host');
   log('  - the fine-grained token you created for it');
+  if (manifest.secrets?.length) log('  - the GitHub App itself (GitHub, Settings, Developer settings, GitHub Apps): uninstall it and delete it');
+  log('  - the branch ruleset "BlazeResolver: protect the default branch", if `blazeresolver harden` created it (left in place: it protects your branch)');
   log('  - issues labeled "blazeresolver" and branches named blazeresolver/fix-* (left alone)');
   return result;
 }

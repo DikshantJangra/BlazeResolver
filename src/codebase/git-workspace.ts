@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,6 +12,13 @@ export interface GitWorkspaceOptions {
   baseRef?: string;
   /** Shell command that runs the project's tests inside a workspace. */
   testCommand: string;
+  /**
+   * Installs dependencies from the lockfile, once per checkout, WITH network. Tests and builds then run offline
+   * (see `offline`), so the only code that ever had network is the lockfile's own, never the AI's.
+   */
+  installCommand?: string;
+  /** Run tests and builds in a container with no network, no capabilities and no way to gain any. Needs Docker. */
+  offline?: { image: string };
   /** Shell command that builds the project inside a workspace. */
   buildCommand: string;
   /** Directory that holds one clone per workspace. */
@@ -63,6 +70,8 @@ export class GitWorkspace implements WorkspaceInterface {
   private readonly workspacesDir: string;
   /** Sandbox copy per workspace id; tests and the build after them share it, a new patch discards it. */
   private readonly runDirs = new Map<string, string>();
+  /** Directories whose dependencies are already installed, so tests and the build after them don't reinstall. */
+  private readonly installed = new Set<string>();
 
   constructor(private options: GitWorkspaceOptions) {
     this.workspacesDir = resolve(options.workspacesDir ?? join(tmpdir(), 'blazeresolver-workspaces'));
@@ -160,17 +169,26 @@ export class GitWorkspace implements WorkspaceInterface {
   private async run(workspace: Workspace, command: string): Promise<TestResult> {
     const path = this.ownedPath(workspace);
     const sandbox = this.options.sandbox;
-    if (!sandbox) {
-      return this.runCommand(path, command, this.options.env ?? process.env);
-    }
+    if (!sandbox) return this.runInDir(path, command, this.options.env ?? process.env);
 
     const base = await this.sandboxCopy(workspace.id, path, sandbox);
     try {
       const env = { ...(this.options.env ?? process.env), HOME: join(base, 'home') };
-      return await this.runCommand(join(base, 'repo'), command, env, sandbox);
+      return await this.runInDir(join(base, 'repo'), command, env, sandbox);
     } finally {
       await killAllProcessesOf(sandbox);
     }
+  }
+
+  /** Installs once (with network), then runs the command offline when configured. */
+  private async runInDir(dir: string, command: string, env: NodeJS.ProcessEnv, user?: SandboxUser): Promise<TestResult> {
+    const install = this.options.installCommand;
+    if (install && !this.installed.has(dir)) {
+      const result = await this.runCommand(dir, install, env, user);
+      if (!result.success) return { success: false, output: `dependency install failed:\n${result.output}` };
+      this.installed.add(dir);
+    }
+    return this.runCommand(dir, command, env, user, this.options.offline);
   }
 
   /** The workspace's index (base plus applied patches) checked out without .git into a directory the sandbox user owns. */
@@ -194,13 +212,16 @@ export class GitWorkspace implements WorkspaceInterface {
     await rm(base, { recursive: true, force: true });
   }
 
-  private runCommand(cwd: string, command: string, baseEnv: NodeJS.ProcessEnv, user?: SandboxUser): Promise<TestResult> {
+  private runCommand(cwd: string, command: string, baseEnv: NodeJS.ProcessEnv, user?: SandboxUser, offline?: { image: string }): Promise<TestResult> {
     const timeoutMs = this.options.commandTimeoutMs ?? 15 * 60 * 1000;
     return new Promise((resolvePromise) => {
       // Inherited from a node --test parent, NODE_TEST_CONTEXT makes the project's own `node --test`
       // report to that parent and exit 0 even when its tests fail.
       const { NODE_TEST_CONTEXT, ...env } = baseEnv;
-      const child = spawn(command, { cwd, shell: true, env, uid: user?.uid, gid: user?.gid });
+      const container = offline ? `blaze-${randomUUID().slice(0, 12)}` : undefined;
+      const child = offline
+        ? spawn('docker', dockerRunArgs({ name: container!, image: offline.image, cwd, command, user: user ?? currentUser(), env }), { env: dockerClientEnv() })
+        : spawn(command, { cwd, shell: true, env, uid: user?.uid, gid: user?.gid });
       let output = '';
       const append = (chunk: Buffer) => {
         output = (output + chunk.toString('utf-8')).slice(-OUTPUT_TAIL_BYTES);
@@ -211,6 +232,8 @@ export class GitWorkspace implements WorkspaceInterface {
       let timedOut = false;
       const timer = setTimeout(() => {
         timedOut = true;
+        // Killing the docker client would leave the container running.
+        if (container) spawn('docker', ['kill', container], { stdio: 'ignore', env: dockerClientEnv() });
         child.kill('SIGKILL');
       }, timeoutMs);
 
@@ -249,6 +272,47 @@ function run(command: string, args: string[]): Promise<void> {
       err ? reject(new GitWorkspaceError('sandbox', `${command} failed: ${stderr.trim() || err.message}`)) : resolvePromise()
     );
   });
+}
+
+const currentUser = (): SandboxUser | undefined =>
+  process.getuid && process.getgid ? { uid: process.getuid(), gid: process.getgid() } : undefined;
+
+/** Only what the docker client itself needs to find its daemon. The host's other environment (keys, tokens) stays out. */
+function dockerClientEnv(): NodeJS.ProcessEnv {
+  const keep = ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONFIG', 'DOCKER_CONTEXT', 'DOCKER_CERT_PATH', 'DOCKER_TLS_VERIFY', 'XDG_RUNTIME_DIR'];
+  return Object.fromEntries(keep.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
+}
+
+/** Environment a container gets: only these, and only if the caller set them. */
+const CONTAINER_ENV = ['CI', 'NODE_ENV'];
+
+/**
+ * `docker run` arguments for a test or build with nothing to reach: no network, no capabilities, no privilege gain,
+ * a non-root user, bounded memory, CPU and processes, and only the workspace mounted.
+ */
+export function dockerRunArgs(o: { name: string; image: string; cwd: string; command: string; user?: SandboxUser; env: NodeJS.ProcessEnv }): string[] {
+  return [
+    'run', '--rm', '--name', o.name,
+    '--network', 'none',
+    '--cap-drop', 'ALL',
+    '--security-opt', 'no-new-privileges',
+    '--pids-limit', '1024', '--memory', '4g', '--cpus', '2',
+    ...(o.user ? ['--user', `${o.user.uid}:${o.user.gid}`] : []),
+    '-v', `${o.cwd}:/work`, '-w', '/work',
+    '-e', 'HOME=/tmp',
+    ...CONTAINER_ENV.filter((k) => o.env[k] !== undefined).flatMap((k) => ['-e', `${k}=${o.env[k]}`]),
+    o.image, 'sh', '-c', o.command
+  ];
+}
+
+/** Whether a Docker daemon answers, so callers can choose offline tests or say why they can't have them. */
+export function dockerAvailable(): boolean {
+  try {
+    execFileSync('docker', ['version', '--format', '{{.Server.Version}}'], { stdio: 'ignore', timeout: 8000 });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Accepts a local ref, commit or tag, falling back to the remote-tracking branch of the same name. */
