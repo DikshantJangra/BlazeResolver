@@ -211,7 +211,7 @@ export default function App() {
   const [newTicketPriority, setNewTicketPriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal');
   const [newTicketChannel, setNewTicketChannel] = useState<'text' | 'voice' | 'webhook' | 'email'>('text');
   const [newTicketOrderId, setNewTicketOrderId] = useState('');
-  const [newTicketCustomerName, setNewTicketCustomerName] = useState('Sarah Jenkins');
+  const [newTicketCustomerName, setNewTicketCustomerName] = useState('');
   const [isCreatingTicket, setIsCreatingTicket] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
@@ -1147,6 +1147,7 @@ export default function App() {
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Customer Name</label>
                   <input
                     type="text"
+                    placeholder="e.g. Alex Morgan"
                     value={newTicketCustomerName}
                     onChange={(e) => setNewTicketCustomerName(e.target.value)}
                     className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 bg-slate-50 focus:bg-white"

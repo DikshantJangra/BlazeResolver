@@ -39,9 +39,11 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
 
   // New ticket modal
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerEmail, setNewCustomerEmail] = useState('');
   const [newSubject, setNewSubject] = useState('');
   const [newCategory, setNewCategory] = useState('orders');
-  const [newOrderId, setNewOrderId] = useState('ORD-9821');
+  const [newOrderId, setNewOrderId] = useState('');
   const [newComplaintText, setNewComplaintText] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
@@ -158,10 +160,9 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
           subject: newSubject.trim() || newComplaintText.trim().slice(0, 45) + '...',
           rawText: newComplaintText.trim(),
           category: newCategory,
-          orderId: newOrderId,
-          customerName: 'Priya Sharma',
-          customerEmail: 'priya.s@example.com',
-          customerPhone: '+91 98765 43210'
+          orderId: newOrderId.trim() || undefined,
+          customerName: newCustomerName.trim() || 'Customer',
+          customerEmail: newCustomerEmail.trim() || undefined
         })
       });
 
@@ -170,6 +171,9 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
         if (json.success && json.data?.ticket) {
           setShowCreateModal(false);
           setNewSubject('');
+          setNewCustomerName('');
+          setNewCustomerEmail('');
+          setNewOrderId('');
           setNewComplaintText('');
           await fetchTickets();
           setSelectedTicket(json.data.ticket);
@@ -471,6 +475,29 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
               >
                 <RiCloseLine className="w-5 h-5" />
               </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-semibold block mb-1 text-xs text-gray-700">Your Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Alex Morgan"
+                  value={newCustomerName}
+                  onChange={(e) => setNewCustomerName(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-orange-400/20 focus:border-orange-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="font-semibold block mb-1 text-xs text-gray-700">Email Address</label>
+                <input
+                  type="email"
+                  placeholder="e.g. alex@example.com"
+                  value={newCustomerEmail}
+                  onChange={(e) => setNewCustomerEmail(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-orange-400/20 focus:border-orange-500 outline-none"
+                />
+              </div>
             </div>
 
             <div>

@@ -319,6 +319,7 @@ app.post('/api/pipeline/seed', async (req, res) => {
 app.post('/api/pipeline/reset', (req, res) => {
   ({ adapters, pipeline } = createPipeline());
   voiceBridge = new VoiceChannelBridge(pipeline);
+  supportStore.resetAll();
   broadcastLiveEvent('pipeline_reset', { timestamp: new Date() }, 'everyone');
   return res.json({ success: true, message: 'BlazeResolver pipeline and adapter stores reset to fresh state' });
 });
