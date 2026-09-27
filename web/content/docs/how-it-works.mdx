@@ -29,7 +29,7 @@ The [handler](/docs/reference/handler) repairs the report (trimming oversized fi
    - `how_to` questions are [answered from your README and help docs](/docs/setup/help-answers) when those cover them. The answer shows in the widget, and nothing is filed.
    - Everything else is acknowledged and not filed.
 
-The customer gets the same thank-you (`202 {"received": true}`) whatever was decided, and never sees the verdict. The one exception is an answered question, which returns `200` with the answer.
+The customer gets a short reply to what they said (`202 {"received": true, "reply": "…"}`) whatever was decided, and never sees the verdict. The reply is written by your AI provider, or is a fixed line per kind without one. The one exception is an answered question, which returns `200` with the answer.
 
 ## 3. Duplicate reports are grouped
 

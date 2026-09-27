@@ -62,7 +62,7 @@ app.all('/api/blaze', nodeHandler(createHandler({ repo: 'acme/shop', allowOrigin
 | Status | Body | When |
 | :--- | :--- | :--- |
 | `200` | `{"received": true, "answer": "…"}` | A how-to question, answered from your README and help docs. Nothing is filed. See [Answer questions from your docs](/docs/setup/help-answers). |
-| `202` | `{"received": true}` | Accepted, whatever triage decided: filed bugs and feature requests, grouped duplicates, unanswered questions, and dropped injection attempts |
+| `202` | `{"received": true, "reply": "…"}` | Accepted, with a short plain-text reply to show the customer (written by your AI provider, or a fixed line per kind without one; never the verdict), whatever triage decided: filed bugs and feature requests, grouped duplicates, unanswered questions, and dropped injection attempts |
 | `204` | none | `OPTIONS` preflight |
 | `400` | `{"error": "invalid json"}` / `{"error": "invalid report"}` | Body isn't JSON, or has no message |
 | `405` | `{"error": "POST only"}` | Any other method |

@@ -57,33 +57,37 @@ export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
     }
   }, [messages.length, isOpen]);
 
-  // Load or create initial session ticket
-  const ensureSessionTicket = async () => {
-    if (activeTicket) return activeTicket;
-    try {
-      const res = await fetch(`${baseUrl}/api/support/tickets/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subject: 'Live Blazzy Session',
-          rawText: 'Customer started a live session via Blazzy Widget',
-          category: 'general',
-          orderId: userOrderId || undefined,
-          customerName: customerName,
-          customerEmail: userEmail || undefined
-        })
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data?.ticket) {
-          setActiveTicket(json.data.ticket);
-          return json.data.ticket;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to initialize session ticket:', e);
-    }
-    return null;
+  const loadMessages = async (ticketId: string) => {
+    const msgRes = await fetch(`${baseUrl}/api/support/tickets/${ticketId}/messages`).then((r) => r.json());
+    if (msgRes.success) setMessages(msgRes.data || []);
+  };
+
+  // Replies that arrive after the send returns (a human agent, or follow-up actions) show up while the chat is open.
+  useEffect(() => {
+    if (!isOpen || !activeTicket) return;
+    const interval = setInterval(() => loadMessages(activeTicket.id).catch(() => {}), 4000);
+    return () => clearInterval(interval);
+  }, [isOpen, activeTicket?.id, baseUrl]);
+
+  // The first message opens the session ticket, so Blazzy replies to what the customer actually said.
+  const openSessionTicket = async (text: string) => {
+    const res = await fetch(`${baseUrl}/api/support/tickets/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: text.slice(0, 45) + (text.length > 45 ? '...' : ''),
+        rawText: text,
+        category: userOrderId ? 'orders' : 'general',
+        orderId: userOrderId || undefined,
+        customerName: customerName,
+        customerEmail: userEmail || undefined
+      })
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.success || !json.data?.ticket) return null;
+    setActiveTicket(json.data.ticket);
+    return json.data.ticket as SupportTicket;
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -95,10 +99,14 @@ export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
     setInputMessage('');
 
     try {
-      const ticket = activeTicket || (await ensureSessionTicket());
-      if (!ticket) throw new Error('No active session');
+      if (!activeTicket) {
+        const ticket = await openSessionTicket(text);
+        if (!ticket) throw new Error('No active session');
+        await loadMessages(ticket.id);
+        return;
+      }
 
-      const res = await fetch(`${baseUrl}/api/support/tickets/${ticket.id}/messages`, {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${activeTicket.id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -110,12 +118,7 @@ export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
         })
       });
 
-      if (res.ok) {
-        const msgRes = await fetch(`${baseUrl}/api/support/tickets/${ticket.id}/messages`).then((r) => r.json());
-        if (msgRes.success) {
-          setMessages(msgRes.data || []);
-        }
-      }
+      if (res.ok) await loadMessages(activeTicket.id);
     } catch (err) {
       console.error('Failed to send message:', err);
       setStatusMsg('Could not send message. Please retry.');
@@ -132,30 +135,11 @@ export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
     setStatusMsg('');
 
     try {
-      const res = await fetch(`${baseUrl}/api/support/tickets/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subject: quickQuery.slice(0, 45) + (quickQuery.length > 45 ? '...' : ''),
-          rawText: quickQuery.trim(),
-          category: userOrderId ? 'orders' : 'general',
-          orderId: userOrderId || undefined,
-          customerName: customerName,
-          customerEmail: userEmail || undefined
-        })
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data?.ticket) {
-          setActiveTicket(json.data.ticket);
-          setQuickQuery('');
-          setActiveTab('chat');
-          const msgRes = await fetch(`${baseUrl}/api/support/tickets/${json.data.ticket.id}/messages`).then((r) => r.json());
-          if (msgRes.success) {
-            setMessages(msgRes.data || []);
-          }
-        }
+      const ticket = await openSessionTicket(quickQuery.trim());
+      if (ticket) {
+        setQuickQuery('');
+        setActiveTab('chat');
+        await loadMessages(ticket.id);
       }
     } catch (err) {
       console.error('Failed to file ticket:', err);

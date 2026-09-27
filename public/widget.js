@@ -116,8 +116,8 @@
     '.tick{width:52px;height:52px;margin:0 auto 12px;border-radius:50%;background:#fff7ed;color:var(--accent);display:grid;place-items:center}' +
     '.tick svg{width:26px;height:26px}' +
     '.done h3{margin:0;font-size:16px;font-weight:700;outline:0}' +
-    '.done p{margin:6px 0 18px;color:var(--muted);font-size:13.5px}' +
-    '.done.answered p{max-height:260px;overflow-y:auto;color:var(--text);text-align:left;white-space:pre-line;line-height:1.5}' +
+    '.done p{margin:6px 0 18px;max-height:260px;overflow-y:auto;color:var(--muted);font-size:13.5px;white-space:pre-line}' +
+    '.done.answered p{color:var(--text);text-align:left;line-height:1.5}' +
 
     ':host([data-position=left]) .launcher,:host([data-position=left]) .panel{right:auto;left:20px}' +
     ':host([data-launcher=false]) .panel{bottom:calc(20px + env(safe-area-inset-bottom,0px))}' +
@@ -235,11 +235,13 @@
       .then(function (res) {
         if (!res.ok) throw res.status;
         return res.text().then(function (t) {
-          try { return JSON.parse(t).answer; } catch (e) { return undefined; }
+          try { return JSON.parse(t); } catch (e) { return {}; }
         });
       })
       .then(
-        function (answer) {
+        function (data) {
+          var answer = data && data.answer;
+          var reply = data && typeof data.reply === 'string' ? data.reply : '';
           settle();
           field.value = '';
           emailInput.value = '';
@@ -248,9 +250,10 @@
           var answered = typeof answer === 'string' && answer;
           done.classList.toggle('answered', !!answered);
           $('.done h3').textContent = answered ? "Here's what Blazzy found" : 'Thanks, Blazzy got it!';
+          var followUp = email && !emailInput.hidden ? "We'll email " + email + " when it's resolved." : '';
           $('.done p').textContent = answered
             ? answer
-            : email && !emailInput.hidden ? "We'll email " + email + " when it's resolved." : "Blazzy is looking into it.";
+            : reply ? reply + (followUp ? '\n\n' + followUp : '') : followUp || "Blazzy is looking into it.";
           form.hidden = true;
           done.hidden = false;
           $('.done h3').focus();

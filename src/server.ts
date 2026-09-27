@@ -589,8 +589,8 @@ app.post('/api/support/tickets/:id/messages', async (req, res) => {
         broadcastLiveEvent('support_human_requested', { ticketId, reason: 'Customer requested human agent' }, 'admins');
         broadcastLiveEvent('support_message_created', { ticketId, message: humanReply }, 'everyone');
       } else if (!ticket.isHumanTakeover) {
-        // 2. AI Auto-Pilot with RAG grounding
-        setTimeout(async () => {
+        // 2. AI Auto-Pilot with RAG grounding. Awaited, so a client that refetches the thread after sending sees the reply.
+        await (async () => {
           try {
             const input: CustomerInput = {
               id: `msg_pipe_${Date.now()}`,
@@ -691,7 +691,7 @@ app.post('/api/support/tickets/:id/messages', async (req, res) => {
           } catch (e) {
             console.error('Error generating AI auto reply:', e);
           }
-        }, 500);
+        })();
       }
     }
 

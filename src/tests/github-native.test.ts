@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHandler } from '../handler/index.js';
+import { fallbackReply } from '../answer/index.js';
 import { emailsIn, groupKey, parseIssueBody, renderIssueBody } from '../handler/issue.js';
 import { triage } from '../triage/index.js';
 import { closedIssues, runNotifyCommand } from '../cli/notify.js';
@@ -63,7 +64,7 @@ describe('report handler', () => {
 
     const first = await handler(post({ message: 'checkout crashes', pageUrl: 'https://site.test/cart', email: 'a@x.com', consoleErrors: ['TypeError at cart.js:9'] }, '2.2.2.2'));
     assert.equal(first.status, 202);
-    assert.deepEqual(await first.json(), { received: true });
+    assert.deepEqual(await first.json(), { received: true, reply: fallbackReply({ kind: 'bug', injection: false }) });
     assert.equal(gh.issues.length, 1);
     assert.deepEqual(gh.issues[0].labels, ['blazeresolver']);
     assert.match(gh.issues[0].title, /^\[bug\] Checkout crashes/);

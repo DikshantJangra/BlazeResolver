@@ -2,7 +2,7 @@ import { commentOnIssue, listOpenIssues, openIssue } from '../github/index.js';
 import { ReportSchema, resolveComplete, triage, type Complete } from '../triage/index.js';
 import { emailMarker, groupKey, keyMarker, renderIssueBody, renderReport, symptomIn } from './issue.js';
 import { sameSymptom, symptomOf } from '../triage/grouping.js';
-import { answerQuestion } from '../answer/index.js';
+import { answerQuestion, replyToCustomer } from '../answer/index.js';
 
 export interface HandlerOptions {
   /** owner/name of the repo that gets the issues. */
@@ -30,6 +30,10 @@ const MAX_BODY = 20_000;
 const TRIAGE_BUDGET_MS = 8_000;
 /** Answering a question comes after triage, inside the same 25s. */
 const ANSWER_BUDGET_MS = 12_000;
+/** The reply to anything that isn't answered, written while the report is filed. */
+const REPLY_BUDGET_MS = 6_000;
+/** Everything has to be back well inside the widget's 25s. */
+const RESPONSE_BUDGET_MS = 21_000;
 
 function withDeadline(complete: Complete | undefined, ms: number): Complete | undefined {
   if (!complete) return undefined;
@@ -93,6 +97,7 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
     if (!parsed.success) return reply(400, { error: 'invalid report' });
     const report = parsed.data;
 
+    const started = Date.now();
     const verdict = await triage(report, withDeadline(options.complete ?? resolveComplete({ timeoutMs: TRIAGE_BUDGET_MS }), TRIAGE_BUDGET_MS));
     const answer = await answerQuestion(report, verdict, {
       complete: withDeadline(options.complete ?? resolveComplete({ timeoutMs: ANSWER_BUDGET_MS }), ANSWER_BUDGET_MS),
@@ -100,8 +105,14 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
       readme: { repo: options.repo, token, fetch: f }
     });
     if (answer) return reply(200, { received: true, answer });
-    // Apart from an answer to a question, the customer only ever gets an acknowledgement, never the verdict.
-    const ack = () => reply(202, { received: true });
+    // Everything else gets a short acknowledgement of what they said, never the verdict. It's written while the
+    // report is filed, in whatever is left of the widget's wait. The fixed reply is used when too little is left, or
+    // when triage fell back to keyword rules: a model that just failed or hung isn't waited on twice.
+    const replyBudget = Math.min(REPLY_BUDGET_MS, RESPONSE_BUDGET_MS - (Date.now() - started));
+    const customerReply = replyToCustomer(report, verdict, {
+      complete: verdict.source === 'llm' && replyBudget >= 1_500 ? withDeadline(options.complete ?? resolveComplete({ timeoutMs: replyBudget }), replyBudget) : undefined
+    });
+    const ack = async () => reply(202, { received: true, reply: await customerReply });
     if (verdict.injection || !(verdict.enterFixLoop || verdict.kind === 'feature_request')) return ack();
 
     try {

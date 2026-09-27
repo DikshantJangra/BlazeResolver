@@ -13,7 +13,7 @@ It works out of the box: the repo's README is the source. You can add more docs.
 2. **Collect the docs.** The endpoint fetches the README of the repo you passed to `createHandler`, with your token first (private repos), then without it (a public repo needs none). READMEs are cached for 10 minutes; a failed fetch is retried after a minute. Any extra `helpDocs` you pass are added.
 3. **Find the relevant sections.** The docs are split at their headings into sections of about 1,200 characters, and ranked against the question by keyword relevance (BM25). The top 4 sections go to the model. There is no embeddings API or vector store to set up, and the same question always finds the same sections.
 4. **Answer only from them.** The model is told to answer only from those excerpts, and to reply with no answer when they don't clearly cover the question. It never guesses. The question is wrapped as data that must not be followed, like every report.
-5. **Show it, or fall back.** A usable answer (up to 1,500 characters, plain text) comes back as `200 {"received": true, "answer": "…"}`, and the widget shows it as text, never as HTML. Otherwise the customer gets the usual thank-you.
+5. **Show it, or fall back.** A usable answer (up to 1,500 characters, plain text) comes back as `200 {"received": true, "answer": "…"}`, and the widget shows it as text, never as HTML. Otherwise the customer gets the usual short reply saying the question was passed to the team.
 
 Answering has its own 12-second budget, after triage's 8, so the reply still arrives before the widget stops waiting at 25 seconds.
 
