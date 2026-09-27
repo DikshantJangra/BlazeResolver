@@ -36,9 +36,44 @@ This starts the API server on port 3001 and the dashboard on [http://127.0.0.1:5
 
 Switch to the customer view from the desk's header to see the other side: a customer opens a ticket, follows the conversation, and rates the help they got.
 
+## React Components (`blazeresolver/react`)
+
+You can embed the support desk or customer portal directly in any React 18+ application:
+
+```tsx
+import { AdminSupportDesk, CustomerSupportPortal } from 'blazeresolver/react';
+
+// Embed the Admin Support Desk with live WebSocket telemetry:
+export function SupportAdmin() {
+  return (
+    <AdminSupportDesk
+      apiBase="http://localhost:3001"
+      wsUrl="ws://localhost:3001"
+      pollIntervalMs={3000}
+    />
+  );
+}
+
+// Embed the Customer Support Portal:
+export function SupportPortal() {
+  return (
+    <CustomerSupportPortal
+      apiBase="http://localhost:3001"
+      currentCustomerId="cust_123"
+      currentCustomerName="Alex Smith"
+      currentCustomerEmail="alex@example.com"
+      pollIntervalMs={3000}
+    />
+  );
+}
+```
+
+Both components connect to the backend API and listen for live ticket updates, status changes, and message broadcasts via WebSocket telemetry.
+
 ## Limits
 
-- **In memory.** Restarting the server discards every ticket, message and rating.
-- **Demo data.** It starts with sample tickets from a food-delivery example (outlets, orders, amounts in rupees). The data model follows that example.
-- **No authentication** on the support routes (`/api/support/…`). Anyone who can reach port 3001 can list, change and close tickets, including customers' names, emails and phone numbers.
-- **Not connected to GitHub.** Tickets here don't become issues. For bug reports that turn into pull requests, use the [widget and endpoint](/docs/quickstart).
+- **In memory.** The default development store keeps tickets, messages, and ratings in memory for local testing.
+- **Purely dynamic.** Tickets are generated and managed dynamically as customers report issues or agents respond; no static mock seeds required.
+- **No authentication** on local development support routes (`/api/support/…`). Add authentication middleware before deploying in production.
+- **Not connected to GitHub by default.** Support desk conversations live in the support store. For customer bug reports that automatically turn into GitHub issues and reviewed pull requests, use the [widget and endpoint](/docs/quickstart).
+

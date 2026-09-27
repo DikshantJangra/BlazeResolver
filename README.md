@@ -71,7 +71,22 @@ Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo), paste any
 
 ### The widget
 
-A small light panel (about 14 KB gzipped) in a shadow DOM, so it never clashes with your styles: a text box and a Send button, a bottom sheet on phones, and unsent drafts kept. It attaches the page address and recent JavaScript errors (the reporter can untick that). Script-tag attributes: `data-accent="#6d28d9"`, `data-position="left"`, `data-title`, `data-user-id`, `data-user-email`, `data-ask-email="true"` (with `BLAZE_NOTIFY_CUSTOMERS=true`), and `data-launcher="false"` to hide the floating button. Open it from your own UI with `<a href="#" data-blazeresolver-open>Report a bug</a>` or `BlazeResolver.open('optional text')`.
+A sleek support chat launcher and panel in an isolated shadow DOM, so it never clashes with your styles. The floating trigger is an icon button rendering the Blazyy mascot SVG (`assets/blazyy.svg`) that opens the support chat panel. On phones it adapts as a bottom sheet, keeping unsent drafts. It attaches the page address and recent JavaScript errors (the reporter can untick that). Script-tag attributes: `data-accent="#6d28d9"`, `data-position="left"`, `data-title`, `data-user-id`, `data-user-email`, `data-ask-email="true"` (with `BLAZE_NOTIFY_CUSTOMERS=true`), and `data-launcher="false"` to hide the floating button. Open it from your own UI with `<a href="#" data-blazeresolver-open>Report a bug</a>` or `BlazeResolver.open('optional text')`.
+
+### React components (`blazeresolver/react`)
+
+Drop the support desk or customer portal directly into your React 18+ application:
+
+```tsx
+import { AdminSupportDesk, CustomerSupportPortal } from 'blazeresolver/react';
+
+// Live admin support desk with real-time WebSocket telemetry:
+<AdminSupportDesk apiBase="http://localhost:3001" wsUrl="ws://localhost:3001" />
+
+// Customer self-service portal:
+<CustomerSupportPortal apiBase="http://localhost:3001" currentCustomerId="cust_123" />
+```
+
 
 ### AI providers
 
