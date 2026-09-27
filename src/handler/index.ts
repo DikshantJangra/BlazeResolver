@@ -22,6 +22,17 @@ export interface HandlerOptions {
 }
 
 const MAX_BODY = 20_000;
+/** The widget waits 25s. Triage past this falls back to keyword rules, so the report is still filed in time. */
+const TRIAGE_BUDGET_MS = 8_000;
+
+function withDeadline(complete: Complete | undefined, ms: number): Complete | undefined {
+  if (!complete) return undefined;
+  return (system, user) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('triage timed out')), ms); });
+    return Promise.race([complete(system, user), deadline]).finally(() => clearTimeout(timer));
+  };
+}
 const env = (name: string) => (globalThis as any).process?.env?.[name] as string | undefined;
 
 // ponytail: in-memory counters, per instance. Serverless instances don't share them, so this only blunts a single-source flood.
@@ -76,7 +87,7 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
     if (!parsed.success) return reply(400, { error: 'invalid report' });
     const report = parsed.data;
 
-    const verdict = await triage(report, options.complete ?? resolveComplete());
+    const verdict = await triage(report, withDeadline(options.complete ?? resolveComplete({ timeoutMs: TRIAGE_BUDGET_MS }), TRIAGE_BUDGET_MS));
     // The customer only ever gets an acknowledgement, never the verdict.
     const ack = () => reply(202, { received: true });
     if (verdict.injection || !(verdict.enterFixLoop || verdict.kind === 'feature_request')) return ack();

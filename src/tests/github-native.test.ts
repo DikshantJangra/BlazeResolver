@@ -292,3 +292,14 @@ describe('at scale', () => {
     assert.match(WORKFLOW, /github\.event\.action == 'opened' \|\| github\.event\.label\.name == 'blazeresolver'/);
   });
 });
+
+describe('audit fixes', () => {
+  it('files a report on time with keyword rules when the AI provider hangs', async () => {
+    const gh = fakeGithub();
+    const hang = () => new Promise<string>(() => {});
+    const started = Date.now();
+    const res = await createHandler({ repo: 'acme/shop', githubToken: 't', complete: hang, fetch: gh.f })(post({ message: 'checkout page crashes with an error' }, '10.0.1.1'));
+    assert.equal(res.status, 202);
+    assert.ok(Date.now() - started < 12_000);
+  });
+});

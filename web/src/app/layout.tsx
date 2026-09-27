@@ -3,10 +3,9 @@ import "./globals.css";
 import Script from 'next/script'; // blazeresolver:managed
 
 export const metadata: Metadata = {
-  title:
-    "BlazeResolver — Open-Source Autonomous Customer Support Resolution Harness",
+  title: "BlazeResolver: customer bug reports in, reviewed pull requests out",
   description:
-    "Self-hostable, adapter-driven AI customer support resolution harness. Triage customer complaints, correlate operational telemetry, enforce policy-gated money limits, and resolve over voice & chat end-to-end.",
+    "Open-source and GitHub-native. A widget in your app files customer bug reports as GitHub issues, and a workflow in your repo finds the cause, writes the fix, runs your tests and opens a pull request for your review. No server to host, any AI provider.",
   icons: {
     icon: [
       { url: "/favicon.ico" },

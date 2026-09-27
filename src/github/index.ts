@@ -37,7 +37,7 @@ function retryDelay(res: Response, attempt: number): number | undefined {
   const after = Number(res.headers.get('retry-after'));
   const secondaryLimit = res.status === 403 && (res.headers.has('retry-after') || res.headers.get('x-ratelimit-remaining') === '0');
   if (res.status !== 429 && res.status < 500 && !secondaryLimit) return undefined;
-  return Math.min(after > 0 ? after * 1000 : 500 * 2 ** attempt, 10_000);
+  return Math.min(after > 0 ? after * 1000 : 500 * 2 ** attempt, 3_000);
 }
 
 async function request(token: string, method: 'GET' | 'POST', url: string, body: unknown, f: typeof fetch): Promise<Response> {

@@ -64,16 +64,22 @@ export default function Header() {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-ds-5">
             <a
-              href="#architecture"
+              href="#how-it-works"
               className="text-sm font-medium text-white/70 hover:text-white transition-colors"
             >
-              Architecture
+              How it works
             </a>
             <a
-              href="#voice-demo"
+              href="#safety"
               className="text-sm font-medium text-white/70 hover:text-white transition-colors"
             >
-              Voice Engine
+              Safety
+            </a>
+            <a
+              href="#get-started"
+              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+            >
+              Get started
             </a>
             <a
               href="https://github.com/DikshantJangra/BlazeResolver#readme"
@@ -156,18 +162,25 @@ export default function Header() {
         </div>
         <nav className="ds-mobile-menu-body">
           <a
-            href="#architecture"
+            href="#how-it-works"
             onClick={() => setMobileMenuOpen(false)}
             className="ds-mobile-menu-item"
           >
-            Architecture
+            How it works
           </a>
           <a
-            href="#voice-demo"
+            href="#safety"
             onClick={() => setMobileMenuOpen(false)}
             className="ds-mobile-menu-item"
           >
-            Voice Engine
+            Safety
+          </a>
+          <a
+            href="#get-started"
+            onClick={() => setMobileMenuOpen(false)}
+            className="ds-mobile-menu-item"
+          >
+            Get started
           </a>
           <a
             href="https://github.com/DikshantJangra/BlazeResolver#readme"

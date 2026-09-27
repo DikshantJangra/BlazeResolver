@@ -21,7 +21,7 @@
   var script = document.currentScript || document.querySelector('script[src*="widget.js"]');
   var attr = function (name) { return (script && script.getAttribute('data-' + name)) || ''; };
   var key = attr('key');
-  var endpoint = attr('endpoint') || (script && script.src ? new URL(script.src, location.href).origin + '/api/report' : '/api/blaze');
+  var endpoint = attr('endpoint') || '/api/blaze';
   var version = attr('app-version');
   var user = { id: attr('user-id'), email: attr('user-email') };
   var title = attr('title') || 'Report a problem';
@@ -212,7 +212,7 @@
     status.textContent = '';
     refresh();
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
-    var timer = controller ? setTimeout(function () { controller.abort(); }, 15000) : 0;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, 25000) : 0;
     var settle = function () {
       clearTimeout(timer);
       sending = false;

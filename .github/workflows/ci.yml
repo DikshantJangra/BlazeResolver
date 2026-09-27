@@ -1,0 +1,37 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Widget parses
+        run: node --check widget/widget.js
+      # Every user's workflow runs blazeresolver@latest, so the published package must install and run on its own.
+      - name: Packed CLI runs
+        run: |
+          npm pack --silent --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/app" && cd "$RUNNER_TEMP/app" && npm init -y >/dev/null
+          npm install --no-audit --no-fund "$RUNNER_TEMP"/blazeresolver-*.tgz
+          npx blazeresolver --help
+          node -e "import('blazeresolver/handler').then((m) => { if (!m.createHandler) process.exit(1) })"

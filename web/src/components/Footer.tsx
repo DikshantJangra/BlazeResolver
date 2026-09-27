@@ -56,7 +56,7 @@ export default function Footer() {
 
         {/* Center: Copyright */}
         <p className="ds-text-caption text-ds-description text-center text-xs">
-          Open source · MIT · © 2026 BlazeResolver. All rights reserved.
+          Open source · Apache-2.0 · © 2026 BlazeResolver
         </p>
 
         {/* Right: Policy Links */}

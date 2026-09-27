@@ -20,21 +20,17 @@
     "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/cjs-marker.mjs"
   },
   "keywords": [
+    "github-actions",
+    "bug-reports",
     "ai-agent",
-    "customer-support",
-    "correlate-engine",
-    "guardrails",
-    "langgraph",
+    "automated-fixes",
+    "pull-requests",
     "triage",
-    "foodtech",
-    "kds",
     "blazeresolver"
   ],
   "author": "DJ",
   "license": "Apache-2.0",
   "dependencies": {
-    "@langchain/core": "^1.2.12",
-    "@langchain/langgraph": "^1.4.18",
     "@lzehrung/codegraph": "^2.3.31",
     "@modelcontextprotocol/client": "^2.1.0",
     "cors": "^2.8.5",
@@ -44,6 +40,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@langchain/core": "^1.2.12",
+    "@langchain/langgraph": "^1.4.18",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.9",
