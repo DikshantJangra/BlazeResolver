@@ -30,6 +30,12 @@ const PORT = Number(process.env.PORT) || 3001;
 app.use(cors());
 // The raw body is kept for verifying GitHub's webhook signature.
 app.use(express.json({ verify: (req, _res, buf) => void ((req as any).rawBody = buf) }));
+// A body that isn't JSON is the sender's mistake: answer 400 instead of logging a stack trace for every one, since
+// /api/report is public.
+app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if ((err as { type?: string })?.type === 'entity.parse.failed') return res.status(400).json({ error: 'invalid json' });
+  return next(err);
+});
 
 // Initialize the example business (BLAZE_EXAMPLE=restaurant | ecommerce), its adapters & the pipeline
 const example = loadExample(process.env.BLAZE_EXAMPLE);

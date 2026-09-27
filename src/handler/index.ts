@@ -1,6 +1,7 @@
 import { commentOnIssue, listOpenIssues, openIssue } from '../github/index.js';
 import { ReportSchema, resolveComplete, triage, type Complete } from '../triage/index.js';
-import { emailMarker, groupKey, keyMarker, renderIssueBody, renderReport } from './issue.js';
+import { emailMarker, groupKey, keyMarker, renderIssueBody, renderReport, symptomIn } from './issue.js';
+import { sameSymptom, symptomOf } from '../triage/grouping.js';
 
 export interface HandlerOptions {
   /** owner/name of the repo that gets the issues. */
@@ -100,7 +101,12 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
       }
 
       const key = groupKey(verdict);
-      const existing = (await listOpenIssues(token, options.repo, 'blazeresolver', f)).find((i) => i.body?.includes(keyMarker(key)));
+      const symptom = symptomOf(verdict, report.consoleErrors);
+      const existing = (await listOpenIssues(token, options.repo, 'blazeresolver', f)).find((i) => {
+        const recorded = symptomIn(i.body);
+        // Issues filed before symptom markers existed only carry the key.
+        return recorded ? sameSymptom(recorded, symptom) : !!i.body?.includes(keyMarker(key));
+      });
       if (existing) {
         await commentOnIssue(token, options.repo, existing.number, `Another customer reported this.\n\n${renderReport(report, verdict)}${email ? `\n\n${emailMarker(email)}` : ''}`, f);
       } else {

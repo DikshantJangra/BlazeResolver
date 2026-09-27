@@ -18,7 +18,8 @@ export class PromptInjectionGuard {
     /disregard\s+rules/i,
     /bypass\s+(guardrails|limits|verification)/i,
     /give\s+me\s+a\s+refund\s+of\s+\S{0,3}\s*(10000|50000|999999)/i,
-    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    // No `g` flag here: with it, .test() keeps lastIndex between calls and every second identical payload passes.
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i,
     /drop\s+table/i,
     /union\s+select/i,
     /grant\s+admin/i

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Report, Triage } from '../triage/index.js';
+import { sameSymptom, symptomOf, type Symptom } from '../triage/grouping.js';
 
 export interface ReportRecord {
   id: string;
@@ -23,6 +24,8 @@ export interface IncidentRecord {
   /** Console errors from the reports; the fix engine reads file references out of them. */
   stackTrace?: string;
   feature?: string;
+  /** How reports are matched to this incident (see triage/grouping.ts). */
+  symptom?: Symptom;
   reportIds: string[];
   status: IncidentStatus;
   prUrl?: string;
@@ -35,12 +38,12 @@ export interface IncidentRecord {
 const JOINABLE: IncidentStatus[] = ['open', 'fixing', 'pr_opened', 'needs_human'];
 
 const newId = (prefix: string) => `${prefix}_${randomBytes(5).toString('hex')}`;
-const norm = (s: string | undefined) => (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
- * Reports and incidents, two JSON files. Reports about the same feature (or with the same summary) in one project
- * share an incident, so ten customers hitting one bug produce one fix.
- * ponytail: whole-file rewrites and matching on the triage's feature/summary text; SQLite and error-signature grouping later.
+ * Reports and incidents, two JSON files. Reports of the same bug in one project (same feature, and the same error or
+ * largely the same symptom: see triage/grouping.ts) share an incident, so ten customers hitting one bug produce one fix,
+ * while two different bugs on one page get a fix each.
+ * ponytail: whole-file rewrites; SQLite later.
  */
 export class IncidentStore {
   private reportsFile: string;
@@ -78,13 +81,23 @@ export class IncidentStore {
     let isNew = false;
     if (triage.enterFixLoop) {
       const incidents = this.incidents();
-      const key = norm(triage.feature) || norm(triage.summary);
+      const symptom = symptomOf(triage, report.consoleErrors);
       incident = incidents.find(
-        (i) => i.projectId === projectId && JOINABLE.includes(i.status) && (norm(i.feature) || norm(i.title)) === key
+        (i) =>
+          i.projectId === projectId &&
+          JOINABLE.includes(i.status) &&
+          // Incidents stored before symptoms existed are matched on what they recorded.
+          sameSymptom(i.symptom ?? symptomOf({ feature: i.feature, summary: i.title }, i.stackTrace?.split('\n')), symptom)
       );
       if (incident) {
         incident.reportIds.push(record.id);
         incident.updatedAt = record.receivedAt;
+        // The first console error any report brings becomes the incident's: later reports are compared against it,
+        // and the fix engine reads file references out of it.
+        if (symptom.error && !incident.symptom?.error) {
+          incident.symptom = { ...(incident.symptom ?? symptomOf({ feature: incident.feature, summary: incident.title })), error: symptom.error };
+          incident.stackTrace ??= report.consoleErrors?.join('\n');
+        }
       } else {
         isNew = true;
         incident = {
@@ -101,6 +114,7 @@ export class IncidentStore {
           ].filter(Boolean).join('\n'),
           stackTrace: report.consoleErrors?.join('\n') || undefined,
           feature: triage.feature,
+          symptom,
           reportIds: [record.id],
           status: 'open',
           updatedAt: record.receivedAt
