@@ -17,8 +17,11 @@ concurrency:
 jobs:
   fix:
     # Only issues the BlazeResolver handler filed (label) and that someone with write access opened.
+    # Reacts to a new issue or the blazeresolver label only. Labels the job itself adds (fixing, pr-opened, ...)
+    # are skipped here, before a runner starts, so they cost no Actions minutes.
     if: >-
       github.event_name == 'issues' &&
+      (github.event.action == 'opened' || github.event.label.name == 'blazeresolver') &&
       contains(github.event.issue.labels.*.name, 'blazeresolver') &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
     runs-on: ubuntu-latest

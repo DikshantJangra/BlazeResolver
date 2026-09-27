@@ -78,6 +78,14 @@ const ENV_SECTIONS: EnvSection[] = [
       '# Recognized: Anthropic, OpenAI, Gemini, Groq, NVIDIA NIM, DeepSeek, xAI, Cerebras, Fireworks,\n' +
       '# Perplexity, OpenRouter, Hugging Face, Zhipu, GitHub Models. Keys that look like nothing in particular\n' +
       '# (Mistral, Together, Cohere, ...) go in a named variable instead, e.g. MISTRAL_API_KEY=...\n' +
+      '# Get a key (free tiers marked *):\n' +
+      '#   Groq*        https://console.groq.com/keys\n' +
+      '#   Gemini*      https://aistudio.google.com/apikey\n' +
+      '#   NVIDIA NIM*  https://build.nvidia.com\n' +
+      '#   OpenRouter*  https://openrouter.ai/keys\n' +
+      '#   Anthropic    https://console.anthropic.com/settings/keys\n' +
+      '#   OpenAI       https://platform.openai.com/api-keys\n' +
+      '#   DeepSeek     https://platform.deepseek.com/api_keys\n' +
       '# Check what was recognized: npx blazeresolver providers\n' +
       '# Optional: BLAZE_MODEL=<model>, BLAZE_PROVIDER=<name> to pin one, OLLAMA_BASE_URL for a local\n' +
       '# Ollama, AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_DEPLOYMENT for Azure OpenAI.',

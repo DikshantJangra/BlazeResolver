@@ -11,6 +11,11 @@ export interface HandlerOptions {
   complete?: Complete;
   /** Keep the customer's email in the issue so they can be told when it's fixed. Only for private repos. */
   storeEmails?: boolean;
+  /**
+   * Reports accepted per IP every 10 minutes, and in total per hour, per server instance. Defaults 10 and 100
+   * (BLAZE_RATE_LIMIT_PER_HOUR overrides the total). GitHub caps content creation at about 500 per hour per token.
+   */
+  rateLimit?: { perIp?: number; perHour?: number };
   /** Set when the widget runs on a different origin than the handler. */
   allowOrigin?: string;
   fetch?: typeof fetch;
@@ -21,8 +26,14 @@ const env = (name: string) => (globalThis as any).process?.env?.[name] as string
 
 // ponytail: in-memory counters, per instance. Serverless instances don't share them, so this only blunts a single-source flood.
 const hits = new Map<string, number[]>();
+let lastSweep = 0;
 function limited(id: string, max: number, windowMs: number): boolean {
   const now = Date.now();
+  // Drop idle clients now and then, so a long-running server's memory doesn't grow with every IP it has ever seen.
+  if (now - lastSweep > 600_000 || hits.size > 50_000) {
+    lastSweep = now;
+    for (const [key, times] of hits) if (now - times[times.length - 1] > 3_600_000) hits.delete(key);
+  }
   const recent = (hits.get(id) ?? []).filter((t) => now - t < windowMs);
   recent.push(now);
   hits.set(id, recent);
@@ -38,6 +49,8 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
   const token = options.githubToken ?? env('BLAZE_GITHUB_TOKEN');
   const f = options.fetch ?? fetch;
   const storeEmails = options.storeEmails ?? env('BLAZE_NOTIFY_CUSTOMERS') === 'true';
+  const perIp = options.rateLimit?.perIp ?? 10;
+  const perHour = options.rateLimit?.perHour ?? (Number(env('BLAZE_RATE_LIMIT_PER_HOUR')) || 100);
   const cors: Record<string, string> = options.allowOrigin
     ? { 'access-control-allow-origin': options.allowOrigin, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' }
     : {};
@@ -50,7 +63,7 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
     if (!token) return reply(500, { error: 'BLAZE_GITHUB_TOKEN is not set' });
 
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'unknown';
-    if (limited(`ip:${ip}`, 10, 600_000) || limited('all', 100, 3_600_000)) return reply(429, { error: 'rate limit' });
+    if (limited(`ip:${ip}`, perIp, 600_000) || limited('all', perHour, 3_600_000)) return reply(429, { error: 'rate limit' });
 
     const text = await req.text();
     if (text.length > MAX_BODY) return reply(413, { error: 'too large' });
@@ -86,7 +99,9 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
         );
       }
       return ack();
-    } catch {
+    } catch (err) {
+      // Loud on purpose: an expired token or a GitHub limit would otherwise drop every report without a trace.
+      console.error(`[blazeresolver] could not file a report in ${options.repo}: ${err instanceof Error ? err.message : err}`);
       return reply(502, { error: 'could not file the report' });
     }
   };
