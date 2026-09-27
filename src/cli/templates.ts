@@ -226,11 +226,12 @@ export const OPTIONS = handler;
 `;
 
 /** Next.js App Router support catch-all route handler for /api/support/[...slug]. */
-export const supportRouteFile = () => `import { createSupportHandler } from 'blazeresolver/support';
+export const supportRouteFile = (repo: string) => `import { createSupportHandler } from 'blazeresolver/support';
 
 // Handles Customer Support Portal & Admin Support Desk API endpoints (tickets, chat, RAG triage, HITL actions).
+// Blazzy answers customers from this repo's README, any helpDocs you add, and the desk's saved replies.
 // Added by \`npx blazeresolver init\`; remove with \`npx blazeresolver remove\`.
-const handler = createSupportHandler();
+const handler = createSupportHandler({ repo: '${repo}' });
 
 export const maxDuration = 60;
 
@@ -250,10 +251,11 @@ export default nodeHandler(createHandler({ repo: '${repo}' }));
 `;
 
 /** Next.js Pages Router support catch-all API route (/pages/api/support/[...slug].ts). */
-export const supportPagesFile = () => `import { createSupportHandler } from 'blazeresolver/support';
+export const supportPagesFile = (repo: string) => `import { createSupportHandler } from 'blazeresolver/support';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-const webHandler = createSupportHandler();
+// Blazzy answers customers from this repo's README, any helpDocs you add, and the desk's saved replies.
+const webHandler = createSupportHandler({ repo: '${repo}' });
 
 export default async function handler(req: any, res: any) {
   const protocol = req.headers['x-forwarded-proto'] || 'http';
@@ -301,13 +303,13 @@ module.exports = nodeHandler(${config});
 `;
 };
 
-export const supportExpressRouterFile = (style: ModuleStyle) => {
+export const supportExpressRouterFile = (repo: string, style: ModuleStyle) => {
   const head = `// Support portal & desk API router. Added by \`npx blazeresolver init\`.
 `;
   return style === 'esm'
     ? `${head}import { createSupportHandler } from 'blazeresolver/support';
 
-const webHandler = createSupportHandler();
+const webHandler = createSupportHandler({ repo: '${repo}' });
 
 export default async function supportRouter(req, res) {
   const protocol = req.protocol || 'http';
@@ -333,7 +335,7 @@ export default async function supportRouter(req, res) {
 `
     : `${head}const { createSupportHandler } = require('blazeresolver/support');
 
-const webHandler = createSupportHandler();
+const webHandler = createSupportHandler({ repo: '${repo}' });
 
 module.exports = async function supportRouter(req, res) {
   const protocol = req.protocol || 'http';

@@ -1,6 +1,7 @@
 import type { Complete, Report, Triage } from '../triage/index.js';
 import { getReadme } from '../github/index.js';
-import { retrieve } from './retrieve.js';
+import { search } from './retrieve.js';
+import type { Embedder } from './embed.js';
 
 export interface AnswerOptions {
   /** The model. Without one, questions get no answer, only the acknowledgement. */
@@ -9,6 +10,8 @@ export interface AnswerOptions {
   helpDocs?: string;
   /** The GitHub repo whose README is the main source of answers. */
   readme?: { repo: string; token?: string; fetch?: typeof fetch };
+  /** Adds semantic search to keyword search. Without one, sections are found by keywords alone. */
+  embedder?: Embedder;
 }
 
 /** The most help docs a project can register. Only the sections that match a question go into the prompt. */
@@ -37,22 +40,27 @@ async function cachedReadme({ repo, token, fetch: f }: NonNullable<AnswerOptions
   return text;
 }
 
+/** The docs to answer from: the extra help docs, then the README. Empty when there are none. */
+export async function loadDocs(options: Pick<AnswerOptions, 'helpDocs' | 'readme'>): Promise<string> {
+  const readme = options.readme ? await cachedReadme(options.readme) : undefined;
+  return [options.helpDocs, readme].filter(Boolean).join('\n\n').trim();
+}
+
 /** Strips a tag's closing form so text can't end the block it sits in. */
 const fence = (text: string, tag: string) => text.replace(new RegExp(`</\\s*${tag}\\s*>`, 'gi'), '');
 
 /**
  * An answer to a customer's how-to question, from the sections of the project's README (and any extra help docs)
- * that match it (RAG).
+ * that match it (RAG: keyword search, plus semantic search when an embedder is given).
  * Undefined when the report isn't a question, nothing is configured, no section matches, the model finds no answer
  * in them, or the model fails; the customer then gets the usual acknowledgement and the question stays with a human.
  */
 export async function answerQuestion(report: Report, verdict: Triage, options: AnswerOptions): Promise<string | undefined> {
   if (verdict.kind !== 'how_to' || verdict.injection || !options.complete) return undefined;
-  const readme = options.readme ? await cachedReadme(options.readme) : undefined;
-  const docs = [options.helpDocs, readme].filter(Boolean).join('\n\n').trim();
+  const docs = await loadDocs(options);
   if (!docs) return undefined;
 
-  const sections = retrieve(docs, report.message);
+  const sections = await search(docs, report.message, { embedder: options.embedder });
   if (!sections.length) return undefined;
   const excerpts = sections
     .map((s) => `${s.headings.length ? `[${s.headings.join(' > ')}]\n` : ''}${s.text}`)

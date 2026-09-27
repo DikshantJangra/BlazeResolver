@@ -19,7 +19,8 @@ import { IncidentStore, type IncidentRecord } from './incidents/index.js';
 import { ClaudeProvider } from './resolver/claude-provider.js';
 import { lockDownServerFiles, resolveFixSandbox, runFix } from './jobs/fix.js';
 import { REPO_PATTERN } from './github/index.js';
-import { MAX_HELP_DOCS, answerQuestion } from './answer/index.js';
+import { MAX_HELP_DOCS, answerQuestion, replyToCustomer } from './answer/index.js';
+import { resolveEmbedder } from './answer/embed.js';
 import { retrieve, type Chunk } from './answer/retrieve.js';
 import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -169,6 +170,9 @@ app.post('/api/projects', (req, res) => {
 
 // The widget waits 25 seconds, and triage has already used some of them.
 const answerComplete = resolveComplete({ timeoutMs: 12_000 });
+const replyComplete = resolveComplete({ timeoutMs: 6_000 });
+// Semantic search over help docs, when a provider with embeddings is configured.
+const embedder = resolveEmbedder();
 
 app.post('/api/report', async (req, res) => {
   const project = registry.verify(req.header('x-blaze-key'));
@@ -181,14 +185,17 @@ app.post('/api/report', async (req, res) => {
   const { incident, isNew } = store.addReport(project.id, parsed.data, result);
   if (incident && isNew && fixEnabled) enqueueFix(project, incident);
   broadcastLiveEvent('report_triaged', { projectId: project.id, triage: result }, 'admins');
-  // A how-to question gets an answer from the project's README and help docs. Otherwise the customer only gets an
-  // acknowledgement, never the triage verdict.
+  // A how-to question gets an answer from the project's README and help docs. Everything else gets a short reply to
+  // what they said, never the triage verdict; a model that just failed triage isn't waited on again.
   const answer = await answerQuestion(parsed.data, result, {
     complete: answerComplete,
     helpDocs: project.helpDocs,
-    readme: { repo: project.repo, token: githubToken }
+    readme: { repo: project.repo, token: githubToken },
+    embedder
   });
-  return answer ? res.status(200).json({ received: true, answer }) : res.status(202).json({ received: true });
+  if (answer) return res.status(200).json({ received: true, answer });
+  const reply = await replyToCustomer(parsed.data, result, { complete: result.source === 'llm' ? replyComplete : undefined });
+  return res.status(202).json({ received: true, reply });
 });
 
 app.get('/api/reports', (req, res) =>
@@ -1112,5 +1119,6 @@ server.listen(PORT, () => {
   console.log(`🎙️ Voice WebSocket Bridge listening on ws://localhost:${PORT}/ws`);
   const ai = describeProviders();
   console.log(`🤖 AI providers, in failover order:${ai.length ? ai.map((l) => `\n   ${l}`).join('') : ' none (triage uses keyword rules)'}`);
+  console.log(`🔎 Help-doc search: ${embedder ? `keywords + semantic (${embedder.id})` : 'keywords only (no embeddings provider configured)'}`);
   console.log(`⚡ Ready to triage, correlate, resolve, and respond!\n`);
 });

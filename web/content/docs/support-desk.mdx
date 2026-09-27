@@ -36,6 +36,28 @@ This starts the API server on port 3001 and the dashboard on [http://127.0.0.1:5
 
 Switch to the customer view from the desk's header to see the other side: a customer opens a ticket, follows the conversation, and rates the help they got.
 
+## How Blazzy answers
+
+`createSupportHandler` (from `blazeresolver/support`) answers every customer message, including the one that opens a ticket, before it responds, so the next fetch of the thread already has the reply. It stops answering once the customer asks for a person or an agent takes over.
+
+The reply is written by your [AI provider](/docs/setup/ai-providers) from the knowledge that best matches the message (RAG), plus the last few messages of the conversation:
+
+- **Your README**, when you pass `repo` (`init` does). A private repo needs `githubToken` or `BLAZE_GITHUB_TOKEN`.
+- **`helpDocs`**, any Markdown or plain text you pass.
+- **The desk's saved replies**, including ones agents add or edit.
+
+The same [keyword plus semantic search](/docs/setup/help-answers#semantic-search) as the report endpoint finds the matching sections. Blazzy is told to state only facts from them, and never to claim a refund, credit or other action was done. Without an AI provider, or if it fails, the customer gets the best-matching saved reply instead. **Draft reply** and **Re-diagnose** in the desk search the same knowledge.
+
+```ts title="app/api/support/[...slug]/route.ts"
+import { readFileSync } from 'node:fs';
+import { createSupportHandler } from 'blazeresolver/support';
+
+const handler = createSupportHandler({
+  repo: 'acme/shop',
+  helpDocs: readFileSync('docs/help.md', 'utf8'),
+});
+```
+
 ## React Components (`blazeresolver/react`)
 
 You can embed the support desk or customer portal directly in any React 18+ application:

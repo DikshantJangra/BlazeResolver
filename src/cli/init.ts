@@ -225,10 +225,10 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
       const ext = usesTypeScript(root, pkg) ? 'ts' : 'js';
       if (next.kind === 'app') {
         createFile(`${next.dir}/api/blaze/route.${ext}`, routeFile(repo!));
-        createFile(`${next.dir}/api/support/[...slug]/route.${ext}`, supportRouteFile());
+        createFile(`${next.dir}/api/support/[...slug]/route.${ext}`, supportRouteFile(repo!));
       } else {
         createFile(`${next.dir}/api/blaze.${ext}`, pagesFile(repo!));
-        createFile(`${next.dir}/api/support/[...slug].${ext}`, supportPagesFile());
+        createFile(`${next.dir}/api/support/[...slug].${ext}`, supportPagesFile(repo!));
       }
       addEnvExample(pkg);
       return;

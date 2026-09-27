@@ -161,7 +161,7 @@ describe('handler: questions get answers, everything else an acknowledgement', (
     system.includes('You triage')
       ? JSON.stringify({ kind: 'how_to', severity: 'low', summary: 'Export question' })
       : '{"answer": "Open Settings, then Export."}';
-  const handler = createHandler({ repo: 'acme/notes-8', githubToken: 'tok', complete, fetch: gh.f });
+  const handler = createHandler({ repo: 'acme/notes-8', githubToken: 'tok', embed: false, complete, fetch: gh.f });
   const post = (message: string) =>
     handler(new Request('http://x/api/report', { method: 'POST', headers: { 'x-forwarded-for': '203.0.113.1' }, body: JSON.stringify({ message }) }));
 
@@ -194,7 +194,7 @@ describe('replies to everything that is not answered from the docs', () => {
       system.includes('You triage')
         ? JSON.stringify({ kind: 'other', severity: 'low', summary: 'Praise' })
         : '{"reply": "Thank you, that means a lot!"}';
-    const handler = createHandler({ repo: 'acme/notes-9', githubToken: 'tok', complete, fetch: readmeServer().f });
+    const handler = createHandler({ repo: 'acme/notes-9', githubToken: 'tok', embed: false, complete, fetch: readmeServer().f });
     const res = await handler(new Request('http://x/api/report', { method: 'POST', headers: { 'x-forwarded-for': '203.0.113.2' }, body: JSON.stringify({ message: 'love the new editor' }) }));
     assert.equal(res.status, 202);
     assert.deepEqual(await res.json(), { received: true, reply: 'Thank you, that means a lot!' });

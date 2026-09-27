@@ -27,6 +27,7 @@ const handler = createHandler({
     githubToken: { type: 'string', description: 'Token with Issues: write on that one repo.', default: 'process.env.BLAZE_GITHUB_TOKEN' },
     complete: { type: '(system: string, user: string) => Promise<string>', description: 'Your own model call, used for triage and for answering questions. Default: whichever provider has a key in the environment; without one, keyword rules decide and questions get no answer.' },
     helpDocs: { type: 'string', description: "Extra help docs (Markdown or plain text), searched with the repo's README to answer how-to questions. Up to 90,000 characters in total. See Answer questions from your docs." },
+    embed: { type: 'Embedder | false', description: 'Semantic search over the docs, alongside keyword search. An embedder from resolveEmbedder, or your own { id, embed(texts, kind) }. false keeps search keyword-only.', default: 'the first provider with embeddings that has a key configured' },
     storeEmails: { type: 'boolean', description: "Keep the reporter's email in the issue, for fix notifications. Private repos only.", default: "process.env.BLAZE_NOTIFY_CUSTOMERS === 'true'" },
     rateLimit: { type: '{ perIp?: number; perHour?: number }', description: 'Reports accepted per IP every 10 minutes, and in total per hour, per instance.', default: '{ perIp: 10, perHour: 100 }' },
     allowOrigin: { type: 'string', description: 'Sends CORS headers and answers preflights for this origin (or "*"). Set it when the widget runs on another origin.' },

@@ -3,6 +3,8 @@ import { ReportSchema, resolveComplete, triage, type Complete } from '../triage/
 import { emailMarker, groupKey, keyMarker, renderIssueBody, renderReport, symptomIn } from './issue.js';
 import { sameSymptom, symptomOf } from '../triage/grouping.js';
 import { answerQuestion, replyToCustomer } from '../answer/index.js';
+import { resolveEmbedder, type Embedder } from '../answer/embed.js';
+export { resolveEmbedder, type Embedder, type EmbedKind } from '../answer/embed.js';
 
 export interface HandlerOptions {
   /** owner/name of the repo that gets the issues. */
@@ -13,6 +15,11 @@ export interface HandlerOptions {
   complete?: Complete;
   /** Extra help docs, searched along with the repo's README when answering customer questions. */
   helpDocs?: string;
+  /**
+   * Semantic search over the docs, alongside keyword search. Defaults to whichever provider with embeddings has a key
+   * configured (see `resolveEmbedder`); `false` keeps search keyword-only.
+   */
+  embed?: Embedder | false;
   /** Keep the customer's email in the issue so they can be told when it's fixed. Only for private repos. */
   storeEmails?: boolean;
   /**
@@ -69,6 +76,7 @@ function limited(id: string, max: number, windowMs: number): boolean {
 export function createHandler(options: HandlerOptions): (req: Request) => Promise<Response> {
   const token = options.githubToken ?? env('BLAZE_GITHUB_TOKEN');
   const f = options.fetch ?? fetch;
+  const embedder = options.embed === false ? undefined : (options.embed ?? resolveEmbedder());
   const storeEmails = options.storeEmails ?? env('BLAZE_NOTIFY_CUSTOMERS') === 'true';
   const perIp = options.rateLimit?.perIp ?? 10;
   const perHour = options.rateLimit?.perHour ?? (Number(env('BLAZE_RATE_LIMIT_PER_HOUR')) || 100);
@@ -102,7 +110,8 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
     const answer = await answerQuestion(report, verdict, {
       complete: withDeadline(options.complete ?? resolveComplete({ timeoutMs: ANSWER_BUDGET_MS }), ANSWER_BUDGET_MS),
       helpDocs: options.helpDocs,
-      readme: { repo: options.repo, token, fetch: f }
+      readme: { repo: options.repo, token, fetch: f },
+      embedder
     });
     if (answer) return reply(200, { received: true, answer });
     // Everything else gets a short acknowledgement of what they said, never the verdict. It's written while the

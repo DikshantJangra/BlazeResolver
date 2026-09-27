@@ -18,7 +18,7 @@ describe('createSupportHandler Web standard handler', () => {
 
   test('creates customer ticket on POST /api/support/tickets/create', async () => {
     const store = new SupportStore();
-    const handler = createSupportHandler({ store, complete: async () => '{"reply": "Sorry about the garlic bread!"}' });
+    const handler = createSupportHandler({ store, embed: false, complete: async () => '{"reply": "Sorry about the garlic bread!"}' });
 
     const req = new Request('http://localhost:3000/api/support/tickets/create', {
       method: 'POST',
@@ -50,7 +50,7 @@ describe('createSupportHandler Web standard handler', () => {
   test('answers every customer message with the model, given the thread so far', async () => {
     const store = new SupportStore();
     const prompts: string[] = [];
-    const handler = createSupportHandler({ store, complete: async (_system, user) => (prompts.push(user), `{"reply": "reply ${prompts.length}"}`) });
+    const handler = createSupportHandler({ store, embed: false, complete: async (_system, user) => (prompts.push(user), `{"reply": "reply ${prompts.length}"}`) });
     const id = await createTicket(handler, 'The app logs me out every few minutes');
 
     const res = await say(handler, id, 'Is there any update?');
@@ -62,7 +62,7 @@ describe('createSupportHandler Web standard handler', () => {
 
   test('still replies when the model fails, and stays quiet once a human has taken over', async () => {
     const store = new SupportStore();
-    const handler = createSupportHandler({ store, complete: async () => { throw new Error('provider down'); } });
+    const handler = createSupportHandler({ store, embed: false, complete: async () => { throw new Error('provider down'); } });
     const id = await createTicket(handler, 'Where is my order?');
     assert.equal(store.getMessages(id).at(-1)?.senderType, 'bot');
 

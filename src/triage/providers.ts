@@ -455,6 +455,16 @@ export function resolveApiKeys(prefix: string, env: Env = process.env): string[]
   return [...new Set([...own, ...universal])];
 }
 
+/**
+ * Keys that certainly belong to one provider: its own variables, plus universal keys whose format says they're its.
+ * Unlike resolveApiKeys, a universal key of unknown format is never included, so no key is sent anywhere on a guess.
+ */
+export function providerKeys(name: string, env: Env = process.env): string[] {
+  const def = BY_NAME.get(name);
+  if (!def) return [];
+  return [...new Set([...namedKeys(def, env), ...universalKeys(env).filter((k) => identifyKey(k) === name)])];
+}
+
 function acceptsModel(def: ProviderDef, model: string, forced: boolean): boolean {
   if (forced || def.serves?.test(model)) return true;
   return !def.vendorOnly && !PROPRIETARY.test(model);

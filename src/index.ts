@@ -12,6 +12,10 @@ export { triage, ReportSchema, KINDS } from './triage/index.js';
 export type { Report, Triage, Kind } from './triage/index.js';
 export { resolveComplete, describeProviders, identifyKey, listProviders, ProviderError } from './triage/providers.js';
 export type { Complete } from './triage/providers.js';
+export { resolveEmbedder, listEmbedProviders } from './answer/embed.js';
+export type { Embedder, EmbedKind, EmbedOptions } from './answer/embed.js';
+export { retrieve, search } from './answer/retrieve.js';
+export type { Chunk, SearchOptions } from './answer/retrieve.js';
 
 // The fix engine: investigate an incident, patch it in an isolated workspace, run the tests and build, open a PR.
 export { runFix } from './jobs/fix.js';

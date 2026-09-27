@@ -11,6 +11,7 @@ import { runInit } from './init.js';
 import { runNotifyCommand } from './notify.js';
 import { runRemove } from './remove.js';
 import { describeProviders } from '../triage/providers.js';
+import { resolveEmbedder } from '../answer/embed.js';
 import { engineVersion } from '../version.js';
 
 const HELP = `blazeresolver: turn customer bug reports into reviewed GitHub pull requests
@@ -178,6 +179,8 @@ try {
     (await import('dotenv')).config({ quiet: true });
     const lines = describeProviders();
     console.log(lines.length ? lines.map((l, i) => `${i + 1}. ${l}`).join('\n') : 'No AI keys found. Put any provider key in .env as API_KEYS=...');
+    const embedder = resolveEmbedder();
+    console.log(`\nHelp-doc search: ${embedder ? `keywords + semantic (${embedder.id})` : 'keywords only. For semantic search too, add a key for a provider with embeddings (OpenAI, Voyage, Gemini, Mistral, Cohere) or set BLAZE_EMBED_BASE_URL.'}`);
   } else if (command === 'fix') {
     console.log(await runFixCommand({ env: process.env, config: config() }));
   } else if (command === 'notify') {
