@@ -1,0 +1,151 @@
+---
+title: Workflow
+description: The GitHub Actions workflow that init writes, line by line.
+---
+
+`init` writes `.github/workflows/blazeresolver.yml` at the repo root. It has two jobs: `fix` (on a new or labelled issue) and `notify` (on a merged fix PR).
+
+```yaml title=".github/workflows/blazeresolver.yml"
+name: BlazeResolver
+on:
+  issues:
+    types: [opened, labeled]
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blazeresolver-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    # Only issues the BlazeResolver handler filed (label) and that someone with write access opened.
+    # Reacts to a new issue or the blazeresolver label only. Labels the job itself adds (fixing, pr-opened, ...)
+    # are skipped here, before a runner starts, so they cost no Actions minutes.
+    if: >-
+      github.event_name == 'issues' &&
+      (github.event.action == 'opened' || github.event.label.name == 'blazeresolver') &&
+      contains(github.event.issue.labels.*.name, 'blazeresolver') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: npx --yes blazeresolver@latest fix
+        env:
+          # Any provider's key(s), comma-separated; each key's provider is recognized from the key itself,
+          # and several give automatic failover. `gh secret set API_KEYS`
+          API_KEYS: ${{ secrets.API_KEYS }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BLAZE_PROVIDER: ${{ vars.BLAZE_PROVIDER }}
+          BLAZE_MODEL: ${{ vars.BLAZE_MODEL }}
+          # Use a personal access token here (secret BLAZE_GITHUB_TOKEN) if you want CI to run on the PRs it opens,
+          # or run `npx blazeresolver app` to use a GitHub App instead.
+          GITHUB_TOKEN: ${{ secrets.BLAZE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+
+  notify:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'blazeresolver/fix-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: npx --yes blazeresolver@latest notify
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          BLAZE_FROM_EMAIL: ${{ secrets.BLAZE_FROM_EMAIL }}
+```
+
+## Triggers
+
+| Event | Job | Condition |
+| :--- | :--- | :--- |
+| `issues: opened` | `fix` | The issue has the `blazeresolver` label |
+| `issues: labeled` | `fix` | The label just added is `blazeresolver` |
+| `pull_request: closed` | `notify` | The PR was merged, and its branch starts with `blazeresolver/fix-` |
+
+The `fix` job also requires the issue author to be an `OWNER`, `MEMBER` or `COLLABORATOR`. Labels the job adds itself (`blazeresolver:fixing` and so on) never match, so they're filtered out before a runner starts and cost no Actions minutes.
+
+## Permissions
+
+The workflow defaults to `contents: read`. Each job asks for only what it needs:
+
+- `fix`: `contents`, `pull-requests` and `issues: write`, to push its branch, open the PR and label the issue. With a GitHub App, this drops to `contents: read`, and the App token does the writing.
+- `notify`: `issues: write` to comment the notification count. Everything else is read-only.
+
+`persist-credentials: false` on checkout keeps the workflow token out of the clone's git config.
+
+## Concurrency
+
+One run per issue or PR number at a time (`cancel-in-progress: false`). A second trigger for the same issue waits, then exits early because the issue already has a `blazeresolver:*` status label.
+
+## Environment
+
+| Variable | From | Purpose |
+| :--- | :--- | :--- |
+| `API_KEYS` | Secret | AI keys, any provider. See [AI providers](/docs/setup/ai-providers). |
+| `ANTHROPIC_API_KEY` | Secret | Optional named Anthropic key |
+| `BLAZE_PROVIDER` | Repo variable | Optional: pin one provider |
+| `BLAZE_MODEL` | Repo variable | Optional: override the model |
+| `GITHUB_TOKEN` | App token, `BLAZE_GITHUB_TOKEN` secret, or built-in | Push, open the PR, and label and comment |
+| `RESEND_API_KEY`, `BLAZE_FROM_EMAIL` | Secrets | `notify` only. See [Customer notifications](/docs/setup/notifications). |
+
+To use a provider through a named variable (for example `MISTRAL_API_KEY`), add it as a secret and add a line for it under the `fix` job's `env:`.
+
+## With a GitHub App
+
+`init --app` (or [`blazeresolver app`](/docs/setup/github-app)) writes this variant of the `fix` job. The built-in token drops to read-only, and a first step mints the App token:
+
+```yaml
+    permissions:
+      contents: read
+    steps:
+      - name: GitHub App token
+        id: app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.BLAZE_APP_ID }}
+          private-key: ${{ secrets.BLAZE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      # ...checkout and setup-node as above...
+      - run: npx --yes blazeresolver@latest fix
+        env:
+          # ...AI keys as above...
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+```
+
+## Customizing
+
+You can edit the workflow. Common changes:
+
+- **More setup** before `fix`, such as a different Node version, a service container your tests need, or `pnpm` via `corepack`. The test and build commands themselves come from `blazeresolver.config.json`.
+- **Named AI keys**, as described above.
+- **A bigger runner** for slow test suites, by changing `runs-on`.
+
+Two things to know: `blazeresolver app` only switches the workflow to the App token automatically if the file is exactly what `init` wrote. And `init --force` regenerates it, overwriting your edits.

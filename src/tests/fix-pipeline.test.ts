@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { IncidentStore } from '../incidents/index.js';
+import { groupKey } from '../handler/issue.js';
 import { triage, type Report } from '../triage/index.js';
 import { ClaudeProvider } from '../resolver/claude-provider.js';
 import type { AIProvider } from '../resolver/ai-provider.js';
@@ -43,34 +43,18 @@ function bareRemote() {
 const project = { repo: 'acme/shop', defaultBranch: 'main', testCommand: CHECKOUT_TEST_COMMAND, buildCommand: CHECKOUT_BUILD_COMMAND };
 
 describe('incident grouping', () => {
-  it('turns duplicate bug reports into one incident and keeps non-bugs out', async () => {
-    const store = new IncidentStore(tmp());
-    const bug = (message: string): Report => ({ message });
+  it('gives duplicate bug reports the same key, so they land on one issue', async () => {
     const verdict = (feature: string) =>
-      triage(bug('checkout crashes with an error'), async () => JSON.stringify({ kind: 'bug', severity: 'high', summary: 'Checkout crashes', feature }));
-
-    const first = store.addReport('prj_1', bug('a'), await verdict('Checkout'));
-    const second = store.addReport('prj_1', bug('b'), await verdict('checkout '));
-    const other = store.addReport('prj_2', bug('c'), await verdict('Checkout'));
-    const question = store.addReport('prj_1', bug('d'), await triage({ message: 'How do I export?' }, undefined));
-
-    assert.equal(first.isNew, true);
-    assert.equal(second.isNew, false);
-    assert.equal(second.incident!.id, first.incident!.id);
-    assert.equal(store.incident(first.incident!.id)!.reportIds.length, 2);
-    assert.notEqual(other.incident!.id, first.incident!.id);
-    assert.equal(question.incident, undefined);
-    assert.equal(store.reports().length, 4);
+      triage({ message: 'checkout crashes with an error' }, async () => JSON.stringify({ kind: 'bug', severity: 'high', summary: 'Checkout crashes', feature }));
+    assert.equal(groupKey(await verdict('Checkout')), groupKey(await verdict('checkout ')));
+    assert.notEqual(groupKey(await verdict('Checkout')), groupKey(await verdict('Login')));
   });
-});
 
-describe('grouping without a model', () => {
-  it('groups rule-triaged bugs from the same page into one incident', async () => {
-    const store = new IncidentStore(tmp());
+  it('groups rule-triaged bugs from the same page without a model', async () => {
     const at = (message: string): Report => ({ message, pageUrl: 'https://shop.test/checkout?x=1' });
-    const a = store.addReport('p', at('checkout crashes with an error'), await triage(at('checkout crashes with an error'), undefined));
-    const b = store.addReport('p', at('page is broken, error shown'), await triage(at('page is broken, error shown'), undefined));
-    assert.equal(b.incident!.id, a.incident!.id);
+    const a = await triage(at('checkout crashes with an error'), undefined);
+    const b = await triage(at('page is broken, error shown'), undefined);
+    assert.equal(groupKey(a), groupKey(b));
   });
 });
 

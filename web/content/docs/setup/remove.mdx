@@ -1,0 +1,39 @@
+---
+title: Remove BlazeResolver
+description: Undo init exactly, without touching your own code.
+---
+
+```bash
+npx blazeresolver remove
+```
+
+`remove` reads the record of changes that `init` kept in `blazeresolver.config.json` and undoes exactly those changes:
+
+| What init did | What remove does |
+| :--- | :--- |
+| Created files (workflow, endpoint route, Express file) | Deletes them, and any folders left empty. A file that no longer mentions BlazeResolver (you replaced it) is **kept**, and reported. |
+| Added marked lines to your files (`layout.tsx`, `index.html`, the Express entry, `.env.example`) | Removes only the lines marked `blazeresolver:managed` |
+| Created or appended to `.env` | Takes back exactly the text it added, and deletes the file if `init` created it and nothing else is in it. Once you've filled in a value, the file is left alone and you're told to delete `API_KEYS` and `BLAZE_GITHUB_TOKEN` yourself. |
+| Appended to `.github/CODEOWNERS` (via `harden`) | Removes exactly that block |
+| Set `BLAZE_APP_ID` / `BLAZE_APP_PRIVATE_KEY` (via `app`) | Deletes those repo secrets, using `gh` |
+| Installed the `blazeresolver` package | Uninstalls it with the same package manager |
+| Wrote `blazeresolver.config.json` | Deletes it |
+
+It asks for confirmation first. Your other code is never touched.
+
+## Options
+
+| Flag | Effect |
+| :--- | :--- |
+| `--yes`, `-y` | Don't ask for confirmation |
+| `--no-uninstall` | Leave the `blazeresolver` package in `package.json` |
+
+## What stays
+
+- Pull requests and comments on GitHub.
+- The branch ruleset, Actions settings and secret scanning from `harden`. These are good settings to keep, and you can change them in the repo settings.
+- The GitHub App on your account, if you created one. Delete it under **Settings → Developer settings → GitHub Apps**.
+- The `API_KEYS` and other secrets you set yourself, `BLAZE_GITHUB_TOKEN` on your backend host, and the fine-grained token itself. Delete secrets with `gh secret delete NAME`.
+- Issues labelled `blazeresolver` and branches named `blazeresolver/fix-*`.
+
+Setups from older versions of `init` have no record of changes. For those, `remove` finds the workflow, the Next.js route and the dependency by their known locations.

@@ -1,0 +1,4 @@
+{
+  "title": "Setup",
+  "pages": ["init", "github", "ai-providers", "report-endpoint", "widget", "github-app", "harden", "notifications", "updates", "remove"]
+}

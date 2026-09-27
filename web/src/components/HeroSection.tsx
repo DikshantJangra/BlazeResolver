@@ -12,6 +12,7 @@ import {
   FaTerminal,
 } from "react-icons/fa6";
 import { SiNpm, SiPnpm, SiBun } from "react-icons/si";
+import Link from "next/link";
 
 type InstallTab = "npm" | "pnpm" | "bun" | "widget";
 
@@ -29,40 +30,44 @@ export default function HeroSection() {
       icon: React.ReactNode;
       command: string;
       rendered: React.ReactNode;
+      /** Not verified end to end yet: shown, but can't be selected or copied. */
+      comingSoon?: boolean;
     }
   > = {
     npm: {
       label: "npx",
       icon: <SiNpm className="w-3.5 h-3.5 text-[#e05d44]" />,
-      command: "npx blazeresolver init",
+      command: "npx blazeresolver@latest init",
       rendered: (
         <>
           <span className="text-white/60">npx </span>
-          <span className="text-white font-medium">blazeresolver init</span>
+          <span className="text-white font-medium">blazeresolver@latest init</span>
         </>
       ),
     },
     pnpm: {
       label: "pnpm",
       icon: <SiPnpm className="w-3 h-3 text-[#f69220]" />,
-      command: "pnpm dlx blazeresolver init",
+      command: "pnpm dlx blazeresolver@latest init",
       rendered: (
         <>
           <span className="text-white/60">pnpm dlx </span>
-          <span className="text-white font-medium">blazeresolver init</span>
+          <span className="text-white font-medium">blazeresolver@latest init</span>
         </>
       ),
     },
     bun: {
       label: "bun",
       icon: <SiBun className="w-3 h-3 text-[#fbf0df]" />,
-      command: "bunx blazeresolver init",
+      command: "bunx blazeresolver@latest init",
       rendered: (
         <>
           <span className="text-white/60">bunx </span>
-          <span className="text-white font-medium">blazeresolver init</span>
+          <span className="text-white font-medium">blazeresolver@latest init</span>
         </>
       ),
+      // init installs with npm, pnpm or yarn only; bun projects aren't supported yet.
+      comingSoon: true,
     },
     widget: {
       label: "widget",
@@ -171,15 +176,13 @@ export default function HeroSection() {
               <FaGithub className="w-4 h-4" />
               <span>View on GitHub</span>
             </a>
-            <a
+            <Link
               className="ds-btn-secondary ds-btn-m basis-[calc(50%-0.625rem)] sm:basis-auto flex items-center justify-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
-              href="https://github.com/DikshantJangra/BlazeResolver#readme"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/docs"
             >
               <FaBook className="w-4 h-4" />
               <span>Docs</span>
-            </a>
+            </Link>
             <a
               className="ds-btn-secondary ds-btn-m basis-[calc(50%-0.625rem)] sm:basis-auto flex items-center justify-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
               href="#how-it-works"
@@ -212,19 +215,30 @@ export default function HeroSection() {
                 <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar">
                   {(["npm", "pnpm", "bun", "widget"] as InstallTab[]).map((tab) => {
                     const isActive = activeTab === tab;
+                    const soon = tabConfigs[tab].comingSoon;
                     return (
                       <button
                         key={tab}
                         type="button"
-                        onClick={() => setActiveTab(tab)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md transition-all cursor-pointer outline-none ${
-                          isActive
-                            ? "bg-white/10 text-white font-medium"
-                            : "text-white/40 hover:text-white/80 hover:bg-white/[0.03]"
+                        disabled={soon}
+                        aria-disabled={soon}
+                        title={soon ? "Coming soon" : undefined}
+                        onClick={() => !soon && setActiveTab(tab)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md transition-all outline-none ${
+                          soon
+                            ? "text-white/25 cursor-not-allowed"
+                            : isActive
+                              ? "bg-white/10 text-white font-medium cursor-pointer"
+                              : "text-white/40 hover:text-white/80 hover:bg-white/[0.03] cursor-pointer"
                         }`}
                       >
-                        {tabConfigs[tab].icon}
+                        <span className={soon ? "opacity-40 grayscale" : undefined}>{tabConfigs[tab].icon}</span>
                         <span>{tabConfigs[tab].label}</span>
+                        {soon && (
+                          <span className="ml-0.5 px-1.5 py-px rounded-full border border-white/10 bg-white/[0.04] text-[9px] uppercase tracking-wider text-white/45">
+                            Soon
+                          </span>
+                        )}
                       </button>
                     );
                   })}

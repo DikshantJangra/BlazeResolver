@@ -1,0 +1,48 @@
+---
+title: Introduction
+description: Customer bug reports in, reviewed pull requests out. Open source, GitHub-native, no server to host.
+---
+
+BlazeResolver connects the people who hit your bugs to the repo that holds the code. A small widget in your app collects a report. An endpoint in your own backend files it as a GitHub issue. A workflow in your repo then finds the cause, writes a fix, runs your tests, and opens a pull request for you to review.
+
+```text
+Customer ── widget ──▶ your /api/blaze ──▶ GitHub issue ──▶ Actions workflow ──▶ pull request ──▶ you review & merge
+                         (triage)           (labelled)       (fix engine)         (audit trail)
+```
+
+A human always merges. BlazeResolver opens pull requests, never merges them, and never pushes to your default branch.
+
+## What you get
+
+<Cards>
+  <Card title="One command to set up" href="/docs/quickstart">
+    `npx blazeresolver init` finds your frontend and backend and wires in the widget, the endpoint, the workflow and `.env`.
+  </Card>
+  <Card title="Any AI provider" href="/docs/setup/ai-providers">
+    Paste any key. 26 providers are supported, most are recognized from the key itself, and several keys fail over automatically.
+  </Card>
+  <Card title="Safe by construction" href="/docs/concepts/security">
+    The model only returns JSON. The harness applies edits, runs your tests offline in a container, and refuses risky changes.
+  </Card>
+  <Card title="Nothing to host" href="/docs/how-it-works">
+    The endpoint runs in your app. The fix runs on GitHub's throwaway runners, with your repo's own secrets.
+  </Card>
+</Cards>
+
+## Where to start
+
+- **New here?** Follow the [Quickstart](/docs/quickstart). It takes about ten minutes.
+- **Want the full picture first?** Read [How it works](/docs/how-it-works).
+- **Evaluating risk?** Read the [Security model](/docs/concepts/security).
+- **Looking something up?** The [CLI](/docs/reference/cli), [environment variables](/docs/reference/environment) and [handler API](/docs/reference/handler) references have every option.
+
+## Requirements
+
+- A GitHub repository with GitHub Actions enabled.
+- Node.js 20 or newer where you run the CLI (the workflow uses Node 22 on the runner).
+- A backend that can serve one HTTP route: a Next.js app, an Express server, or any runtime that speaks the Web `Request`/`Response` API (Cloudflare Workers, Vercel, Deno, Bun).
+- Tests in your repo. BlazeResolver only opens a pull request for a fix that passes them. Without tests, every report goes to a human.
+
+<Callout title="Open source">
+  BlazeResolver is Apache-2.0 licensed. The source, issues and discussions are on [GitHub](https://github.com/DikshantJangra/BlazeResolver).
+</Callout>

@@ -1,0 +1,62 @@
+---
+title: Widget API
+description: Script attributes, the BlazeResolver global, and events.
+---
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js" data-endpoint="/api/blaze"></script>
+```
+
+The script is safe to include twice. If a widget is already on the page, the second copy does nothing.
+
+## Attributes
+
+| Attribute | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `data-endpoint` | URL | `/api/blaze` | Where reports are POSTed |
+| `data-accent` | CSS color | `#ff6b00` | Brand color |
+| `data-position` | `right` \| `left` | `right` | Side of the screen |
+| `data-title` | string | `Report a problem` | Panel heading |
+| `data-app-version` | string | none | Sent as `appVersion` |
+| `data-user-id` | string | none | Sent as `userId` |
+| `data-user-email` | string | none | Sent as `email`; hides the email box |
+| `data-ask-email` | `true` \| `false` | `false` | Show an optional email box for fix notifications |
+| `data-launcher` | `true` \| `false` | `true` | Show the floating button |
+
+## `window.BlazeResolver`
+
+```ts
+interface BlazeResolverWidget {
+  /** Widget build. Present once the script has run. */
+  version: number;
+  /** Open the panel, optionally pre-filling the message. */
+  open(text?: string): void;
+  close(): void;
+  toggle(): void;
+  /** Attach the signed-in user to every report. Passing an email hides the email box. */
+  identify(user: { id?: string; email?: string }): void;
+}
+```
+
+## Declarative open
+
+Clicking any element with `data-blazeresolver-open` opens the panel. The attribute's value, if any, pre-fills the message. The click's default action is prevented, so `href="#"` doesn't jump.
+
+```html
+<a href="#" data-blazeresolver-open>Report a bug</a>
+```
+
+## Events
+
+| Event | Target | When |
+| :--- | :--- | :--- |
+| `blazeresolver:ready` | `document` | The widget is mounted and `window.BlazeResolver` is usable |
+
+## Behavior
+
+- **Shadow DOM.** Styles never leak in or out. The host element has a `data-blazeresolver` attribute.
+- **Drafts.** Unsent text is kept in `localStorage` under `blazeresolver:draft`.
+- **Errors.** It listens for `error` and `unhandledrejection` from page load onward, keeping the last 20 distinct messages (up to 1,000 characters each). The reporter can opt out per report.
+- **Mobile.** It becomes a bottom sheet on narrow screens, and respects safe-area insets.
+- **Timeout.** It waits up to 25 seconds for the endpoint.
+- **Keyboard.** <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> sends, and <kbd>Esc</kbd> closes.

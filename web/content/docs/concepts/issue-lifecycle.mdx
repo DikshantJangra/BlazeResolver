@@ -1,0 +1,62 @@
+---
+title: Issue lifecycle
+description: How a BlazeResolver issue moves from filed to fixed, and how duplicate reports are grouped.
+---
+
+```text
+                 ┌──────────────────────┐
+ report ───────▶ │ blazeresolver        │  opened by the endpoint
+                 └──────────┬───────────┘
+                            │ workflow starts
+                 ┌──────────▼───────────┐
+                 │ blazeresolver:fixing │
+                 └─────┬──────────┬─────┘
+          a fix passed │          │ no fix passed / error
+ ┌─────────────────────▼──┐   ┌───▼───────────────────────┐
+ │ blazeresolver:pr-opened│   │ blazeresolver:needs-human │
+ └──────────┬─────────────┘   └───────────────────────────┘
+            │ you merge the PR
+ ┌──────────▼─────────────┐
+ │ issue closed           │  "Closes #n"; notify job emails opted-in customers
+ └────────────────────────┘
+```
+
+## Grouping duplicate reports
+
+When one bug hits many customers, you want one issue and one fix, not twenty. Each issue carries a hidden grouping key, built from the triaged `feature` (or the summary, when there isn't one) as a lowercase slug:
+
+```html
+<!-- blaze:key=checkout -->
+```
+
+When a new `bug` or `outage` report arrives, the endpoint looks through open issues labelled `blazeresolver` for the same key:
+
+- **Found:** it adds a comment, `Another customer reported this.`, followed by that customer's report.
+- **Not found:** it opens a new issue.
+
+The fix job counts those comments. The PR and its audit comment say how many customers reported the bug. Customers are only ever counted on GitHub, never identified.
+
+Once the issue is closed, the next report with the same key opens a fresh issue. That's deliberate: a bug that comes back after a fix is a new incident.
+
+## Labels
+
+| Label | Set by | Meaning |
+| :--- | :--- | :--- |
+| `blazeresolver` | Endpoint | A customer bug for the fix engine |
+| `priority:critical` | Endpoint | Triaged as critical |
+| `customer-feedback` | Endpoint | Feature request; not worked on |
+| `blazeresolver:fixing` | Fix job | Work started |
+| `blazeresolver:pr-opened` | Fix job | A PR is ready for review, and a comment links to it |
+| `blazeresolver:needs-human` | Fix job | No passing fix, or an error. A comment explains why. |
+
+The fix job skips any issue that already has one of the last three labels, so a re-run or a second trigger never does the work twice.
+
+## Retrying a fix
+
+To have BlazeResolver try again (after you've added a test, fixed flaky CI, or changed the AI key), remove the `blazeresolver:fixing` and `blazeresolver:needs-human` labels, then remove and re-add the `blazeresolver` label. Adding the `blazeresolver` label triggers the workflow again.
+
+## Filing an issue by hand
+
+You can hand BlazeResolver any bug. Open an issue yourself (as someone with write access), describe the bug, and add the `blazeresolver` label. The workflow treats it like a customer report, except the report count is 1.
+
+Issues opened by people **without** write access are ignored, even with the label, because the workflow only trusts owners, members and collaborators. Outside contributors can't point your fix engine at arbitrary instructions.

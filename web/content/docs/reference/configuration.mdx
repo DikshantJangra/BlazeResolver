@@ -1,0 +1,51 @@
+---
+title: Configuration file
+description: Every field of blazeresolver.config.json.
+---
+
+`init` writes `blazeresolver.config.json` at the repo root. The workflow's `fix` job reads it on every run, so commit it. You can edit the commands by hand.
+
+```json title="blazeresolver.config.json"
+{
+  "repo": "acme/shop",
+  "defaultBranch": "main",
+  "installCommand": "(cd web && npm ci)",
+  "testCommand": "(cd web && npm test)",
+  "buildCommand": "(cd web && npm run build)",
+  "sandbox": "docker",
+  "sandboxImage": "node:22-bookworm-slim",
+  "layout": { "frontend": "web", "handler": "next" },
+  "installed": {
+    "files": ["web/src/app/api/blaze/route.ts", ".github/workflows/blazeresolver.yml", "blazeresolver.config.json"],
+    "edits": ["web/src/app/layout.tsx"],
+    "dependency": { "dir": "web", "pm": "npm" },
+    "env": { "file": "web/.env", "created": true, "added": "..." }
+  }
+}
+```
+
+## Fields
+
+<TypeTable
+  type={{
+    repo: { type: 'string', description: 'owner/name of the repo that gets issues and pull requests.', required: true },
+    defaultBranch: { type: 'string', description: 'Branch fixes start from and PRs target.', required: true },
+    installCommand: { type: 'string', description: 'Installs dependencies, with network, before offline tests. Absent in configs from before offline tests; re-run init --force to add it.' },
+    testCommand: { type: 'string', description: 'Runs your tests. A fix must pass it. Also run once on the untouched code as the baseline.', required: true },
+    buildCommand: { type: 'string', description: 'Builds the project after tests pass. "true" when there is no build step.', required: true },
+    sandbox: { type: '"docker" | "none"', description: 'docker: tests and build run offline in a container, failing closed without Docker. none: they run on the runner with network.', default: '"docker"' },
+    sandboxImage: { type: 'string', description: 'Container image for offline tests. It must have your toolchain.', default: '"node:<major>-bookworm-slim"' },
+    pin: { type: 'string', description: 'The version the workflow and widget are locked to, if you used --pin.' },
+    app: { type: 'boolean', description: 'The workflow uses a GitHub App token. Set by init --app or blazeresolver app.' },
+    layout: { type: 'object', description: 'Where init put things: frontend and backend folders, and the handler kind (next, express, other or none).' },
+    installed: { type: 'object', description: 'The record of everything init, harden and app changed: files created, files edited, the dependency, the exact .env text, CODEOWNERS text, and repo secrets. blazeresolver remove reads this. Do not edit it by hand.' },
+  }}
+/>
+
+## Commands
+
+Commands run from the repo root in a shell, so `(cd web && npm test)` and `&&` chains work. In a monorepo `init` chains one command per package that has tests.
+
+**Custom images.** If your tests need more than Node (Python, a browser, native libraries), point `sandboxImage` at an image that has it. Tests still run offline, so everything they need must come from the install step or the image.
+
+**Services.** Tests that need a database or other network service can't reach it from the offline container. Either mock it, or set `"sandbox": "none"` and start the service in the workflow. The audit comment then records that tests ran with network.

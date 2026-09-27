@@ -1,0 +1,138 @@
+---
+title: Library API
+description: The building blocks under init, for custom pipelines.
+---
+
+Most projects only need `npx blazeresolver init` and [`blazeresolver/handler`](/docs/reference/handler). The package root also exports the parts underneath, for when you want to wire them together yourself: your own intake, your own CI, or another code host.
+
+```ts
+import { triage, resolveComplete, runFix, BugResolver } from 'blazeresolver';
+```
+
+<Callout type="warn">
+  These are lower-level APIs, and may change between minor versions while BlazeResolver is `0.x`. Pin the version if you build on them.
+</Callout>
+
+## Triage
+
+```ts
+import { triage, ReportSchema, KINDS, resolveComplete } from 'blazeresolver';
+
+const report = ReportSchema.parse(body); // zod schema: message, pageUrl, appVersion, userId, email, consoleErrors
+const verdict = await triage(report);     // uses whatever AI key is configured, else keyword rules
+// verdict: { kind, severity, summary, steps, expected?, actual?, feature?,
+//            source: 'llm' | 'rules', injection: boolean, enterFixLoop: boolean }
+```
+
+`enterFixLoop` is `true` only for `bug` and `outage`. `KINDS` lists every `kind`. See [Triage](/docs/concepts/triage).
+
+For example, to forward how-to questions to your help desk while BlazeResolver handles bugs:
+
+```ts title="app/api/blaze/route.ts"
+import { createHandler, triage, ReportSchema } from 'blazeresolver';
+
+const blaze = createHandler({ repo: 'acme/shop' });
+
+export async function POST(req: Request) {
+  const body = await req.clone().json().catch(() => null);
+  const parsed = ReportSchema.safeParse(body);
+  if (parsed.success) {
+    const verdict = await triage(parsed.data);
+    if (verdict.kind === 'how_to' || verdict.kind === 'account_billing') {
+      await sendToHelpDesk(parsed.data); // your code
+      return Response.json({ received: true }, { status: 202 });
+    }
+  }
+  return blaze(req);
+}
+```
+
+This triages bug reports twice (once here, once in `blaze`). For high volume, pass your own `complete` to both, with caching.
+
+## AI providers
+
+```ts
+import { resolveComplete, describeProviders, identifyKey, listProviders, ProviderError } from 'blazeresolver';
+
+const complete = resolveComplete({ maxTokens: 1024, timeoutMs: 30_000 }); // undefined when no key is set
+const text = await complete?.('You are a helpful assistant.', 'Say hi');
+
+identifyKey('gsk_...');  // 'groq'
+listProviders();         // [{ name: 'anthropic', envPrefix: 'ANTHROPIC' }, ...] in priority order
+describeProviders();     // the lines `npx blazeresolver providers` prints
+```
+
+`resolveComplete` reads the same variables as everything else (see [AI providers](/docs/setup/ai-providers)), including failover, rotation and cooldowns. Pass `env` to read from an object instead of `process.env`. Failed calls throw a `ProviderError` that carries the HTTP `status`.
+
+## Fix engine
+
+`runFix` is what `blazeresolver fix` calls. Given a project, an incident, a token and an AI provider, it clones, resolves, and opens a pull request or reports back:
+
+```ts
+import { runFix } from 'blazeresolver';
+
+const outcome = await runFix({
+  project: { repo: 'acme/shop', defaultBranch: 'main', installCommand: 'npm ci', testCommand: 'npm test', buildCommand: 'npm run build', sandbox: 'docker' },
+  incident: { id: 'ticket-812', title: 'Checkout button does nothing', description: '...', stackTrace: '...' },
+  reportCount: 3,
+  token: process.env.GITHUB_TOKEN!,
+  ai: myProvider, // an AIProvider, see below
+});
+// { status: 'pr_opened', url } | { status: 'needs_human', url?, reason }
+```
+
+Without `issueNumber`, a failure opens a new issue with the findings. With it, the findings go on that issue, and the PR closes it.
+
+## `BugResolver`
+
+The loop inside `runFix`: baseline, investigate, then propose, patch, test and build with retries. It works on any `CodebaseInterface` and `WorkspaceInterface`, and never commits, pushes or merges; a passing fix ends as `READY_FOR_REVIEW` with its diff.
+
+```ts
+import { BugResolver, CodeGraphAdapter, GitWorkspace } from 'blazeresolver';
+
+const codebase = new CodeGraphAdapter({ root: '/path/to/clone' });
+const workspaces = new GitWorkspace({
+  repo: '/path/to/clone',
+  testCommand: 'npm test',
+  buildCommand: 'npm run build',
+  installCommand: 'npm ci',
+  offline: { image: 'node:22-bookworm-slim' },
+});
+
+const result = await new BugResolver({ codebase, workspaces, ai: myProvider, maxAttempts: 3 }).resolve(incident);
+if (result.status === 'READY_FOR_REVIEW') console.log(result.diff);
+await codebase.close();
+await workspaces.dispose();
+```
+
+| Option | Description |
+| :--- | :--- |
+| `codebase` | Read-only view of the repo, used for investigation |
+| `workspaces` | Isolated workspaces; one fresh workspace per attempt |
+| `ai` | An `AIProvider` |
+| `maxAttempts` | 1–5, default 3 |
+| `forbiddenPaths` | `RegExp[]` of paths a fix may not touch. Replaces the built-in list (see [Guards](/docs/concepts/fix-engine#guards)), so include those patterns if you still want them. |
+| `secretValues` | Exact values a fix must never contain |
+
+## `AIProvider`
+
+Implement it to bring your own model, agent loop or tool-using setup. Providers only read and propose: they get a read-only `codebase`, never a workspace.
+
+```ts
+import type { AIProvider } from 'blazeresolver';
+
+const myProvider: AIProvider = {
+  async investigate({ incident, baselineFailure, context, codebase }) {
+    // return { summary, rootCause, suspectedFiles, confidence: 'low' | 'medium' | 'high', evidence? }
+  },
+  async proposeFix({ incident, investigation, files, previousAttempts, codebase }) {
+    // return { summary, edits: [{ kind: 'replace', path, search, replace } | { kind: 'create', path, content }] }
+  },
+};
+```
+
+A `replace` edit's `search` text must occur exactly once in the file's current content (which `files` gives you). When `previousAttempts` is non-empty, address the last attempt's `failure`, which has a `stage` of `patch`, `test` or `build` and its output.
+
+## Also exported
+
+`PromptInjectionGuard` (the triage screen), `renderPatch`, `createUnifiedDiff` and `PatchError` (edit-to-diff rendering), `GitWorkspaceError`, `HARD_MAX_ATTEMPTS`, and all the types: `Incident`, `Investigation`, `FixProposal`, `FileEdit`, `FixAttempt`, `ResolutionResult`, `CodebaseInterface`, `WorkspaceInterface` and friends.

@@ -1,0 +1,97 @@
+---
+title: Set up with init
+description: What npx blazeresolver init detects, what it writes, and how to steer it.
+---
+
+```bash
+npx blazeresolver init
+```
+
+Run it from anywhere inside your repo. It moves to the repository root, because GitHub only reads workflows from there.
+
+## What it detects
+
+**Your GitHub repo.** It reads `owner/name` from the `origin` remote, or from the first GitHub remote. Override it with `--repo owner/name`.
+
+**Your default branch.** The branch you're on, falling back to `main`. Override it with `--branch`.
+
+**Your frontend and backend.** It reads every `package.json` up to three folders deep and judges each package by its dependencies, not by what its folder is called. `client`/`server`, `web`/`api`, `frontend`/`backend`, `apps/*`, and a single Next.js app all work. In a terminal it asks you to confirm:
+
+```text
+Frontend folder, where the widget goes ("none" to skip) [web]
+Backend folder, where the report endpoint goes ("none" to skip) [api]
+```
+
+A Next.js app serves as both, so the backend question is skipped. To skip the questions, pass `--frontend <folder> --backend <folder>`, or `--yes` to accept what was detected.
+
+**Your commands.** For each package that has a `test` or `build` script (or the root package, in a workspace), it records:
+
+- an **install** command from your lockfile (npm, pnpm or yarn),
+- a **test** command such as `(cd api && npm test)`,
+- a **build** command, or `true` when there is none.
+
+Override them with `--install`, `--test` and `--build`. If no package has a `test` script, `init` warns you. BlazeResolver only opens fixes that pass real tests, so without them every report goes to a human.
+
+**Your Node version.** It reads `.nvmrc`, `.node-version` or `engines.node` and picks the matching `node:<major>-bookworm-slim` image for offline tests.
+
+## What it writes
+
+For a Next.js app in `web/`, for example:
+
+<Files>
+  <Folder name=".github/workflows" defaultOpen>
+    <File name="blazeresolver.yml" />
+  </Folder>
+  <Folder name="web" defaultOpen>
+    <Folder name="src/app" defaultOpen>
+      <File name="api/blaze/route.ts" />
+      <File name="layout.tsx" />
+    </Folder>
+    <File name=".env" />
+  </Folder>
+  <File name="blazeresolver.config.json" />
+</Files>
+
+| Piece | Details |
+| :--- | :--- |
+| **Workflow** | `.github/workflows/blazeresolver.yml` at the repo root. See [Workflow reference](/docs/reference/workflow). |
+| **Endpoint** | Next.js App Router: `app/api/blaze/route.ts`. Pages Router: `pages/api/blaze.ts`. Express: a small `blazeresolver.js`/`.ts` next to the file that calls `express()`, plus two marked lines there (the import and `app.all('/api/blaze', ...)`), in your module system (ESM, CommonJS or TypeScript). Any other framework gets a printed snippet and no guessed edits. See [Report endpoint](/docs/setup/report-endpoint). |
+| **Widget** | One `<script>` before `</body>` in your `index.html`, or a `<Script>` in your Next.js root layout. |
+| **`.env`** | Created in the backend if missing. Otherwise only the missing variables are appended. Existing lines are never touched. If `.env` isn't git-ignored, `init` tells you. |
+| **Dependency** | `blazeresolver`, installed in the backend package with its own package manager (npm, pnpm, yarn, and npm workspaces). Skip this with `--no-install`. |
+| **`.env.example`** | If one exists, `BLAZE_GITHUB_TOKEN=` is added to it. |
+| **Config** | `blazeresolver.config.json`, which records every file created and every line added, so [`remove`](/docs/setup/remove) can undo exactly that. |
+
+Every line `init` adds to one of your files ends with a `blazeresolver:managed` marker. That's how `remove` finds them again.
+
+## Where the widget points
+
+- **Same origin** (a Next.js app, or a frontend and backend in one package): `data-endpoint="/api/blaze"`.
+- **The frontend's dev server proxies `/api`**: also `/api/blaze`.
+- **Separate origins**: `http://localhost:<port>/api/blaze`, using the port your backend listens on. `init` reminds you to change this to your production API URL before you deploy. The Express endpoint answers CORS for this case.
+
+## Options
+
+| Flag | What it does |
+| :--- | :--- |
+| `--repo owner/name` | The repo that gets issues and pull requests |
+| `--branch main` | The branch fixes start from and PRs target |
+| `--frontend <dir>` / `--backend <dir>` | Where the widget and the endpoint go, relative to the repo root |
+| `--yes`, `-y` | Accept what was detected without asking |
+| `--install "<cmd>"` | Installs dependencies, with network, before offline tests |
+| `--test "<cmd>"` | Your test command |
+| `--build "<cmd>"` | Your build command |
+| `--no-sandbox` | Run tests with network access instead of offline in a container |
+| `--sandbox-image <image>` | Container image for offline tests (default `node:<major>-bookworm-slim`) |
+| `--pin <version>` | Lock the workflow and widget to one release. See [Updates and pinning](/docs/setup/updates). |
+| `--app` | Use a GitHub App token in the workflow. See [GitHub App](/docs/setup/github-app). |
+| `--force` | Set up again over an existing install, overwriting its files |
+| `--no-install` | Don't install the npm package |
+
+## Running it again
+
+If `blazeresolver.config.json` already records an install, `init` stops and tells you so. Run `npx blazeresolver remove` first, or pass `--force` to regenerate the files. `--force` is also how you pick up a newer workflow template.
+
+## After init
+
+`init` ends with a numbered list of what's left. It's the same list as steps 2–5 of the [Quickstart](/docs/quickstart): the GitHub token, an AI key (in `.env` and as a repo secret), the Actions setting, and branch protection. Then commit everything except `.env`.

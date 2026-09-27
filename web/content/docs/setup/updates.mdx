@@ -1,0 +1,39 @@
+---
+title: Updates and pinning
+description: Stay on the latest release automatically, or lock to one version you've reviewed.
+---
+
+## Automatic by default
+
+Out of the box, BlazeResolver updates itself:
+
+- The **widget** loads from `cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js`.
+- The **workflow** runs `npx --yes blazeresolver@latest fix` (and `notify`).
+
+The **endpoint** is the exception. It uses the `blazeresolver` package in your `package.json`, so it updates when you update your dependencies.
+
+## Pin a version
+
+```bash
+npx blazeresolver init --force --pin 0.4.0
+```
+
+`--pin` writes that exact version into the workflow and the widget tag, and records it in `blazeresolver.config.json`. Nothing changes until you re-run `init` with a newer `--pin`.
+
+The trade-off: `latest` gets you fixes without lifting a finger, but it runs code published after you last looked. A pin gives you a supply chain you control, and you upgrade on your own schedule.
+
+## Third-party actions
+
+The workflow pins every third-party action to a full commit SHA, not a tag. A tag can be moved to different code after you've reviewed it; a commit can't:
+
+```yaml
+- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+- uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+- uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+```
+
+Newer BlazeResolver releases refresh these pins. Run `npx blazeresolver init --force` to regenerate the workflow with the current template.
+
+## Upgrading an older setup
+
+A `blazeresolver.config.json` written before offline tests existed has no `installCommand`. Fixes for it still run, but with network access, and the audit comment on each pull request says so. Re-run `npx blazeresolver init --force` to get offline tests.

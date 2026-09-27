@@ -1,0 +1,62 @@
+---
+title: GitHub App
+description: Give the fix job a short-lived, single-repo token, and have your CI run on its pull requests.
+---
+
+```bash
+npx blazeresolver app
+```
+
+By default the fix job uses the workflow's built-in `GITHUB_TOKEN`. That works, but it has two drawbacks:
+
+- GitHub doesn't run workflows on pull requests opened by that token, so **your CI doesn't start** on BlazeResolver's PRs.
+- It needs **Allow GitHub Actions to create and approve pull requests** turned on for the whole repo.
+
+A GitHub App fixes both. The fix job gets an App token that is scoped to this one repo and lives for minutes. The workflow's own token drops to read-only.
+
+## What the command does
+
+<Steps>
+<Step>
+
+**Creates the app through GitHub's manifest flow.** Your browser opens to GitHub with the app pre-filled: private, permission to write Contents, Pull requests and Issues, and no webhook events. Click **Create GitHub App**; you can leave every setting as it is. For an organization-owned repo, the app is created in that organization.
+
+</Step>
+<Step>
+
+**Stores the credentials as repo secrets** `BLAZE_APP_ID` and `BLAZE_APP_PRIVATE_KEY`, through the GitHub CLI. The private key is only held in memory and is never written to disk.
+
+If `gh` is missing or not logged in, the key is saved to `~/.blazeresolver/<app>.private-key.pem` (readable only by you), and the command prints how to add both secrets yourself. Delete the file afterwards.
+
+</Step>
+<Step>
+
+**Opens the install page.** Choose **Only select repositories**, then your repo. The command waits up to five minutes and confirms once the app is installed.
+
+</Step>
+<Step>
+
+**Switches the workflow to the App token**, if `.github/workflows/blazeresolver.yml` is still exactly what `init` wrote. If you've edited it, it's left alone. Re-run `npx blazeresolver init --force --app` to regenerate it, or add the App step by hand (see [Workflow reference](/docs/reference/workflow#with-a-github-app)).
+
+</Step>
+</Steps>
+
+Afterwards, you can turn **off** "Allow GitHub Actions to create and approve pull requests" (Settings → Actions → General). The App opens the pull requests now. If you then run [`harden`](/docs/setup/harden), it also stops Actions from approving pull requests.
+
+## What the app can and can't do
+
+| Can | Can't |
+| :--- | :--- |
+| Create branches and push to them | Merge pull requests |
+| Open pull requests | Change repo settings or branch protection |
+| Comment on and label issues | Edit workflows (it has no Workflows permission) |
+| Act on the one repo it's installed on | See your other repos |
+
+## Setting it up from the start
+
+```bash
+npx blazeresolver init --app   # write the App variant of the workflow
+npx blazeresolver app          # then create and install the app
+```
+
+`blazeresolver remove` deletes the two repo secrets. The app itself stays on your GitHub account; delete it under **Settings → Developer settings → GitHub Apps** if you no longer need it.

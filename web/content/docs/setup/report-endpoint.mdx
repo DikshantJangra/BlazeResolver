@@ -1,0 +1,129 @@
+---
+title: Report endpoint
+description: Mount the handler that turns widget reports into GitHub issues, in Next.js, Express, or any Web-standard runtime.
+---
+
+The endpoint is the only part of BlazeResolver that runs on your servers. It takes a report from the widget, [triages](/docs/concepts/triage) it, and files it as a GitHub issue. It stores nothing and holds only an issues-only token, and it can't push code.
+
+`init` writes it for Next.js and Express. For anything else, mount it yourself in a few lines. The handler is a plain Web-standard function, `(Request) => Promise<Response>`.
+
+```bash
+npm install blazeresolver
+```
+
+<Tabs items={["Next.js App Router", "Next.js Pages Router", "Express", "Cloudflare Workers", "Deno / Bun"]}>
+<Tab value="Next.js App Router">
+
+```ts title="app/api/blaze/route.ts"
+import { createHandler } from 'blazeresolver/handler';
+
+// Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
+const handler = createHandler({ repo: 'your-org/your-repo' });
+
+// Triage and filing take a few seconds; room for a slow AI provider on serverless hosts.
+export const maxDuration = 60;
+
+export const POST = handler;
+export const OPTIONS = handler;
+```
+
+</Tab>
+<Tab value="Next.js Pages Router">
+
+```ts title="pages/api/blaze.ts"
+import { createHandler, nodeHandler } from 'blazeresolver/handler';
+
+export default nodeHandler(createHandler({ repo: 'your-org/your-repo' }));
+```
+
+</Tab>
+<Tab value="Express">
+
+```ts title="src/blazeresolver.ts"
+import { createHandler, nodeHandler } from 'blazeresolver/handler';
+
+export default nodeHandler(
+  createHandler({ repo: 'your-org/your-repo', allowOrigin: process.env.BLAZE_ALLOW_ORIGIN || '*' })
+);
+```
+
+```ts title="src/server.ts"
+import express from 'express';
+import blazeresolver from './blazeresolver';
+
+const app = express();
+app.all('/api/blaze', blazeresolver);
+```
+
+`nodeHandler` works with or without a body parser mounted before it. CommonJS works the same way with `require('blazeresolver/handler')`.
+
+</Tab>
+<Tab value="Cloudflare Workers">
+
+```ts title="src/index.ts"
+import { createHandler } from 'blazeresolver/handler';
+
+export default {
+  async fetch(request: Request, env: { BLAZE_GITHUB_TOKEN: string }) {
+    const url = new URL(request.url);
+    if (url.pathname !== '/api/blaze') return new Response('Not found', { status: 404 });
+    const handler = createHandler({
+      repo: 'your-org/your-repo',
+      githubToken: env.BLAZE_GITHUB_TOKEN,
+      allowOrigin: 'https://your-app.example',
+    });
+    return handler(request);
+  },
+};
+```
+
+On runtimes without `process.env`, pass `githubToken` explicitly. AI triage reads its keys from `process.env`. Where that doesn't exist, enable Node compatibility, or pass your own `complete` function (see [Handler API](/docs/reference/handler)); otherwise triage uses keyword rules.
+
+</Tab>
+<Tab value="Deno / Bun">
+
+```ts title="server.ts"
+import { createHandler } from 'blazeresolver/handler';
+
+const handler = createHandler({ repo: 'your-org/your-repo', allowOrigin: '*' });
+
+Bun.serve({
+  fetch(req) {
+    return new URL(req.url).pathname === '/api/blaze' ? handler(req) : new Response('Not found', { status: 404 });
+  },
+});
+// Deno: Deno.serve((req) => ...same...)
+```
+
+</Tab>
+</Tabs>
+
+## Cross-origin setups
+
+When the widget's page and the endpoint are on different origins, set `allowOrigin` to the page's origin (or `'*'`). The handler then answers `OPTIONS` preflights and adds CORS headers. The endpoint takes no cookies, only a report, so `'*'` is safe. On Express, `init` reads the value from `BLAZE_ALLOW_ORIGIN`.
+
+Then point the widget at the full URL:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js"
+        data-endpoint="https://api.your-app.example/api/blaze"></script>
+```
+
+## Environment
+
+| Variable | Needed | Purpose |
+| :--- | :--- | :--- |
+| `BLAZE_GITHUB_TOKEN` | Yes | Fine-grained token, Issues read and write on one repo. See [GitHub tokens](/docs/setup/github). |
+| `API_KEYS` | Recommended | Any AI key(s) for triage. Without one, keyword rules classify reports. |
+| `BLAZE_NOTIFY_CUSTOMERS` | No | `true` keeps the reporter's email so they can be told about the fix. See [Customer notifications](/docs/setup/notifications). |
+| `BLAZE_RATE_LIMIT_PER_HOUR` | No | Total reports accepted per hour per instance. Default `100`. |
+| `BLAZE_ALLOW_ORIGIN` | No | Used by the Express file `init` writes. Default `*`. |
+
+## Limits and behavior
+
+- **POST only**, JSON body of at most 20,000 characters. The message itself is capped at 5,000.
+- **Rate limits:** 10 reports per IP every 10 minutes, and 100 in total per hour, per server instance. The client IP is read from `X-Forwarded-For`. The counters live in memory, so serverless instances don't share them. They blunt a single-source flood; for more, add your host's rate limiting or a WAF rule in front.
+- **Triage budget:** 8 seconds. If the model takes longer, keyword rules decide, so the report is still filed before the widget gives up at 25 seconds.
+- **Serverless timeout:** give the route at least 30–60 seconds (`maxDuration` on Vercel).
+
+See [Handler API](/docs/reference/handler) for every option and response code.

@@ -1,0 +1,81 @@
+---
+title: Triage
+description: How a report is screened, classified and routed before anything reaches GitHub.
+---
+
+Triage runs inside your [report endpoint](/docs/setup/report-endpoint), once per report. It decides whether the report becomes a fix candidate, a feature request, or nothing at all.
+
+## 1. Injection screen
+
+Every customer-controlled field (message, page URL, app version, user id and console errors) is checked against known prompt-injection and attack patterns **before any model is called**:
+
+- `ignore previous instructions`, `system prompt`, `override policy`, `disregard rules`, `bypass guardrails`
+- `you are now in developer mode` and similar persona switches
+- `<script>…</script>`, `drop table`, `union select`, `grant admin`
+
+On a match, the report is classified as `abuse` and nothing is filed. The customer still sees the normal thank-you, so an attacker learns nothing.
+
+<Callout type="warn">
+  This screen matches text, not intent. A genuine report that quotes one of these phrases (for example, a bug about a page that renders `<script>` tags) is dropped too. If an expected report never shows up, see [Troubleshooting](/docs/troubleshooting#a-report-never-became-an-issue).
+</Callout>
+
+## 2. Classification
+
+With an AI key configured, the model gets a fixed system prompt, with the report wrapped in `<report>…</report>` and marked as data that must never be followed. It must reply with JSON only:
+
+| Field | Values |
+| :--- | :--- |
+| `kind` | `bug`, `outage`, `feature_request`, `how_to`, `account_billing`, `abuse`, `other` |
+| `severity` | `low`, `medium`, `high`, `critical` |
+| `summary` | One sentence |
+| `steps` | Steps to reproduce (up to 10) |
+| `expected`, `actual` | What should happen, and what happens instead |
+| `feature` | The affected page or feature |
+
+An `outage` means the whole product, or a core flow, is down for many users.
+
+**The fallback: keyword rules.** Triage falls back to rules if there's no key, the model takes longer than 8 seconds, or the reply doesn't validate. The rules look for words such as `down`/`503` (outage), `error`/`broken`/`crash`/`not working` (bug), `please add`/`wish` (feature request), `how do I` (how-to), and `invoice`/`password`/`login` (account and billing). A rules-classified bug is `high` severity when console errors were attached, and `medium` otherwise. Triage never blocks intake: whatever happens, the report gets a verdict.
+
+When the model doesn't name a feature, the page path from `pageUrl` is used. That's what groups reports from the same page together.
+
+## 3. Routing
+
+| Verdict | What happens |
+| :--- | :--- |
+| `bug`, `outage` | Filed as an issue labelled `blazeresolver` (plus `priority:critical` when critical), or added as a comment to the open issue for the same bug. The fix workflow picks it up. |
+| `feature_request` | Filed as an issue titled `[feature request] …`, labelled `customer-feedback`. The workflow ignores it. |
+| `how_to`, `account_billing`, `other` | Acknowledged. Nothing is filed. |
+| `abuse` / injection | Acknowledged. Nothing is filed, and no model is called. |
+
+<Callout>
+  How-to and billing questions aren't filed because BlazeResolver is built to fix code, not to be a help desk. If you want those too, wrap the handler and forward them to your support tool. See [Library API](/docs/reference/library).
+</Callout>
+
+## What the issue looks like
+
+`````md
+**Summary:** Checkout button does nothing on Safari
+**Kind:** bug | **Severity:** high | **Triaged by:** llm
+**Page:** `https://shop.example/checkout`
+**App version:** `1.4.2`
+**Steps to reproduce:**
+1. Add an item to the cart
+2. Open checkout in Safari 17
+3. Click "Pay"
+**Expected:** The payment form opens
+**Actual:** Nothing happens
+
+### Customer report
+````text
+the pay button is dead on my mac, tried twice
+````
+
+### Console errors
+````text
+TypeError: undefined is not an object (evaluating 'e.cart.items')
+````
+
+<!-- blaze:key=checkout -->
+`````
+
+Customer text always sits inside fenced code blocks, so it can't render as markdown, HTML or `@mentions`. The fix engine reads it back out as data. The hidden `blaze:key` comment is the grouping key, described in [Issue lifecycle](/docs/concepts/issue-lifecycle).

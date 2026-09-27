@@ -1,36 +1,29 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BlazeResolver website
 
-## Getting Started
-
-First, run the development server:
+The marketing site and the documentation at `/docs`, in one Next.js app.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev     # http://localhost:3000 and http://localhost:3000/docs
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Layout
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The app has two route groups with **separate root layouts**, so their styles never mix:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Route group | Serves | Styles |
+| :--- | :--- | :--- |
+| `src/app/(site)` | `/`, the marketing page | `src/app/globals.css` |
+| `src/app/(docs)` | `/docs/*`, built with [Fumadocs](https://fumadocs.dev) | `src/app/(docs)/docs.css` (Fumadocs preset plus BlazeResolver colors) |
 
-## Learn More
+Moving between the two is a full page load; that's what keeps the stylesheets apart. `src/app/api/blaze` is the site's own BlazeResolver endpoint, and `src/app/api/search` serves docs search.
 
-To learn more about Next.js, take a look at the following resources:
+## Editing the docs
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Pages are MDX files in `content/docs/`. The file path is the URL: `content/docs/setup/widget.mdx` becomes `/docs/setup/widget`.
+- Every page needs `title` and `description` frontmatter. The description is plain text, so no markdown or backticks.
+- Sidebar order comes from `meta.json` in each folder. Add a new page's file name there, or it's appended at the end.
+- Components available in MDX without importing: `Callout`, `Cards`/`Card`, `Steps`/`Step`, `Tabs`/`Tab`, `TypeTable`, `Accordions`/`Accordion`, `Files`/`Folder`/`File` (registered in `src/components/mdx.tsx`).
+- Search indexes the pages automatically.
+- Document behavior from the source in `../src`, not from memory. Most pages link the relevant command, option or file.

@@ -1,0 +1,57 @@
+---
+title: Customer notifications
+description: Email customers when the bug they reported is fixed and merged. Opt-in.
+---
+
+When a BlazeResolver pull request merges, the workflow's `notify` job can email every customer who reported that bug and asked to hear back. This is off unless you turn on all three parts below.
+
+<Steps>
+<Step>
+
+### Let the endpoint keep emails
+
+On the backend:
+
+```bash title=".env"
+BLAZE_NOTIFY_CUSTOMERS=true
+```
+
+The reporter's email is then stored in the issue as a hidden HTML comment. Without this setting, emails are dropped before the issue is written.
+
+</Step>
+<Step>
+
+### Ask for an email in the widget
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js"
+        data-endpoint="/api/blaze" data-ask-email="true"></script>
+```
+
+For signed-in users, pass `data-user-email` or call `BlazeResolver.identify({ email })` instead. The email box is then hidden.
+
+</Step>
+<Step>
+
+### Add Resend secrets to the repo
+
+```bash
+gh secret set RESEND_API_KEY      # from resend.com
+gh secret set BLAZE_FROM_EMAIL    # e.g. "Acme Support <support@acme.com>", on a domain verified in Resend
+```
+
+</Step>
+</Steps>
+
+## What happens on merge
+
+1. The `notify` job runs when a pull request whose branch starts with `blazeresolver/fix-` is merged.
+2. It reads the issues the pull request closes (`Closes #12`) and collects the emails stored in the issue and in its "Another customer reported this" comments.
+3. It sends each person one email through Resend, with the subject *The problem you reported is fixed*.
+4. It comments on the issue with a count ("3 customer(s) told the fix is merged"). The count never includes addresses.
+
+If `RESEND_API_KEY` or `BLAZE_FROM_EMAIL` is missing, the job skips sending and says so in its log.
+
+<Callout type="warn" title="Use a private repo">
+  Stored emails are only base64-encoded inside an HTML comment in the issue body, not encrypted. Anyone who can read the issue's raw text can read them. Only turn this on for a **private** repository.
+</Callout>

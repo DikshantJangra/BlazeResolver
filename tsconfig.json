@@ -12,7 +12,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",
 
     /* Linting */
     "strict": true,
@@ -23,5 +22,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "client"]
+  "include": ["src"]
 }

@@ -1,0 +1,80 @@
+---
+title: Troubleshooting
+description: Fixes for the most common setup problems, and answers to common questions.
+---
+
+## A report never became an issue
+
+Work down this list:
+
+1. **Check the endpoint's response** in the browser's Network tab (the `POST` to `/api/blaze`).
+   - `500 BLAZE_GITHUB_TOKEN is not set`: set the variable on your host, not only in your local `.env`, and redeploy.
+   - `502 could not file the report`: GitHub refused the call. Your server logs show `[blazeresolver] could not file a report in <repo>: …` with the reason. Usually the token has expired, has the wrong repo selected, or lacks **Issues: Read and write**.
+   - `429 rate limit`: 10 reports per IP every 10 minutes. Wait, or raise `rateLimit.perIp` in code.
+   - `404` or a CORS error: `data-endpoint` points at the wrong place, or the endpoint needs `allowOrigin` for a cross-origin page. See [Cross-origin setups](/docs/setup/report-endpoint#cross-origin-setups).
+2. **A `202` means accepted, not filed.** The customer always gets `202`, but only `bug`, `outage` and `feature_request` verdicts are filed. A question (`how_to`), a billing issue, or `other` is acknowledged and dropped. So is anything the injection screen matched, including genuine reports that quote phrases like `system prompt`, `drop table`, or a `<script>` tag. See [Triage](/docs/concepts/triage).
+3. **It may have been grouped.** If an open issue already covers the same feature or page, the report is added as a comment ("Another customer reported this.") rather than as a new issue.
+
+## The issue was filed but the workflow didn't run
+
+- **Is the workflow on the default branch?** GitHub only runs workflows from files committed to the repo. Push `.github/workflows/blazeresolver.yml`.
+- **Is Actions enabled?** Check Settings → Actions → General.
+- **Who opened the issue?** The `fix` job only runs for issues opened by an owner, member or collaborator. The endpoint's token must belong to such a person. An issue opened by an outside account is ignored, even with the label.
+- **Does it have the `blazeresolver` label?** Feature requests get `customer-feedback` instead, and are never worked on.
+- **Was it already handled?** Issues labelled `blazeresolver:fixing`, `:pr-opened` or `:needs-human` are skipped. See [Retrying a fix](/docs/concepts/issue-lifecycle#retrying-a-fix).
+
+## The workflow failed
+
+| Message on the issue or in the log | Fix |
+| :--- | :--- |
+| `No AI key is set. Add any provider's key as the API_KEYS repo secret…` | `gh secret set API_KEYS`. Keys in a named variable (like `MISTRAL_API_KEY`) also need a line in the workflow's `env:`. |
+| `Tests are set to run offline in a container … but Docker is not available here` | Use a GitHub-hosted Ubuntu runner, or `init --force --no-sandbox` to run tests with network |
+| Push or PR creation fails with `403` / `Resource not accessible by integration` | Turn on **Allow GitHub Actions to create and approve pull requests**, or [use a GitHub App](/docs/setup/github-app). A `BLAZE_GITHUB_TOKEN` secret needs Contents, Pull requests and Issues write. |
+| `GITHUB_TOKEN and GITHUB_EVENT_PATH are required` | You ran `blazeresolver fix` outside the workflow. It's only meant to run in Actions. |
+| Can't read `blazeresolver.config.json` | Commit the config file at the repo root |
+
+## It says it needs a human
+
+`blazeresolver:needs-human` with a findings comment means no attempt passed. The comment names the stage that stopped the last attempt:
+
+- **`patch`**: a [guard](/docs/concepts/fix-engine#guards) refused the edit (for example, it touched `auth/` or a lockfile), or the edit didn't match the file. The fix belongs to a human by design.
+- **`test`**: the proposed fixes didn't make your tests pass. The model's root-cause guess is in the comment, and is often most of the work.
+- **`build`**: tests passed but the build broke.
+
+A strong coding model makes a big difference here. See [AI providers](/docs/setup/ai-providers).
+
+## CI doesn't run on BlazeResolver's pull requests
+
+That's GitHub's rule for the built-in `GITHUB_TOKEN`: pull requests it opens don't trigger workflows. Use a [GitHub App](/docs/setup/github-app) (recommended) or a PAT in the `BLAZE_GITHUB_TOKEN` repo secret.
+
+## My AI key isn't recognized
+
+Run `npx blazeresolver providers`. If the key is listed as *skipped, provider unknown*, its format doesn't identify the provider. Put it in a named variable (`MISTRAL_API_KEY=...`), set `BLAZE_PROVIDER`, or turn on `BLAZE_KEY_PROBE=on`.
+
+## FAQ
+
+<Accordions>
+<Accordion title="Does my code leave GitHub?">
+  The relevant parts do. Files the fix engine reads are sent to the AI provider(s) you configured, from the GitHub runner. No BlazeResolver server is involved, and no one else gets your code or your keys.
+</Accordion>
+<Accordion title="Can a customer make it add a backdoor?">
+  They can try to steer what the model writes. They can't change what the system is allowed to do: the model has no tools, risky paths and dependency changes are refused, tests run offline, every diff is scanned for secrets, and a human must approve the merge. See the [Security model](/docs/concepts/security).
+</Accordion>
+<Accordion title="What does it cost?">
+  BlazeResolver is free and open source. You pay for your AI provider's tokens (a few model calls per fix, and one per triaged report) and your GitHub Actions minutes. Free AI tiers (Groq, Gemini, NVIDIA NIM, OpenRouter) work.
+</Accordion>
+<Accordion title="Does it work without tests?">
+  It will set up, but every report will end as needs-human, because BlazeResolver only opens fixes that pass real tests. That's intentional.
+</Accordion>
+<Accordion title="Does it work with GitLab or Bitbucket?">
+  Not out of the box. The CLI and workflow are GitHub-specific. The [library API](/docs/reference/library) (triage, BugResolver) is host-agnostic if you want to build your own integration.
+</Accordion>
+<Accordion title="What languages does it support?">
+  The setup CLI targets JavaScript and TypeScript projects: it reads package.json, Next.js and Express. The fix engine edits any text files and runs whatever test and build commands you configure, with a container image that has your toolchain.
+</Accordion>
+<Accordion title="Can I use it without the widget?">
+  Yes. POST JSON to your endpoint from any form, app or tool. See [Build your own UI](/docs/setup/widget#build-your-own-ui). You can also label issues you file yourself with `blazeresolver`.
+</Accordion>
+</Accordions>
+
+Still stuck? Ask in [GitHub Discussions](https://github.com/DikshantJangra/BlazeResolver/discussions), or report a bug with this site's own widget.

@@ -1,0 +1,117 @@
+---
+title: AI providers
+description: Paste any key. 26 providers, recognized from the key itself, with automatic failover.
+---
+
+BlazeResolver uses a model in two places: **triage** in your report endpoint, and the **fix engine** in the workflow. Both read keys the same way, and you never have to say which provider a key belongs to.
+
+```bash title=".env"
+API_KEYS=sk-ant-...,gsk_...,nvapi-...     # Anthropic, Groq and NVIDIA NIM, in one line
+```
+
+Put the same value in the repo secret the workflow reads:
+
+```bash
+gh secret set API_KEYS
+```
+
+Without any key, triage falls back to keyword rules and the fix engine stops with a clear error on the issue. Check what was recognized, in failover order, with keys masked:
+
+```bash
+npx blazeresolver providers
+```
+
+## How a key is recognized
+
+Cheapest first:
+
+1. **Its variable name.** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` and so on, plus common aliases such as `GOOGLE_API_KEY` and `HF_TOKEN`.
+2. **Its format.** Most providers use a distinctive prefix: `sk-ant-`, `gsk_`, `nvapi-`, `AIza`, `xai-`, `pplx-`, `hf_` and others.
+3. **Asking, if you opt in.** Keys whose format says nothing (Mistral, Together, Cohere and others) are skipped with a warning by default. With `BLAZE_KEY_PROBE=on`, the likely providers are each asked once whether the key is theirs. It's a model-list request, so no tokens are spent, and the answer is cached. This is off by default because it shows the key to providers it may not belong to.
+
+**Ways to write keys.** Any of these forms work:
+
+| Form | Example |
+| :--- | :--- |
+| Universal list | `API_KEYS=key1,key2` |
+| Universal single or numbered | `API_KEY=...`, `API_KEY_1=...`, `API_KEY_2=...` |
+| Named | `MISTRAL_API_KEY=...` |
+| Named list or numbered | `GROQ_API_KEYS=a,b` or `GROQ_API_KEY_1=...`, `GROQ_API_KEY_2=...` |
+
+## Failover and rotation
+
+- **Several providers:** the first one in the priority order below answers. When it fails (outage, rate limit, bad key, timeout, unknown model), the next one takes over automatically. A provider that just failed sits out for a minute.
+- **Several keys for one provider:** they rotate round-robin. A key that hits an auth or rate-limit error cools down while the others carry on.
+- **`BLAZE_PROVIDER=groq`** pins a single provider, and all keys go to it.
+- **`BLAZE_MODEL=claude-sonnet-5`** overrides the model, but only on providers that serve it. A Claude model name never reaches Groq. The provider that owns the model moves to the front.
+- **`<NAME>_MODEL`** (for example `GROQ_MODEL`) overrides the model for one provider only.
+
+## Supported providers
+
+In priority order. **Recognized by** says how a key gets matched to the provider when it's pasted into `API_KEYS`.
+
+| # | Provider | Recognized by | Named variable (aliases) | Default model |
+| --: | :--- | :--- | :--- | :--- |
+| 1 | Anthropic | `sk-ant-` | `ANTHROPIC_API_KEY` (`CLAUDE_API_KEY`) | `claude-sonnet-5` |
+| 2 | OpenAI | `sk-proj-`, `sk-svcacct-`, `sk-admin-`, classic `sk-` keys | `OPENAI_API_KEY` | `gpt-4.1-mini` |
+| 3 | Azure OpenAI | Settings: `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` | `AZURE_OPENAI_API_KEY` (`AZURE_API_KEY`) | your deployment |
+| 4 | Google Gemini | `AIza` | `GEMINI_API_KEY` (`GOOGLE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) | `gemini-2.0-flash` |
+| 5 | xAI | `xai-` | `XAI_API_KEY` | `grok-2-latest` |
+| 6 | Mistral | Named variable, or probe | `MISTRAL_API_KEY` | `mistral-large-latest` |
+| 7 | DeepSeek | `sk-` + 32 hex characters | `DEEPSEEK_API_KEY` | `deepseek-chat` |
+| 8 | Groq | `gsk_` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+| 9 | NVIDIA NIM | `nvapi-` | `NVIDIA_API_KEY` (`NVIDIA_NIM_API_KEY`, `NGC_API_KEY`) | `meta/llama-3.1-70b-instruct` |
+| 10 | Cerebras | `csk-` | `CEREBRAS_API_KEY` | `llama3.1-70b` |
+| 11 | Fireworks | `fw_` | `FIREWORKS_API_KEY` | `accounts/fireworks/models/llama-v3p1-70b-instruct` |
+| 12 | Together AI | Named variable, or probe | `TOGETHER_API_KEY` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| 13 | DeepInfra | Named variable, or probe | `DEEPINFRA_API_KEY` | `meta-llama/Meta-Llama-3.1-70B-Instruct` |
+| 14 | SambaNova | Named variable, or probe | `SAMBANOVA_API_KEY` | `Meta-Llama-3.1-70B-Instruct` |
+| 15 | Hyperbolic | Named variable, or probe | `HYPERBOLIC_API_KEY` | `meta-llama/Meta-Llama-3.1-70B-Instruct` |
+| 16 | Novita | Named variable, or probe | `NOVITA_API_KEY` | `meta-llama/llama-3.1-70b-instruct` |
+| 17 | Moonshot / Kimi | Named variable, or probe | `MOONSHOT_API_KEY` (`KIMI_API_KEY`) | `moonshot-v1-8k` |
+| 18 | Zhipu / GLM | `<32 hex>.<16 chars>` | `ZHIPU_API_KEY` (`ZHIPUAI_API_KEY`, `ZAI_API_KEY`) | `glm-4-plus` |
+| 19 | Cohere | Named variable, or probe | `COHERE_API_KEY` (`CO_API_KEY`) | `command-r-plus` |
+| 20 | AI21 | Named variable only | `AI21_API_KEY` | `jamba-large` |
+| 21 | Baseten | Named variable only | `BASETEN_API_KEY` | `meta-llama/Llama-3.3-70B-Instruct` |
+| 22 | Perplexity | `pplx-` | `PERPLEXITY_API_KEY` | `sonar` |
+| 23 | GitHub Models | A GitHub token (`ghp_`, `github_pat_`, `gho_`, `ghu_`) | `GITHUB_MODELS_API_KEY` | `gpt-4o-mini` |
+| 24 | Hugging Face | `hf_` | `HUGGINGFACE_API_KEY` (`HF_TOKEN`, `HUGGINGFACEHUB_API_TOKEN`) | `meta-llama/Llama-3.3-70B-Instruct` |
+| 25 | OpenRouter | `sk-or-` | `OPENROUTER_API_KEY` | `openrouter/auto` |
+| 26 | Ollama (local) | Settings: `OLLAMA_BASE_URL` or `OLLAMA_MODEL` | none (no key needed) | `llama3.1` |
+
+<Callout title="GitHub tokens are never used as AI keys by accident">
+  Only a GitHub token pasted into an AI key variable counts as a GitHub Models key. `BLAZE_GITHUB_TOKEN` and `GITHUB_TOKEN` are never used for AI; they stay scoped to issues and pull requests.
+</Callout>
+
+**Custom endpoints.** `OPENAI_BASE_URL` points the OpenAI provider at any OpenAI-compatible server. `NVIDIA_BASE_URL` and `OLLAMA_BASE_URL` do the same for their providers. `AZURE_OPENAI_API_VERSION` defaults to `2024-08-01-preview`.
+
+## Keys the workflow can see
+
+The generated workflow passes these to the fix job:
+
+```yaml
+API_KEYS: ${{ secrets.API_KEYS }}
+ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+BLAZE_PROVIDER: ${{ vars.BLAZE_PROVIDER }}
+BLAZE_MODEL: ${{ vars.BLAZE_MODEL }}
+```
+
+Any key that `API_KEYS` can recognize just works. If you use a **named variable** (for example `MISTRAL_API_KEY`, or Azure's endpoint settings), add it as a repo secret **and** add a matching line under `env:` in `.github/workflows/blazeresolver.yml`.
+
+## Get a key
+
+Free tiers are marked with \*.
+
+| Provider | Where |
+| :--- | :--- |
+| Groq\* | [console.groq.com/keys](https://console.groq.com/keys) |
+| Gemini\* | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| NVIDIA NIM\* | [build.nvidia.com](https://build.nvidia.com) |
+| OpenRouter\* | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| Anthropic | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+| OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| DeepSeek | [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) |
+
+<Callout type="info" title="Which model for fixes?">
+  Triage is short and cheap, so any model works. The fix engine reads code and writes precise edits, so it does noticeably better on a strong coding model. A good setup is a strong model first for quality, then a free-tier key as the failover.
+</Callout>

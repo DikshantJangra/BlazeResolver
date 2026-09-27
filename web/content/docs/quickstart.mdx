@@ -1,0 +1,106 @@
+---
+title: Quickstart
+description: From zero to your first fix pull request in about ten minutes.
+---
+
+This guide sets up BlazeResolver in an existing repo. You need the [GitHub CLI](https://cli.github.com) (`gh`) logged in to the account that owns the repo.
+
+<Steps>
+<Step>
+
+### Run `init` in your repo
+
+From anywhere inside the repository:
+
+```bash
+npx blazeresolver init
+```
+
+`init` looks at what each package depends on (not at folder names) to find your frontend and backend, then asks you to confirm. Press Enter to accept, or type another folder. In scripts and CI, pass the answers instead:
+
+```bash
+npx blazeresolver init --frontend web --backend api --yes
+```
+
+It adds four things and records each change so `remove` can undo exactly that:
+
+| It adds | Where |
+| :--- | :--- |
+| `.github/workflows/blazeresolver.yml` | The fix and notify workflow, at the repo root |
+| The report endpoint | `/api/blaze` in your Next.js app or Express server |
+| The widget | One `<script>` in your `index.html` or Next.js root layout |
+| `blazeresolver.config.json` | Repo, branch, and your install, test and build commands |
+
+It also creates or appends to `.env` in the backend (`API_KEYS=` and `BLAZE_GITHUB_TOKEN=`) and installs the `blazeresolver` package there. See [`init` in detail](/docs/setup/init).
+
+</Step>
+<Step>
+
+### Give the endpoint a GitHub token
+
+Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) with access to **this repository only** and one permission: **Issues: Read and write**. Put it in the backend's `.env`:
+
+```bash title=".env"
+BLAZE_GITHUB_TOKEN=github_pat_...
+```
+
+This token can open issues and nothing else. It can't read your code or push. Set the same variable on your hosting provider when you deploy.
+
+</Step>
+<Step>
+
+### Add an AI key
+
+Paste any provider's key into `.env`. The provider is recognized from the key's format:
+
+```bash title=".env"
+API_KEYS=gsk_...
+```
+
+Then give the workflow the same key as a repo secret:
+
+```bash
+gh secret set API_KEYS
+```
+
+Several keys, even from different providers, go on one line separated by commas and fail over automatically. Groq, Gemini, NVIDIA NIM and OpenRouter have free tiers. See [AI providers](/docs/setup/ai-providers).
+
+</Step>
+<Step>
+
+### Allow Actions to open pull requests
+
+On GitHub, go to **Settings → Actions → General → Workflow permissions** and turn on **Allow GitHub Actions to create and approve pull requests**.
+
+To avoid this setting, and to have your CI run on BlazeResolver's pull requests, use a [GitHub App](/docs/setup/github-app) instead.
+
+</Step>
+<Step>
+
+### Protect your default branch
+
+Every fix must pass a human review. Let GitHub enforce that:
+
+```bash
+npx blazeresolver harden
+```
+
+This adds a branch ruleset (pull request plus one approval, no force pushes), a CODEOWNERS block for sensitive paths, read-only Actions defaults, and secret scanning. See [Harden your repo](/docs/setup/harden).
+
+</Step>
+<Step>
+
+### Commit and try it
+
+Commit the new files (never `.env`), push, and deploy. Open your app, click the widget, and describe a real bug. Within a few seconds an issue labelled `blazeresolver` appears. The workflow starts, and a few minutes later you get either a pull request or a comment explaining why it needs a human.
+
+</Step>
+</Steps>
+
+## Check your setup
+
+```bash
+npx blazeresolver providers   # which AI keys were recognized, in failover order (keys masked)
+```
+
+If a report doesn't turn into an issue, or the workflow doesn't start, see [Troubleshooting](/docs/troubleshooting).

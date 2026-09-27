@@ -2,8 +2,9 @@
 
 import React, { useState } from "react";
 import { FaGithub, FaBook, FaTerminal, FaCheck, FaCopy, FaBolt } from "react-icons/fa6";
+import Link from "next/link";
 
-const INIT = "npx blazeresolver init";
+const INIT = "npx blazeresolver@latest init";
 
 const SETUP_STEPS = [
   { title: "Run init in your repo", body: "Writes the workflow, the report route, the config and your .env (kept out of git)." },
@@ -83,15 +84,13 @@ export default function InstallationSection() {
           <FaGithub className="w-4 h-4" />
           <span>View on GitHub</span>
         </a>
-        <a
+        <Link
           className="ds-btn-secondary ds-btn-m flex items-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
-          href="https://github.com/DikshantJangra/BlazeResolver#readme"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/docs/quickstart"
         >
           <FaBook className="w-4 h-4" />
           <span>Documentation</span>
-        </a>
+        </Link>
         <a
           className="ds-btn-secondary ds-btn-m flex items-center gap-2.5 px-6 py-3 text-sm font-medium transition-all"
           href="https://www.npmjs.com/package/blazeresolver"

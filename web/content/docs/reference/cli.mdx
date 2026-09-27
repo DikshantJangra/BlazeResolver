@@ -1,0 +1,82 @@
+---
+title: CLI
+description: Every blazeresolver command and flag.
+---
+
+```bash
+npx blazeresolver <command> [options]
+```
+
+Run any command from anywhere inside your repo; it finds the repository root itself. `npx blazeresolver` with no command (or `help`) prints the usage.
+
+## `init`
+
+Sets up the repo: workflow, report endpoint, widget, `.env` and config. See [Set up with init](/docs/setup/init).
+
+| Option | Description |
+| :--- | :--- |
+| `--repo owner/name` | GitHub repo for issues and PRs. Default: read from your git remotes. |
+| `--branch <name>` | Default branch. Default: the current branch, or `main`. |
+| `--frontend <dir>` | Where the widget goes, relative to the repo root |
+| `--backend <dir>` | Where the report endpoint goes |
+| `--yes`, `-y` | Accept what was detected without asking |
+| `--install "<cmd>"` | Dependency install command (runs with network) |
+| `--test "<cmd>"` | Test command |
+| `--build "<cmd>"` | Build command |
+| `--no-sandbox` | Run tests with network instead of offline in a container |
+| `--sandbox-image <image>` | Container image for offline tests. Default: `node:<your Node major>-bookworm-slim`. |
+| `--pin <version>` | Use this exact version in the workflow and widget instead of `latest` |
+| `--app` | Write the GitHub App variant of the workflow |
+| `--force` | Set up again over an existing install, overwriting its files |
+| `--no-install` | Don't install the `blazeresolver` package |
+
+## `remove`
+
+Undoes `init`, exactly. See [Remove BlazeResolver](/docs/setup/remove).
+
+| Option | Description |
+| :--- | :--- |
+| `--yes`, `-y` | Don't ask for confirmation |
+| `--no-uninstall` | Keep the package in `package.json` |
+
+## `app`
+
+Creates a GitHub App for the fix job, stores `BLAZE_APP_ID` and `BLAZE_APP_PRIVATE_KEY` as repo secrets, waits for you to install it, and switches the workflow to it. Needs the GitHub CLI for the secrets. No options. See [GitHub App](/docs/setup/github-app).
+
+## `harden`
+
+Applies branch protection, CODEOWNERS, safe Actions defaults and secret scanning on GitHub. Needs the GitHub CLI. See [Harden your repo](/docs/setup/harden).
+
+| Option | Description |
+| :--- | :--- |
+| `--owner @you` | Owner of the sensitive paths in CODEOWNERS. Default: the logged-in `gh` user. |
+| `--strict` | No admin bypass on the branch ruleset |
+| `--dry-run` | Print what would change; change nothing |
+| `--yes`, `-y` | Don't ask for confirmation |
+
+It exits with code 1 if any step failed.
+
+## `providers`
+
+Lists the AI providers your keys were recognized as, in failover order, with keys masked. It reads `.env` in the current folder and your shell environment. See [AI providers](/docs/setup/ai-providers).
+
+```text
+$ npx blazeresolver providers
+1. anthropic: sk-a…0123 (key format)
+2. groq: gsk_…yz12 (key format), gsk_…ba98 (key format)
+3. skipped, provider unknown (use a named variable like MISTRAL_API_KEY, or BLAZE_KEY_PROBE=on): 0123…stuv
+```
+
+Each key shows how it was recognized: `key format`, or the variable it came from.
+
+## `fix`
+
+Run by the workflow, not by you. It reads the issue from `GITHUB_EVENT_PATH` and uses `GITHUB_TOKEN`, then runs the [fix engine](/docs/concepts/fix-engine) for that issue. It needs `blazeresolver.config.json` at the repo root.
+
+## `notify`
+
+Run by the workflow, not by you. When a `blazeresolver/fix-*` PR merges, it emails the customers who opted in. See [Customer notifications](/docs/setup/notifications).
+
+## Exit codes
+
+`0` on success. `1` on any error (the message goes to stderr), on an unknown command, or when `harden` had a failed step.

@@ -3,7 +3,6 @@
  *   <script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js" data-endpoint="/api/blaze" data-app-version="1.4.2"></script>
  * data-endpoint is the report handler in your own backend (`npx blazeresolver init` sets it up).
  * Building your own UI? POST {message, pageUrl, appVersion, userId, email, consoleErrors} to that endpoint.
- * data-key is only for the hosted-server mode: with it the default endpoint is <script origin>/api/report.
  *
  * Optional attributes:
  *   data-user-id, data-user-email   who is reporting (or call BlazeResolver.identify({ id, email }))
@@ -20,7 +19,6 @@
 
   var script = document.currentScript || document.querySelector('script[src*="widget.js"]');
   var attr = function (name) { return (script && script.getAttribute('data-' + name)) || ''; };
-  var key = attr('key');
   var endpoint = attr('endpoint') || '/api/blaze';
   var version = attr('app-version');
   var user = { id: attr('user-id'), email: attr('user-email') };
@@ -206,7 +204,6 @@
       consoleErrors: ctx.checked && errors.length ? errors.slice() : undefined
     };
     var headers = { 'content-type': 'application/json' };
-    if (key) headers['x-blaze-key'] = key;
 
     sending = true;
     status.textContent = '';

@@ -77,33 +77,22 @@ An AI that writes code based on customer messages is an attack surface. These ru
 
 ## Current state
 
-What exists today is a customer-service demo for a restaurant (triage → correlate → refund → reply). About the left half of the sketch exists in basic form; none of the fix loop does.
+BlazeResolver is GitHub-native: no hosted server. The whole report-to-PR loop works for GitHub repos:
 
-**Reusable as-is or with changes:**
-- The 4-stage pipeline: Triage, Correlate, Resolve, Respond ([src/core/pipeline](src/core/pipeline/index.ts)).
-- **Correlate:** grouping many reports into one incident is exactly what's needed for duplicate bug reports.
-- **HITL approval queue:** becomes the PR approval queue ([resolve/index.ts](src/core/resolve/index.ts)).
-- **Prompt-injection guard and idempotency keys** ([guardrails/index.ts](src/core/guardrails/index.ts)).
-- **Live dashboard and WebSocket feed:** becomes the Admin dashboard ([client/App.tsx](client/App.tsx), [server.ts](src/server.ts)).
-- **Agent tool definitions:** can become an MCP server ([byo-agent.ts](src/channels/byo-agent.ts)).
+- **Widget** ([widget/widget.js](widget/widget.js)) files reports to a route in the user's own backend ([src/handler](src/handler/index.ts)).
+- **Triage** with a prompt-injection guard, AI triage on any of 26 providers with failover, and keyword rules as the fallback ([src/triage](src/triage/index.ts)). Duplicate reports become comments on one issue.
+- **Fix engine** on GitHub Actions ([src/jobs/fix.ts](src/jobs/fix.ts), [src/resolver](src/resolver/bug-resolver.ts)): investigate, patch, offline tests and build, edit guards, secret scan, audit trail, PR.
+- **Setup and teardown**: `init`, `app`, `harden`, `remove` ([src/cli](src/cli/index.ts)).
+- **Notify** customers when a fix merges ([src/notify](src/notify/index.ts)).
 
-**Missing:**
-- Install flow.
-- For scaling: Graft and per-project API keys.
-- Support widget and other channels.
-- GitHub integration.
-- The fix engine and sandbox.
-- Production signal integrations.
-- Persistence.
-- Real LLM calls: triage and replies are keyword rules and templates today.
+The earlier restaurant customer-service demo (correlate, refunds, voice, dashboard, hosted server) has been removed.
 
-**Known issues in the current code:**
-- **Keyword triage misclassifies messages.** "Rider taking a wrong route, check GPS" becomes `wrong_item` and gets auto-refunded ([triage/index.ts:42-45](src/core/triage/index.ts#L42-L45)).
-- **Hardcoded demo fallbacks in the core:** `branch_cp_02`, `ord-1021`, `cust_registered_user` ([correlate/index.ts:45](src/core/correlate/index.ts#L45), [resolve/index.ts:244](src/core/resolve/index.ts#L244)).
-- **Correlate reports a root cause the data doesn't support**, and incident summaries go stale ([correlate/index.ts:84-151](src/core/correlate/index.ts#L84-L151)).
-- **`POST /api/hitl/action` has no authentication.**
-- **All state is in memory.**
-- **The core is restaurant-specific:** hardcoded categories, dish and branch fields, kitchen timing, ₹ amounts.
+**Open gaps:**
+- Fine-grained GitHub tokens expire; the endpoint logs it, but nothing warns ahead of time.
+- Rate limiting is per server instance, so serverless copies don't share counts.
+- Two identical reports in the same second can still open two issues.
+- The endpoint installs the full package (codegraph, MCP client) though it only needs the handler.
+- No production-signal integration yet (Sentry).
 
 ---
 
@@ -124,15 +113,15 @@ Build the whole loop narrowly before building it broadly:
 
 ## Phase 0: Stabilize the current code
 
-- [ ] Fix the keyword-triage misclassification and add a regression test.
-- [ ] Remove the hardcoded demo fallbacks. Missing data must fail safely.
-- [ ] Fix Correlate: only state a root cause the signal confirms, and keep incident summaries up to date.
-- [ ] Add authentication to the approval endpoint.
+- [x] ~~Fix the keyword-triage misclassification and add a regression test.~~: that code was part of the removed demo.
+- [x] ~~Remove the hardcoded demo fallbacks. Missing data must fail safely.~~: that code was part of the removed demo.
+- [x] ~~Fix Correlate: only state a root cause the signal confirms, and keep incident summaries up to date.~~: that code was part of the removed demo.
+- [x] ~~Add authentication to the approval endpoint.~~: that code was part of the removed demo.
 - [ ] Add persistence (SQLite by default, Postgres optional) for reports, incidents, approvals and the audit log.
 - [ ] Load config from `.env` and validate it with `zod`.
-- [ ] Move all restaurant-specific code out of `src/core` into `examples/restaurant`.
-- [ ] Add GitHub Actions (typecheck and tests), a Dockerfile and `docker-compose.yml`.
-- [ ] Remove the duplicate `blazyy.png` files and the `file:///` links in the README.
+- [x] ~~Move all restaurant-specific code out of `src/core`~~: removed with the demo.
+- [x] Add GitHub Actions (typecheck and tests). No Dockerfile: nothing is hosted.
+- [x] Remove the duplicate `blazyy.png` files and the `file:///` links in the README.
 
 **Done when:** CI is green, state survives a restart, and `src/core` contains no restaurant terms.
 

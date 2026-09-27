@@ -81,14 +81,12 @@ export default function Header() {
             >
               Get started
             </a>
-            <a
-              href="https://github.com/DikshantJangra/BlazeResolver#readme"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/docs"
               className="text-sm font-medium text-white/70 hover:text-white transition-colors"
             >
               Docs
-            </a>
+            </Link>
             <a
               href="https://github.com/DikshantJangra/BlazeResolver/discussions"
               target="_blank"
@@ -182,14 +180,12 @@ export default function Header() {
           >
             Get started
           </a>
-          <a
-            href="https://github.com/DikshantJangra/BlazeResolver#readme"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href="/docs"
             className="ds-mobile-menu-item"
           >
             Documentation
-          </a>
+          </Link>
           <a
             href="https://github.com/DikshantJangra/BlazeResolver/discussions"
             target="_blank"

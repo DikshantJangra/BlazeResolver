@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/* The docs are their own root layout, so the marketing site's globals.css never loads here (and vice versa). */
+
+@font-face {
+  font-family: "Host Grotesk";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url(/fonts/host-grotesk-latin.woff2) format("woff2");
+}
+@font-face {
+  font-family: "Fragment Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/fragment-mono-latin.woff2) format("woff2");
+}
+
+@theme {
+  --font-sans: "Host Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* BlazeResolver orange on the neutral preset. */
+:root {
+  --color-fd-primary: #e05e00;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-ring: #ff6b00;
+}
+
+.dark {
+  --color-fd-background: #0a0b0e;
+  --color-fd-card: #111318;
+  --color-fd-popover: #111318;
+  --color-fd-secondary: #16181e;
+  --color-fd-muted: #16181e;
+  --color-fd-accent: #1c1f26;
+  --color-fd-border: #23262e;
+  --color-fd-primary: #ff6b00;
+  --color-fd-primary-foreground: #0a0b0e;
+  --color-fd-ring: #ff6b00;
+}
+
+::selection {
+  background: #ff6b00;
+  color: #fff;
+}

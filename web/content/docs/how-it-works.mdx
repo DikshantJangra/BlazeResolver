@@ -1,0 +1,70 @@
+---
+title: How it works
+description: The full path of one bug report, from the widget to a merged pull request.
+---
+
+BlazeResolver has three moving parts, and each runs in a place you already control:
+
+| Part | Runs in | Holds |
+| :--- | :--- | :--- |
+| **Widget** | Your users' browsers | Nothing secret |
+| **Report endpoint** (`/api/blaze`) | Your backend | A GitHub token that can only open issues, plus optionally an AI key for triage |
+| **Workflow** (`blazeresolver.yml`) | GitHub Actions, on a fresh VM per run | Your repo secrets: AI keys, and the token that opens pull requests |
+
+There is no BlazeResolver server. Nobody else ever holds your keys.
+
+## 1. A customer reports a problem
+
+The [widget](/docs/setup/widget) is a small panel in a shadow DOM (about 14 KB gzipped). The customer types what went wrong. With the report the widget sends the page address, the app version (if you set one), and up to 20 recent JavaScript errors from the page. The reporter can untick the errors before sending.
+
+## 2. The endpoint triages it
+
+The [handler](/docs/reference/handler) validates the report, rate-limits by IP, and then [triages](/docs/concepts/triage) it:
+
+1. **Injection check first.** If any field looks like an attempt to instruct the AI, the report is dropped without calling a model.
+2. **Classify.** An AI model (or keyword rules, when no key is set or the model takes longer than 8 seconds) returns a kind (`bug`, `outage`, `feature_request`, `how_to`, `account_billing`, `abuse`, `other`), a severity, a one-line summary, and steps to reproduce.
+3. **Route.**
+   - `bug` and `outage` become an issue labelled **`blazeresolver`**. Critical ones also get `priority:critical`.
+   - `feature_request` becomes an issue labelled `customer-feedback`, which the workflow ignores.
+   - Everything else is acknowledged and not filed.
+
+The customer always gets the same answer (`202 {"received": true}`) and never sees the verdict.
+
+## 3. Duplicate reports are grouped
+
+Each issue carries a hidden key derived from the affected feature or page. When a second customer reports the same thing, the handler comments on the existing open issue ("Another customer reported this.") instead of opening a new one. The fix job later counts these comments as the number of affected customers.
+
+## 4. The workflow runs the fix engine
+
+The new issue triggers `.github/workflows/blazeresolver.yml`. The `fix` job starts only when the issue carries the `blazeresolver` label **and** was opened by an owner, member or collaborator. Your endpoint's token belongs to one, and a random visitor can't trigger it.
+
+On the runner, [`blazeresolver fix`](/docs/concepts/fix-engine):
+
+1. Labels the issue `blazeresolver:fixing`.
+2. Clones the latest commit of your default branch and indexes it.
+3. Runs your tests once on the untouched code (the baseline).
+4. Asks the model to **investigate**: root cause, suspected files, confidence, evidence.
+5. Asks the model to **propose a fix** as JSON edits, up to 3 attempts. Each attempt gets a fresh workspace, and each retry sees the previous failure.
+6. For each proposal, the harness refuses forbidden paths and risky edits, applies the patch, scans it for secrets, then runs your tests and build **offline in a container**.
+7. When an attempt passes, it scans the final diff for secrets again, commits, pushes `blazeresolver/fix-issue-<n>`, and opens a pull request that closes the issue.
+
+## 5. You review
+
+The pull request has two parts:
+
+- **The description**: incident, root cause, evidence, the fix, test output, and a risk note.
+- **An audit comment**, written by the harness rather than the model: engine version, providers, attempts, files changed, tests before and after, how isolated the tests were, and which checks passed.
+
+The issue is labelled `blazeresolver:pr-opened`. If no attempt passed, it's labelled `blazeresolver:needs-human` instead, with a comment saying which guard or test stopped it and the model's best guess at the cause.
+
+## 6. You merge, customers hear back
+
+When a `blazeresolver/fix-*` pull request merges, the `notify` job emails the customers who asked to be told. This is opt-in: it needs `BLAZE_NOTIFY_CUSTOMERS=true` on the endpoint, plus Resend secrets. See [Customer notifications](/docs/setup/notifications).
+
+## What never happens
+
+- The model never gets a shell, a token, network access to your infrastructure, or a clone. It returns text, and BlazeResolver's own code decides what to do with it.
+- Nothing is merged, and nothing is pushed to your default branch.
+- Fixes never touch CI config, secrets, lockfiles, auth, payments, billing or migrations.
+
+Read the [Security model](/docs/concepts/security) for every layer.

@@ -2,6 +2,7 @@
 
 import React from "react";
 import { FaGithub, FaComments, FaBook } from "react-icons/fa6";
+import Link from "next/link";
 
 export default function Footer() {
   return (
@@ -42,15 +43,13 @@ export default function Footer() {
               <FaComments className="w-3.5 h-3.5" />
               <span>Community</span>
             </a>
-            <a
-              href="https://github.com/DikshantJangra/BlazeResolver#readme"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/docs"
               className="flex items-center gap-1.5 hover:text-white transition-colors"
             >
               <FaBook className="w-3.5 h-3.5" />
               <span>Documentation</span>
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -64,25 +63,21 @@ export default function Footer() {
           aria-label="Policies and statements"
           className="flex items-center gap-3 text-xs"
         >
-          <a
+          <Link
             className="text-white/60 transition-colors hover:text-white whitespace-nowrap"
-            href="https://github.com/DikshantJangra/BlazeResolver#readme"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/docs/concepts/security"
           >
             Safe Use Policy
-          </a>
+          </Link>
           <span aria-hidden="true" className="text-white/30">
             ·
           </span>
-          <a
+          <Link
             className="text-white/60 transition-colors hover:text-white whitespace-nowrap"
-            href="https://github.com/DikshantJangra/BlazeResolver#readme"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/docs/concepts/security#privacy"
           >
             Data Statement
-          </a>
+          </Link>
         </nav>
       </div>
     </footer>

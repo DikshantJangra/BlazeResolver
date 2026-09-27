@@ -1,0 +1,38 @@
+---
+title: Harden your repo
+description: Make GitHub itself enforce that a human reviews every fix.
+---
+
+```bash
+npx blazeresolver harden
+```
+
+BlazeResolver never merges. `harden` makes GitHub enforce that too, so the guarantee doesn't rest on BlazeResolver's code alone. It uses the GitHub CLI (`gh`) with your login, shows the plan, and asks before changing anything.
+
+## What it changes
+
+| Step | Change |
+| :--- | :--- |
+| **Branch ruleset** | A ruleset named *BlazeResolver: protect the default branch*: no deletion, no force pushes, and changes only through a pull request with 1 approval and a code owner's review. Stale approvals are dismissed on new pushes. Repo admins can still merge through a pull request (`--strict` removes that too). Re-running updates the ruleset in place. |
+| **CODEOWNERS** | Appends a block to `.github/CODEOWNERS` so a named owner must review anything under `/.github/`, `auth/`, `payments/`, `billing/`, `migrations/`, `package.json`, `/package-lock.json` and `.npmrc`. |
+| **Actions defaults** | The workflow token becomes read-only by default. With a [GitHub App](/docs/setup/github-app), Actions also can no longer approve pull requests. |
+| **Secret scanning** | Turned on, with push protection. |
+
+Each step reports on its own. Free private repos can't use rulesets, and private repos need GitHub Secret Protection for secret scanning. A failed step doesn't block the others, and it tells you what to set by hand instead.
+
+## Options
+
+| Flag | Effect |
+| :--- | :--- |
+| `--owner @you` | Who owns the sensitive paths: a user or `@org/team`. Defaults to the logged-in `gh` user. |
+| `--strict` | No admin bypass: even you need someone else's approval to merge |
+| `--dry-run` | Show what would change, and change nothing |
+| `--yes` | Don't ask for confirmation |
+
+## Still up to you
+
+GitHub can't be told these for you:
+
+- **Add your CI job as a required status check** (Settings → Rules → the ruleset). Only you know its name.
+- **Commit `.github/CODEOWNERS`.** The code-owner rule applies once it's on the default branch.
+- **Never run this workflow on self-hosted runners in a public repo.** Turn on two-factor authentication for everyone with write access.

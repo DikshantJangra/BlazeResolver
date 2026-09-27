@@ -1,0 +1,48 @@
+---
+title: Security model
+description: Every layer between an anonymous customer's text and your default branch.
+---
+
+BlazeResolver takes text from anyone on the internet and turns it into code changes in your repo. That's only safe if the text can influence *what the model writes*, but never *what the system is allowed to do*. This page lists every layer that keeps it that way.
+
+## Threat model
+
+We assume a customer report can be **fully adversarial**: a crafted message that tries to make the model add a backdoor, leak a secret, weaken a test, or run code with network access. We assume the model **may comply**. The defenses therefore sit in deterministic code around the model, not in the prompt.
+
+## Layers
+
+| Layer | What it does |
+| :--- | :--- |
+| **Split privileges** | The internet-facing endpoint holds an Issues-only token for one repo. It can't read code or push. The code-writing credentials exist only on the GitHub runner. |
+| **Injection screen** | Known injection and attack patterns are dropped at the endpoint before any model sees them. |
+| **Data, not instructions** | Customer text is wrapped as data in every prompt, fenced in the issue so it can't render as markdown or `@mention` anyone, and stripped of markers before the fix engine reads it. |
+| **Trusted trigger** | The fix job only runs for issues labelled `blazeresolver` **and** opened by an owner, member or collaborator. The labels that mean "already handled" stop re-runs. |
+| **No tools for the model** | The model never gets a shell, a token, a clone or network access. It returns JSON, and the harness applies the edits. |
+| **Your own runner** | The job runs on a fresh GitHub-hosted VM, destroyed afterwards. Your keys live in your repo's secrets; nobody else holds them. |
+| **Offline tests** | Dependencies install from your lockfile (with network). Then tests and build run in a container with `--network none`, no capabilities, no privilege escalation, a non-root user, and none of the runner's environment. It fails closed without Docker. |
+| **Edit guards** | Fixes that touch CI, secrets, lockfiles, auth, payments, billing, migrations, install or test-runner config are refused. So are dependency, script or install-time `package.json` changes, removed assertions, and patches over 400 lines. See [Guards](/docs/concepts/fix-engine#guards). |
+| **Secret scan** | Every added line is checked for credential formats and for the exact values of this job's own secrets, once before the tests and again on the final diff. Nothing is pushed if one is found. |
+| **Token hygiene** | The clone's git config never keeps the token. Error messages and failure output are scrubbed of it. |
+| **Least privilege** | Permissions are set per job, read-only by default. With a [GitHub App](/docs/setup/github-app), the built-in token can only read, and a repo-scoped App token that lives minutes does the writing. |
+| **Pinned actions** | Third-party actions are pinned to full commit SHAs. [`--pin`](/docs/setup/updates) locks BlazeResolver itself to one version. |
+| **Human in the loop** | BlazeResolver opens pull requests and never merges. [`harden`](/docs/setup/harden) makes GitHub enforce an approval and a code-owner review. |
+| **Audit trail** | Every PR gets a comment written by the harness, not the model: engine version, providers, attempts, files changed, tests before and after, isolation level, and the checks passed. |
+
+## Privacy
+
+- **Customer identity.** Reports can carry a `userId` and `email`. User ids aren't written to the issue. Emails are only stored when you set `BLAZE_NOTIFY_CUSTOMERS=true`, and then only base64-encoded in a hidden HTML comment, so use a **private** repo for that. On GitHub, customers are counted, never named.
+- **Where text goes.** The report text (and console errors) goes to your AI provider for triage, and the issue body goes to your provider during the fix. Choose providers whose data terms fit your users.
+- **Console errors** can contain URLs or ids from your app. The reporter can untick them before sending.
+- **Commit messages** are scrubbed of anything that looks like personal data before commit.
+
+## What stays your responsibility
+
+- **Reviewing the diff.** A fix can be wrong in a way your tests don't catch. The guards stop *dangerous* changes, not *incorrect* ones.
+- **Writing tests worth passing.** The engine is exactly as trustworthy as your test suite.
+- **Runners.** Never run this workflow on self-hosted runners in a public repo.
+- **Account security.** Turn on two-factor authentication for everyone with write access, and keep branch protection on.
+- **Rate limiting at scale.** The endpoint's limits live in memory, per instance. For high-traffic apps, add your host's rate limiting or a WAF rule.
+
+## Reporting a vulnerability
+
+Please report security issues privately from the [Security tab](https://github.com/DikshantJangra/BlazeResolver/security) of the BlazeResolver repository, not in a public issue.

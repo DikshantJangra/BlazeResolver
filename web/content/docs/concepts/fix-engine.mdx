@@ -1,0 +1,128 @@
+---
+title: Fix engine
+description: What blazeresolver fix does on the runner, from a labelled issue to a pull request.
+---
+
+The fix engine runs as the `fix` job of your workflow, on a fresh GitHub-hosted VM that's destroyed afterwards. It turns one issue into either a pull request or a clear explanation of why it couldn't.
+
+**The AI proposes, the harness executes.** The model only ever returns JSON: first an investigation, then file edits. BlazeResolver's own code applies the edits, runs your tests, commits, pushes and opens the pull request.
+
+## Before it starts
+
+The job exits early, and does nothing, if:
+
+- the issue no longer has the `blazeresolver` label,
+- it already has `blazeresolver:fixing`, `blazeresolver:pr-opened` or `blazeresolver:needs-human`,
+- its author isn't an owner, member or collaborator.
+
+These are checked against the issue as it is now, not the (possibly stale) event payload. Then it labels the issue `blazeresolver:fixing`, and counts the "Another customer reported this" comments to get the number of affected customers.
+
+## The loop
+
+<Steps>
+<Step>
+
+**Clone.** A shallow clone of the latest commit of your default branch. The token is removed from the clone's git config straight away, so your repo's own tests can't read it.
+
+</Step>
+<Step>
+
+**Index.** [CodeGraph](https://www.npmjs.com/package/@lzehrung/codegraph) builds a code graph of the repo (definitions, references, call and file dependencies), used to find the code the report is about.
+
+</Step>
+<Step>
+
+**Baseline.** Your tests run once on the untouched code. If they fail, the bug is reproduced, and that failure goes to the model as evidence. If they pass, the audit notes that the bug wasn't covered by an existing test.
+
+</Step>
+<Step>
+
+**Investigate.** The engine gathers up to 8 relevant files (from the code graph and from file paths in the attached stack traces) and asks the model for a summary, a root cause, the suspected files, a confidence (`low`/`medium`/`high`), and evidence.
+
+</Step>
+<Step>
+
+**Propose, patch, test, build.** Up to **3 attempts** by default (never more than 5). Each attempt:
+
+1. starts from a **fresh workspace**, so a failed attempt never leaks into the next,
+2. shows the model the current contents of the suspected files, plus the previous attempts and exactly where each one failed,
+3. gets back edits of two kinds: *replace this exact text* (which must occur exactly once), or *create this new file*,
+4. goes through the [guards](#guards). A refusal counts as a failed attempt, and the reason goes back to the model,
+5. is applied as a unified diff, scanned for secrets, then tested and built.
+
+The first attempt whose tests **and** build pass wins.
+
+</Step>
+<Step>
+
+**Final check and publish.** The final diff is scanned for secrets again. Then the engine commits as `fix: <incident title>`, pushes `blazeresolver/fix-issue-<n>`, opens the pull request against your default branch, and posts the audit comment.
+
+</Step>
+</Steps>
+
+## Guards
+
+An attempt is refused, and the model is told why, when it would:
+
+| Refused | Why |
+| :--- | :--- |
+| Touch `.github/`, `.env*`, lockfiles, or any `auth`, `payment(s)`, `billing`, `migration(s)` or `secret(s)` folder | Where a wrong change costs the most |
+| Touch install config: `.npmrc`, `.yarnrc(.yml)`, `.pnpmfile.cjs`, `pnpm-workspace.yaml`, `.nvmrc`, `.node-version` | Where a malicious registry or script would be planted |
+| Touch test-runner config: `jest`, `vitest`, `vite`, `playwright`, `cypress`, `karma`, `ava`, `mocha`, `nyc` or `c8` configs | A fix could "pass" by switching tests off |
+| Change `dependencies`, `devDependencies`, `scripts`, `bin`, `main`, `exports`, `type`, `engines`, `overrides`, `workspaces` or `packageManager` in any `package.json`, or create a new one | How code gets smuggled in at install time |
+| Remove assertions from an existing test (fewer `expect`/`assert`/`it`/`test`/`describe` calls after the edit) | A test that checks less isn't a fix |
+| Produce a patch over 400 lines | That's a redesign, not a bug fix |
+| Add a credential: private keys, AWS, GitHub, Anthropic, OpenAI-style, Google, Slack, Stripe, Groq/NVIDIA and npm tokens, JWTs, hard-coded secrets, or the exact value of any secret in this job's environment | Nothing leaves through the PR |
+
+## Where tests run
+
+With the default `"sandbox": "docker"` in `blazeresolver.config.json`:
+
+1. **Install, with network.** Your `installCommand` installs dependencies from the lockfile. That's the only code that ever runs with network access, and it's code you already chose.
+2. **Test and build, offline.** They run in a `node:<major>-bookworm-slim` container with `--network none`, no Linux capabilities, no privilege escalation, a non-root user, and none of the runner's environment. AI-written code can't phone home or read the job's secrets.
+
+If Docker isn't available, the job **fails closed** rather than silently running with network. GitHub-hosted Ubuntu runners have Docker. Opt out with `init --no-sandbox` (`"sandbox": "none"`); tests then run with network, and the audit comment says so.
+
+## Outcomes
+
+**A fix passed.** You get a pull request with:
+
+- **Incident**, and how many customers reported it
+- **Root cause** and **Evidence** from the investigation
+- **Fix**: the model's summary of the change
+- **Verification**: tests before and after, and the tail of the passing test output
+- **Risk**: the model's confidence, and a reminder that nothing merges without a human
+- `Closes #<n>`
+
+Plus the audit comment:
+
+```md
+## BlazeResolver audit
+
+| | |
+| :--- | :--- |
+| Engine | blazeresolver 0.5.0 |
+| Trigger | issue #42, 3 customer report(s) |
+| Model | providers in failover order: anthropic, groq; 4 model call(s) |
+| Attempts | 2 of 3 allowed (earlier attempts failed at: #1: test) |
+| Files changed | 1 (+6 -2): `src/cart/checkout.ts` |
+| Tests before the fix | failing |
+| Tests after the fix | passing |
+| Build after the fix | passing |
+| Isolation | offline: dependencies installed with network from the lockfile, then tests and build ran in a `node:22-bookworm-slim` container with no network, no capabilities and no privilege escalation |
+| Checks passed | no forbidden paths (...); no dependency, script or install-time changes; no removed assertions; no secrets in the diff; patch within the size limit |
+| Duration | 3m |
+
+Written by the harness, not the model. A human still has to review the diff and merge.
+```
+
+**No fix passed.** The issue gets `blazeresolver:needs-human` and a comment with the incident, why it stopped, the stage and output of the last failed attempt (secrets scrubbed), and the model's best guess at the cause, with its confidence. That's often enough to fix it yourself in minutes.
+
+**The job errored** (no AI key, clone failure and so on). The issue gets `blazeresolver:needs-human` and a comment with the error, token redacted, and the workflow run fails so you notice.
+
+## Limits
+
+- The job has a 30-minute timeout.
+- Each model call can take up to 3 minutes and return up to 4,096 tokens.
+- Test and build output given to the model is cut to its last 8,000 characters, where runners report failures.
+- What no sandbox can catch stays yours: a fix that's wrong but passes weak tests. Review the diff, and write tests worth passing.

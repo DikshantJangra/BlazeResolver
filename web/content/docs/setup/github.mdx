@@ -1,0 +1,71 @@
+---
+title: GitHub tokens and settings
+description: The two tokens BlazeResolver uses, the permissions each needs, and the repo settings to change.
+---
+
+BlazeResolver keeps its GitHub access split in two, so the internet-facing part can do as little as possible.
+
+| | Report endpoint | Fix workflow |
+| :--- | :--- | :--- |
+| **Where it runs** | Your backend, open to the internet | GitHub Actions, triggered by an issue |
+| **Token** | `BLAZE_GITHUB_TOKEN` in the backend's environment | The workflow's own `GITHUB_TOKEN`, a PAT in the `BLAZE_GITHUB_TOKEN` repo secret, or a GitHub App token |
+| **Needs** | Issues: read and write | Contents, Pull requests and Issues: write |
+| **Can push code?** | No | Yes, to its own `blazeresolver/fix-*` branch |
+
+## The endpoint's token
+
+Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new):
+
+- **Repository access:** Only select repositories → your repo.
+- **Permissions:** Issues → **Read and write**. Nothing else.
+
+Set it as `BLAZE_GITHUB_TOKEN` wherever the backend runs: `.env` locally, and your host's environment settings in production (Vercel, Railway, Fly and so on).
+
+<Callout type="warn">
+  The workflow only picks up issues opened by an owner, member or collaborator. The issues this token opens are authored by the token's owner, so the token must belong to someone with write access to the repo.
+</Callout>
+
+If this token leaks, the worst anyone can do is open, comment on and label issues in that one repo.
+
+## The workflow's token
+
+The workflow picks the first of these that exists:
+
+1. **A GitHub App token**, when set up with [`npx blazeresolver app`](/docs/setup/github-app). This is the recommended option: it's short-lived, scoped to this repo, and the PRs it opens trigger your CI.
+2. **The `BLAZE_GITHUB_TOKEN` repo secret**, if you add one. This is a personal access token, so PRs it opens trigger your CI. It needs **Contents, Pull requests and Issues: Read and write**. That's more than the endpoint's token, so don't reuse the endpoint's token here.
+3. **The built-in `GITHUB_TOKEN`**, which needs nothing from you. GitHub doesn't run workflows on pull requests opened by this token, so your CI won't start on its own. Push an empty commit or re-run CI by hand.
+
+## Repo settings
+
+**Settings → Actions → General → Workflow permissions:**
+
+- Turn on **Allow GitHub Actions to create and approve pull requests**. This is needed for options 2 and 3 above. With a GitHub App you can leave it off; `blazeresolver app` tells you when it's safe to turn it off.
+
+**Settings → Secrets and variables → Actions:**
+
+| Name | Type | Needed |
+| :--- | :--- | :--- |
+| `API_KEYS` | Secret | Yes: any AI provider key(s). See [AI providers](/docs/setup/ai-providers). |
+| `BLAZE_GITHUB_TOKEN` | Secret | Optional: a PAT for the fix job (see above) |
+| `BLAZE_APP_ID`, `BLAZE_APP_PRIVATE_KEY` | Secrets | Set by `npx blazeresolver app` |
+| `RESEND_API_KEY`, `BLAZE_FROM_EMAIL` | Secrets | Only for [customer notifications](/docs/setup/notifications) |
+| `BLAZE_PROVIDER`, `BLAZE_MODEL` | Variables | Optional: pin a provider or model for the fix job |
+
+Set secrets from the terminal with `gh secret set NAME`, and variables with `gh variable set NAME`.
+
+**Branch protection.** Require a pull request with at least one approval on your default branch. [`npx blazeresolver harden`](/docs/setup/harden) does this for you.
+
+## Labels
+
+The workflow uses these labels. GitHub creates each one the first time it's applied, so you don't need to create them yourself.
+
+| Label | Meaning |
+| :--- | :--- |
+| `blazeresolver` | A customer bug the fix engine should work on |
+| `priority:critical` | Triaged as critical severity |
+| `customer-feedback` | A feature request. The workflow ignores it. |
+| `blazeresolver:fixing` | The fix job is running or has run |
+| `blazeresolver:pr-opened` | A pull request is open for review |
+| `blazeresolver:needs-human` | No fix passed, or the job hit an error. See the issue's comments. |
+
+See [Issue lifecycle](/docs/concepts/issue-lifecycle) for how an issue moves between them.

@@ -1,0 +1,89 @@
+---
+title: Handler API
+description: createHandler and nodeHandler from blazeresolver/handler, with the request and response contract.
+---
+
+```ts
+import { createHandler, nodeHandler } from 'blazeresolver/handler';
+```
+
+`blazeresolver/handler` ships as both ESM and CommonJS with types, so it works from TypeScript, `import` and `require` alike. The same two functions are also exported from the package root.
+
+## `createHandler(options)`
+
+Returns a Web-standard handler, `(request: Request) => Promise<Response>`. Mount it as-is in Next.js App Router, Cloudflare Workers, Vercel, Deno or Bun.
+
+```ts
+const handler = createHandler({
+  repo: 'acme/shop',
+  allowOrigin: 'https://shop.acme.com',
+  rateLimit: { perIp: 5, perHour: 200 },
+});
+```
+
+<TypeTable
+  type={{
+    repo: { type: 'string', description: 'owner/name of the repo that gets the issues.', required: true },
+    githubToken: { type: 'string', description: 'Token with Issues: write on that one repo.', default: 'process.env.BLAZE_GITHUB_TOKEN' },
+    complete: { type: '(system: string, user: string) => Promise<string>', description: 'Your own model call for triage. It must return the JSON triage expects. Default: whichever provider has a key in the environment; without one, keyword rules.' },
+    storeEmails: { type: 'boolean', description: "Keep the reporter's email in the issue, for fix notifications. Private repos only.", default: "process.env.BLAZE_NOTIFY_CUSTOMERS === 'true'" },
+    rateLimit: { type: '{ perIp?: number; perHour?: number }', description: 'Reports accepted per IP every 10 minutes, and in total per hour, per instance.', default: '{ perIp: 10, perHour: 100 }' },
+    allowOrigin: { type: 'string', description: 'Sends CORS headers and answers preflights for this origin (or "*"). Set it when the widget runs on another origin.' },
+    fetch: { type: 'typeof fetch', description: 'Custom fetch for the GitHub calls, e.g. for tests or a proxy.', default: 'globalThis.fetch' },
+  }}
+/>
+
+## `nodeHandler(handler)`
+
+Adapts a handler to Node's `(req, res)`, for Express, Next.js Pages Router and plain `http` servers. It works with or without a body parser.
+
+```ts
+app.all('/api/blaze', nodeHandler(createHandler({ repo: 'acme/shop', allowOrigin: '*' })));
+```
+
+## Request body
+
+`POST` with a JSON body, at most 20,000 characters in total:
+
+<TypeTable
+  type={{
+    message: { type: 'string', description: 'What went wrong, in the reporter\'s words. 1 to 5,000 characters after trimming.', required: true },
+    pageUrl: { type: 'string', description: 'Page the report came from. Up to 2,000 characters. Its path groups reports when the model names no feature.' },
+    appVersion: { type: 'string', description: 'Your release. Up to 100 characters.' },
+    userId: { type: 'string', description: 'Reporter id. Up to 200 characters. Checked by the injection screen; never written to the issue.' },
+    email: { type: 'string', description: 'Valid email, up to 200 characters. Only kept when storeEmails is on.' },
+    consoleErrors: { type: 'string[]', description: 'Up to 20 entries of up to 1,000 characters each.' },
+  }}
+/>
+
+## Responses
+
+| Status | Body | When |
+| :--- | :--- | :--- |
+| `202` | `{"received": true}` | Accepted, whatever triage decided, including dropped injection attempts and questions that aren't filed |
+| `204` | none | `OPTIONS` preflight |
+| `400` | `{"error": "invalid json"}` / `{"error": "invalid report"}` | Body isn't JSON, or doesn't match the schema |
+| `405` | `{"error": "POST only"}` | Any other method |
+| `413` | `{"error": "too large"}` | Body over 20,000 characters |
+| `429` | `{"error": "rate limit"}` | Per-IP or hourly limit hit |
+| `500` | `{"error": "BLAZE_GITHUB_TOKEN is not set"}` | No token configured |
+| `502` | `{"error": "could not file the report"}` | GitHub refused (expired token, missing permission, GitHub's own limits). Also logged loudly to stderr as `[blazeresolver] could not file a report in <repo>: …`. |
+
+The client IP for rate limiting comes from the first entry of `X-Forwarded-For`.
+
+## Wrapping the handler
+
+The handler is just a function, so you can put your own logic around it. For example, you could require a signed-in session:
+
+```ts title="app/api/blaze/route.ts"
+import { createHandler } from 'blazeresolver/handler';
+import { auth } from '@/lib/auth';
+
+const blaze = createHandler({ repo: 'acme/shop' });
+
+export async function POST(req: Request) {
+  const session = await auth();
+  if (!session) return new Response('Sign in to report a problem', { status: 401 });
+  return blaze(req);
+}
+```

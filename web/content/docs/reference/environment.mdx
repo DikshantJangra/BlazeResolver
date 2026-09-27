@@ -1,0 +1,51 @@
+---
+title: Environment variables
+description: Every variable BlazeResolver reads, where it goes, and what it does.
+---
+
+BlazeResolver reads variables in two places:
+
+- **Your backend**, which runs the report endpoint: set these in `.env` and on your host.
+- **The workflow**, which runs the fix engine: set these as repo secrets and variables.
+
+## Report endpoint (your backend)
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `BLAZE_GITHUB_TOKEN` | none (**required**) | Fine-grained token, **Issues: read and write** on one repo. Without it the endpoint answers `500`. |
+| `API_KEYS` | none | AI key(s) for triage, comma-separated, any provider. Without any, keyword rules classify reports. |
+| `BLAZE_NOTIFY_CUSTOMERS` | `false` | `true` stores the reporter's email in the issue for the fix notification. Private repos only. |
+| `BLAZE_RATE_LIMIT_PER_HOUR` | `100` | Total reports accepted per hour, per instance. The per-IP limit is fixed at 10 per 10 minutes, or set via `rateLimit.perIp` in code. |
+| `BLAZE_ALLOW_ORIGIN` | `*` | CORS origin, used by the Express file `init` writes |
+
+## Fix workflow (repo secrets and variables)
+
+| Name | Kind | Description |
+| :--- | :--- | :--- |
+| `API_KEYS` | Secret | AI key(s) for the fix engine. **Required.** |
+| `ANTHROPIC_API_KEY` | Secret | Optional, as a named alternative |
+| `BLAZE_GITHUB_TOKEN` | Secret | Optional PAT for the fix job, so its PRs trigger CI. Needs Contents, Pull requests and Issues write. |
+| `BLAZE_APP_ID`, `BLAZE_APP_PRIVATE_KEY` | Secrets | GitHub App credentials, set by `blazeresolver app` |
+| `RESEND_API_KEY` | Secret | Resend key for customer notifications |
+| `BLAZE_FROM_EMAIL` | Secret | Sender, e.g. `Acme Support <support@acme.com>` |
+| `BLAZE_PROVIDER` | Variable | Pin one AI provider |
+| `BLAZE_MODEL` | Variable | Override the model |
+
+## AI provider settings (both places)
+
+| Variable | Description |
+| :--- | :--- |
+| `API_KEYS`, `API_KEY`, `API_KEY_1`… | Keys of any provider; each one's provider is recognized from its format |
+| `<NAME>_API_KEY`, `<NAME>_API_KEYS`, `<NAME>_API_KEY_1`… | Keys for one provider, e.g. `MISTRAL_API_KEY`. See the [provider table](/docs/setup/ai-providers#supported-providers) for names and aliases. |
+| `<NAME>_MODEL` | Model for one provider, e.g. `GROQ_MODEL=llama-3.1-8b-instant` |
+| `BLAZE_PROVIDER` | Use only this provider (its `name`, e.g. `groq`, `anthropic`, `azure-openai`) |
+| `BLAZE_MODEL` | Model override, sent only to providers that serve it. Its owner moves to the front of the failover order. |
+| `BLAZE_KEY_PROBE` | `on` asks likely providers once which one an unrecognized key belongs to |
+| `OPENAI_BASE_URL`, `NVIDIA_BASE_URL` | Point those providers at another compatible endpoint |
+| `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | Setting either enables a local Ollama (default `http://localhost:11434/v1`, `llama3.1`) |
+| `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT` | Both set enables Azure OpenAI. The key goes in `API_KEYS` or `AZURE_OPENAI_API_KEY`. |
+| `AZURE_OPENAI_API_VERSION` | Default `2024-08-01-preview` |
+
+## Set by GitHub
+
+The `fix` and `notify` commands also read `GITHUB_TOKEN` and `GITHUB_EVENT_PATH`, which GitHub Actions provides. They refuse to run without them.

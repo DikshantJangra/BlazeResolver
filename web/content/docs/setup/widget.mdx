@@ -1,0 +1,112 @@
+---
+title: Widget
+description: Add the support widget, match your brand, and open it from your own UI.
+---
+
+The widget is a small, light panel: a text box and a Send button. It's about 14 KB gzipped and lives in a shadow DOM, so it never clashes with your styles. On phones it becomes a bottom sheet. Unsent drafts are kept.
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js"
+        data-endpoint="/api/blaze"></script>
+```
+
+`init` adds this tag for you: before `</body>` in `index.html`, or as a `next/script` `<Script strategy="afterInteractive">` in your Next.js root layout.
+
+## What it sends
+
+| Field | Source |
+| :--- | :--- |
+| `message` | What the customer typed (up to 5,000 characters) |
+| `pageUrl` | The current page address |
+| `appVersion` | `data-app-version`, if set |
+| `userId`, `email` | `data-user-id` / `data-user-email`, `BlazeResolver.identify()`, or the optional email box |
+| `consoleErrors` | Up to 20 recent uncaught errors and unhandled promise rejections from the page. The reporter can untick these before sending. |
+
+The customer sees a thank-you whatever triage decides. The triage verdict is never shown to them.
+
+## Customize
+
+All options are `data-` attributes on the script tag:
+
+| Attribute | Default | Effect |
+| :--- | :--- | :--- |
+| `data-endpoint` | `/api/blaze` | Your [report endpoint](/docs/setup/report-endpoint) |
+| `data-accent` | `#ff6b00` | Brand color for the button and highlights |
+| `data-position` | `right` | `left` puts the launcher and panel on the left |
+| `data-title` | `Report a problem` | Panel heading |
+| `data-app-version` | none | Your release, attached to every report |
+| `data-user-id` | none | Who is reporting, if signed in |
+| `data-user-email` | none | Their email. The email box is then hidden. |
+| `data-ask-email` | `false` | `true` shows an optional "email me when it's fixed" box. Needs `BLAZE_NOTIFY_CUSTOMERS=true` on the endpoint. |
+| `data-launcher` | `true` | `false` hides the floating button; open the panel from your own UI instead |
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js"
+        data-endpoint="/api/blaze"
+        data-accent="#6d28d9"
+        data-position="left"
+        data-app-version="1.4.2"
+        data-ask-email="true"></script>
+```
+
+## Open it from your own UI
+
+Any element with `data-blazeresolver-open` opens the panel when clicked. Its value, if any, pre-fills the message:
+
+```html
+<a href="#" data-blazeresolver-open>Report a bug</a>
+<button data-blazeresolver-open="Checkout failed: ">Checkout problem?</button>
+```
+
+Or from JavaScript:
+
+```js
+BlazeResolver.open('optional text to pre-fill');
+BlazeResolver.close();
+BlazeResolver.toggle();
+```
+
+## Identify signed-in users
+
+```js
+BlazeResolver.identify({ id: user.id, email: user.email });
+```
+
+To call it as soon as the widget is ready:
+
+```js
+document.addEventListener('blazeresolver:ready', () => {
+  BlazeResolver.identify({ id: user.id, email: user.email });
+});
+```
+
+See [Widget API](/docs/reference/widget-api) for the full reference.
+
+## Keyboard
+
+- <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> sends the report.
+- <kbd>Esc</kbd> closes the panel.
+
+## Build your own UI
+
+You don't have to use the widget. POST JSON to your endpoint from anywhere, such as your own form, a mobile app, or a support tool:
+
+```ts
+await fetch('/api/blaze', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    message: 'The checkout button does nothing on Safari',
+    pageUrl: location.href,
+    appVersion: '1.4.2',
+    consoleErrors: ['TypeError: undefined is not an object (evaluating e.cart.items)'],
+  }),
+});
+// → 202 {"received": true}
+```
+
+The request schema is in the [Handler API](/docs/reference/handler#request-body).
+
+## Self-hosting the script
+
+The widget loads from jsDelivr, so installs pick up fixes automatically. To serve it yourself, copy `node_modules/blazeresolver/widget/widget.js` into your public folder and point `src` at it. To lock the CDN version instead, see [Updates and pinning](/docs/setup/updates).
