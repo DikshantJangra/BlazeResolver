@@ -19,6 +19,7 @@ import { IncidentStore, type IncidentRecord } from './incidents/index.js';
 import { ClaudeProvider } from './resolver/claude-provider.js';
 import { lockDownServerFiles, resolveFixSandbox, runFix } from './jobs/fix.js';
 import { REPO_PATTERN } from './github/index.js';
+import { MAX_HELP_DOCS, answerQuestion } from './answer/index.js';
 import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -156,12 +157,16 @@ app.post('/api/projects', (req, res) => {
     if (process.env.BLAZE_OPEN_SIGNUP !== 'true') return res.status(401).json({ error: 'signup is closed' });
     if (limited(`signup:${req.ip}`, 5, 3_600_000)) return res.status(429).json({ error: 'too many signups, try later' });
   }
-  const { repo, defaultBranch, testCommand, buildCommand } = req.body ?? {};
+  const { repo, defaultBranch, testCommand, buildCommand, helpDocs } = req.body ?? {};
   if (typeof repo !== 'string' || !REPO_PATTERN.test(repo)) return res.status(400).json({ error: 'repo must be owner/name' });
+  if (typeof helpDocs === 'string' && helpDocs.length > MAX_HELP_DOCS) return res.status(400).json({ error: `helpDocs is over ${MAX_HELP_DOCS} characters` });
   const text = (v: unknown, max: number) => (typeof v === 'string' && v.length > 0 && v.length <= max ? v : undefined);
-  const { project, key } = registry.register(repo, text(defaultBranch, 100), text(testCommand, 300), text(buildCommand, 300));
+  const { project, key } = registry.register(repo, text(defaultBranch, 100), text(testCommand, 300), text(buildCommand, 300), text(helpDocs, MAX_HELP_DOCS));
   return res.status(201).json({ project: { id: project.id, repo, defaultBranch: project.defaultBranch }, key });
 });
+
+// The widget waits 25 seconds, and triage has already used some of them.
+const answerComplete = resolveComplete({ timeoutMs: 12_000 });
 
 app.post('/api/report', async (req, res) => {
   const project = registry.verify(req.header('x-blaze-key'));
@@ -174,8 +179,14 @@ app.post('/api/report', async (req, res) => {
   const { incident, isNew } = store.addReport(project.id, parsed.data, result);
   if (incident && isNew && fixEnabled) enqueueFix(project, incident);
   broadcastLiveEvent('report_triaged', { projectId: project.id, triage: result }, 'admins');
-  // The customer only gets an acknowledgement, never the triage verdict.
-  return res.status(202).json({ received: true });
+  // A how-to question gets an answer from the project's README and help docs. Otherwise the customer only gets an
+  // acknowledgement, never the triage verdict.
+  const answer = await answerQuestion(parsed.data, result, {
+    complete: answerComplete,
+    helpDocs: project.helpDocs,
+    readme: { repo: project.repo, token: githubToken }
+  });
+  return answer ? res.status(200).json({ received: true, answer }) : res.status(202).json({ received: true });
 });
 
 app.get('/api/reports', (req, res) =>

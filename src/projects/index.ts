@@ -9,6 +9,8 @@ export interface Project {
   /** Run in a fresh clone by the fix engine. */
   testCommand: string;
   buildCommand: string;
+  /** The product's help docs; customer questions are answered from these. */
+  helpDocs?: string;
   /** sha256 of the project key. The key itself is shown once at registration and never stored. */
   keyHash: string;
   createdAt: string;
@@ -31,7 +33,8 @@ export class ProjectRegistry {
     repo: string,
     defaultBranch = 'main',
     testCommand = 'npm ci && npm test',
-    buildCommand = 'npm run build --if-present'
+    buildCommand = 'npm run build --if-present',
+    helpDocs?: string
   ): { project: Project; key: string } {
     const key = `blz_${randomBytes(24).toString('hex')}`;
     const project: Project = {
@@ -40,6 +43,7 @@ export class ProjectRegistry {
       defaultBranch,
       testCommand,
       buildCommand,
+      helpDocs,
       keyHash: hash(key),
       createdAt: new Date().toISOString()
     };

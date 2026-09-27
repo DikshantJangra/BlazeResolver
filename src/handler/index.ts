@@ -2,6 +2,7 @@ import { commentOnIssue, listOpenIssues, openIssue } from '../github/index.js';
 import { ReportSchema, resolveComplete, triage, type Complete } from '../triage/index.js';
 import { emailMarker, groupKey, keyMarker, renderIssueBody, renderReport, symptomIn } from './issue.js';
 import { sameSymptom, symptomOf } from '../triage/grouping.js';
+import { answerQuestion } from '../answer/index.js';
 
 export interface HandlerOptions {
   /** owner/name of the repo that gets the issues. */
@@ -10,6 +11,8 @@ export interface HandlerOptions {
   githubToken?: string;
   /** Model for triage. Defaults to whichever AI provider has a key configured; without one, keyword rules are used. */
   complete?: Complete;
+  /** Extra help docs, searched along with the repo's README when answering customer questions. */
+  helpDocs?: string;
   /** Keep the customer's email in the issue so they can be told when it's fixed. Only for private repos. */
   storeEmails?: boolean;
   /**
@@ -25,6 +28,8 @@ export interface HandlerOptions {
 const MAX_BODY = 20_000;
 /** The widget waits 25s. Triage past this falls back to keyword rules, so the report is still filed in time. */
 const TRIAGE_BUDGET_MS = 8_000;
+/** Answering a question comes after triage, inside the same 25s. */
+const ANSWER_BUDGET_MS = 12_000;
 
 function withDeadline(complete: Complete | undefined, ms: number): Complete | undefined {
   if (!complete) return undefined;
@@ -89,7 +94,13 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
     const report = parsed.data;
 
     const verdict = await triage(report, withDeadline(options.complete ?? resolveComplete({ timeoutMs: TRIAGE_BUDGET_MS }), TRIAGE_BUDGET_MS));
-    // The customer only ever gets an acknowledgement, never the verdict.
+    const answer = await answerQuestion(report, verdict, {
+      complete: withDeadline(options.complete ?? resolveComplete({ timeoutMs: ANSWER_BUDGET_MS }), ANSWER_BUDGET_MS),
+      helpDocs: options.helpDocs,
+      readme: { repo: options.repo, token, fetch: f }
+    });
+    if (answer) return reply(200, { received: true, answer });
+    // Apart from an answer to a question, the customer only ever gets an acknowledgement, never the verdict.
     const ack = () => reply(202, { received: true });
     if (verdict.injection || !(verdict.enterFixLoop || verdict.kind === 'feature_request')) return ack();
 
