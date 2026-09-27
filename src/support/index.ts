@@ -317,15 +317,6 @@ export class SupportStore {
           triageItemName: result.triage.itemName,
           triageResourceId: result.triage.resourceId,
           triageOrderId: result.triage.orderId,
-          resolutionActions: result.resolution.actions.map(({ actionType, approvalStatus, amount, reason }) => ({
-            actionType,
-            approvalStatus,
-            amount,
-            reason
-          })),
-          responseChannel: result.response.channel,
-          responseTone: result.response.tone,
-          responseQualityPassed: result.response.qualityPassed,
           processedAt: result.timestamp instanceof Date ? result.timestamp.toISOString() : String(result.timestamp)
         };
         aiResponseText = responseText;
