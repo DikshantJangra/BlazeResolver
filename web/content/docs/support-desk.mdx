@@ -42,9 +42,11 @@ Switch to the customer view from the desk's header to see the other side: a cust
 
 The reply is written by your [AI provider](/docs/setup/ai-providers) from the knowledge that best matches the message (RAG), plus the last few messages of the conversation:
 
-- **Your README**, when you pass `repo` (`init` does). A private repo needs `githubToken` or `BLAZE_GITHUB_TOKEN`.
+- **Your README**, read from the app's own checkout on disk. Where the README isn't deployed with the app, it's fetched from `repo` on GitHub (`init` sets it); a private repo then needs `githubToken` or `BLAZE_GITHUB_TOKEN` with Contents: read-only.
 - **`helpDocs`**, any Markdown or plain text you pass.
-- **The desk's saved replies**, including ones agents add or edit.
+- **The desk's saved replies**, the ones your agents add or edit. A new desk starts with none, so Blazzy never answers from anything but your own docs and replies.
+
+Blazzy answers as your product's assistant (`product`, or `BLAZE_PRODUCT_NAME`, defaulting to the repo's name) and never mentions other companies or products. With no readable README and no `helpDocs`, it has nothing to answer from, so it says a specialist will follow up rather than guessing.
 
 The same [keyword plus semantic search](/docs/setup/help-answers#semantic-search) as the report endpoint finds the matching sections. Blazzy is told to state only facts from them, and never to claim a refund, credit or other action was done. Without an AI provider, or if it fails, the customer gets the best-matching saved reply instead. **Draft reply** and **Re-diagnose** in the desk search the same knowledge.
 

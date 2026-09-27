@@ -12,7 +12,7 @@ BlazeResolver reads variables in two places:
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `BLAZE_GITHUB_TOKEN` | none (**required**) | Fine-grained token, **Issues: read and write** on one repo. Without it the endpoint answers `500`. |
+| `BLAZE_GITHUB_TOKEN` | none (**required**) | Fine-grained token, **Issues: read and write** on one repo, plus **Contents: read-only** if the repo is private (for README answers). Without it the endpoint answers `500`. |
 | `API_KEYS` | none | AI key(s) for triage, comma-separated, any provider. Without any, keyword rules classify reports. |
 | `BLAZE_NOTIFY_CUSTOMERS` | `false` | `true` stores the reporter's email in the issue for the fix notification. Private repos only. |
 | `BLAZE_RATE_LIMIT_PER_HOUR` | `100` | Total reports accepted per hour, per instance. The per-IP limit is fixed at 10 per 10 minutes, or set via `rateLimit.perIp` in code. |
@@ -52,12 +52,14 @@ Semantic search over your docs needs a provider with embeddings; without one, se
 
 | Variable | Description |
 | :--- | :--- |
+| `BLAZE_PRODUCT_NAME` | Your product's name, which Blazzy answers for (default: the repo's name). Same as the `product` option. |
 | `BLAZE_EMBED_PROVIDER` | Use only this embeddings provider (`custom`, `openai`, `voyage`, `gemini`, `mistral`, `cohere`, `azure-openai`, `ollama`), or `off` |
 | `BLAZE_EMBED_MODEL` | Embeddings model override for that provider |
 | `BLAZE_EMBED_BASE_URL`, `BLAZE_EMBED_API_KEY` | Any OpenAI-compatible `/embeddings` endpoint; takes priority when set |
 | `VOYAGE_API_KEY` | Voyage AI embeddings |
 | `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | Enables Azure OpenAI embeddings, with the endpoint and key above |
 | `OLLAMA_EMBED_MODEL` | Local Ollama embeddings model (default `nomic-embed-text`) |
+| `BLAZE_VECTOR_DB` | Where the default vector database is kept. Default `.blazeresolver/vectors.db` at the repo root. |
 | `BLAZE_EMBED_MIN_SIMILARITY` | Cosine similarity a section needs to count as a semantic match. Default `0.25`. |
 
 ## Set by GitHub

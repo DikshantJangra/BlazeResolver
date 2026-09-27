@@ -8,6 +8,7 @@ import {
   git, isNext, needsJsExtension, pickLayout, repoRoot, usesTypeScript
 } from './detect.js';
 import { MARK, hasManaged, indentOf, insertAfter, insertBefore, insertInline, lastImportLine } from './edit.js';
+import { VECTOR_DIR, gitignoreAddition } from '../answer/gitignore.js';
 import { expressRouterFile, pagesFile, routeFile, supportRouteFile, supportPagesFile, widgetTag, workflow, agentsRequirements, blazeTriageAgent, blazeResolverAgent, type ModuleStyle } from './templates.js';
 
 /** Everything `init` changed, so `remove` can undo exactly that and nothing else. */
@@ -81,7 +82,8 @@ const ENV_SECTIONS: EnvSection[] = [
   },
   {
     header: '# --- BlazeResolver: GitHub Token -----------------------------------------------\n' +
-      '# Fine-grained token: Issues read and write permissions on this repo.',
+      '# Fine-grained token on this repo: Issues read and write. If the repo is private, also Contents read-only,\n' +
+      '# so customer questions can be answered from its README.',
     vars: [{ key: 'BLAZE_GITHUB_TOKEN', comment: '# gh auth token or fine-grained PAT' }]
   },
 ];
@@ -388,7 +390,8 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     say('\nNext steps:');
     let step = 1;
     for (const m of manual) say(`  ${step++}. ${m}`);
-    say(`  ${step++}. Create a fine-grained GitHub token with Issues: read and write on ${repo} only.`);
+    say(`  ${step++}. Create a fine-grained GitHub token for ${repo} only, with Issues: read and write.`);
+    say('     If the repo is private, also give it Contents: read-only, so questions are answered from your README.');
     say('     Give it to your backend as BLAZE_GITHUB_TOKEN in .env (just created/updated for you).');
     say(`  ${step++}. Paste any AI key into .env as API_KEYS= (or API_KEY_1, API_KEY_2).`);
     say('     Universal auto-detection works with Gemini, Claude, OpenAI, Groq, NVIDIA, DeepSeek, xAI, etc.');
@@ -399,6 +402,24 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     if (!layout.frontend) say(`  ${step++}. Widget tag for your page: ${widgetTag(endpoint, opts.pin)}`);
     say('\nRun `npx blazeresolver doctor`, then commit the new files (not .env). Undo everything with `npx blazeresolver remove`.');
     say(opts.pin ? `Pinned to blazeresolver@${opts.pin}: nothing changes until you re-run init with a newer --pin.` : 'Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest (use --pin <version> to lock it).');
+  }
+
+  // --- keeping the vector database out of git ---------------------------------------------------------------
+
+  /** `.blazeresolver/` in the root .gitignore: the docs' vector database is built in the product and never committed. */
+  function ignoreVectorDb() {
+    const rel = '.gitignore';
+    const path = join(root, rel);
+    const existingText = existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+    const addition = gitignoreAddition(existingText);
+    if (!addition) {
+      say(`  kept    ${rel} (already ignores ${VECTOR_DIR}/)`);
+      return;
+    }
+    writeFileSync(path, (existingText ?? '') + addition);
+    // Exact text, so `remove` takes back precisely this and leaves the rest of the file alone.
+    manifest.appended = [...(manifest.appended ?? []), { file: rel, created: existingText === undefined, added: addition }];
+    say(`  ${existingText === undefined ? 'wrote ' : 'edited'}  ${rel} (ignores ${VECTOR_DIR}/, the docs' vector database)`);
   }
 
   // --- the agents and schema -------------------------------------------------------------------------------
@@ -420,6 +441,7 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     ensureEnv((installTarget ?? layout.handlerPkg)?.dir ?? '');
     const endpoint = placeWidget();
     placeAgents();
+    ignoreVectorDb();
     createFile('.github/workflows/blazeresolver.yml', workflow({ pin: opts.pin ?? existing?.pin, app: opts.app || existing?.app }));
     installDependency();
     if (!cmds.hasTests && !opts.test) {

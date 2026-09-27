@@ -91,7 +91,8 @@ const api = (token: string, path: string, body: unknown, f: typeof fetch) => cal
 
 /**
  * The repo's README as raw Markdown, or undefined when it has none or GitHub can't be reached. Tried with the token
- * first (private repos), then without it: an Issues-only token can't read contents, but a public repo needs none.
+ * first, then without it: a public repo needs no token, and a private one needs a token with Contents: Read-only
+ * (an Issues-only token can't read it).
  */
 export async function getReadme(repo: string, token: string | undefined, f: typeof fetch = fetch): Promise<string | undefined> {
   for (const auth of token ? [token, undefined] : [undefined]) {

@@ -2,7 +2,7 @@
  * Embeddings for semantic search over help docs, so "delete my account" finds a section that only says "close".
  * Found from the same keys as the AI providers; nothing to set up when one of them offers embeddings.
  *
- *   OpenAI, Voyage, Gemini, Mistral, Cohere, Azure OpenAI (with AZURE_OPENAI_EMBEDDING_DEPLOYMENT), a local Ollama,
+ *   OpenAI, Voyage, Gemini, Mistral, Cohere, NVIDIA NIM, Azure OpenAI (with AZURE_OPENAI_EMBEDDING_DEPLOYMENT), a local Ollama,
  *   or any OpenAI-compatible endpoint (BLAZE_EMBED_BASE_URL, with BLAZE_EMBED_API_KEY and BLAZE_EMBED_MODEL).
  *
  * One provider is picked, the first configured in that order, and never swapped for another: vectors from different
@@ -143,6 +143,22 @@ const DEFS: EmbedDef[] = [
       )) as { embeddings?: { float?: number[][] } };
       return body.embeddings?.float ?? [];
     }
+  },
+  {
+    name: 'nvidia',
+    defaultModel: 'nvidia/nemotron-3-embed-1b',
+    batch: 50,
+    keys: (env) => providerKeys('nvidia', env),
+    call: (key, model, env, t) =>
+      openaiStyle(
+        `${trimSlash(env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1')}/embeddings`,
+        { authorization: `Bearer ${key}` },
+        model,
+        t,
+        'nvidia',
+        // NIM retrieval models encode questions and passages differently, and cut text past their token limit.
+        (kind) => ({ input_type: kind === 'query' ? 'query' : 'passage', encoding_format: 'float', truncate: 'END' })
+      )
   },
   {
     name: 'azure-openai',

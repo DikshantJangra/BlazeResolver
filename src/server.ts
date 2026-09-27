@@ -19,13 +19,14 @@ import { IncidentStore, type IncidentRecord } from './incidents/index.js';
 import { ClaudeProvider } from './resolver/claude-provider.js';
 import { lockDownServerFiles, resolveFixSandbox, runFix } from './jobs/fix.js';
 import { REPO_PATTERN } from './github/index.js';
-import { MAX_HELP_DOCS, answerQuestion, replyToCustomer } from './answer/index.js';
+import { MAX_HELP_DOCS, answerQuestion, productName, replyToCustomer } from './answer/index.js';
 import { resolveEmbedder } from './answer/embed.js';
+import { defaultVectorStore } from './answer/vector-store.js';
 import { retrieve, type Chunk } from './answer/retrieve.js';
 import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { SupportStore } from './support/index.js';
+import { DEMO_SAVED_REPLIES, SupportStore } from './support/index.js';
 
 const app = express();
 app.set('trust proxy', 1); // behind a host's proxy, req.ip is the real client
@@ -173,6 +174,8 @@ const answerComplete = resolveComplete({ timeoutMs: 12_000 });
 const replyComplete = resolveComplete({ timeoutMs: 6_000 });
 // Semantic search over help docs, when a provider with embeddings is configured.
 const embedder = resolveEmbedder();
+// Vectors of every project's docs, kept across restarts. Ids are content hashes, so projects never mix.
+const vectorStore = embedder ? defaultVectorStore() : undefined;
 
 app.post('/api/report', async (req, res) => {
   const project = registry.verify(req.header('x-blaze-key'));
@@ -191,10 +194,17 @@ app.post('/api/report', async (req, res) => {
     complete: answerComplete,
     helpDocs: project.helpDocs,
     readme: { repo: project.repo, token: githubToken },
-    embedder
+    embedder,
+    vectorStore,
+    // This server's own checkout isn't any project's: their READMEs come from GitHub.
+    readmePath: false,
+    product: productName(undefined, project.repo)
   });
   if (answer) return res.status(200).json({ received: true, answer });
-  const reply = await replyToCustomer(parsed.data, result, { complete: result.source === 'llm' ? replyComplete : undefined });
+  const reply = await replyToCustomer(parsed.data, result, {
+    complete: result.source === 'llm' ? replyComplete : undefined,
+    product: productName(undefined, project.repo)
+  });
   return res.status(202).json({ received: true, reply });
 });
 
@@ -456,7 +466,8 @@ app.get('/api/byo-agent/tools', (req, res) => {
 });
 
 // --- Support Desk & Customer Portal Endpoints ---
-const supportStore = new SupportStore();
+// The demo desk (the example business) starts with demo saved replies; a product's own desk starts with none.
+const supportStore = new SupportStore({ savedReplies: DEMO_SAVED_REPLIES });
 
 // Get Tickets
 app.get('/api/support/tickets', (req, res) => {

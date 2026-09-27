@@ -200,7 +200,8 @@ export const WORKFLOW = workflow();
 /** Next.js App Router route handler. Same origin as the page, so no CORS. */
 export const routeFile = (repo: string) => `import { createHandler } from 'blazeresolver/handler';
 
-// Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
+// Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only;
+// a private repo also needs Contents: read-only, so questions can be answered from its README).
 // Added by \`npx blazeresolver init\`; remove with \`npx blazeresolver remove\`.
 const handler = createHandler({ repo: '${repo}' });
 
@@ -231,7 +232,8 @@ export const OPTIONS = handler;
 /** Next.js Pages Router API route (Node req/res). */
 export const pagesFile = (repo: string) => `import { createHandler, nodeHandler } from 'blazeresolver/handler';
 
-// Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
+// Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only;
+// a private repo also needs Contents: read-only, so questions can be answered from its README).
 // Added by \`npx blazeresolver init\`; remove with \`npx blazeresolver remove\`.
 export default nodeHandler(createHandler({ repo: '${repo}' }));
 `;
@@ -275,7 +277,8 @@ export type ModuleStyle = 'esm' | 'cjs';
  */
 export const expressRouterFile = (repo: string, style: ModuleStyle) => {
   const config = `createHandler({ repo: '${repo}', allowOrigin: process.env.BLAZE_ALLOW_ORIGIN || '*' })`;
-  const head = `// Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
+  const head = `// Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only;
+// a private repo also needs Contents: read-only, so questions can be answered from its README).
 // Added by \`npx blazeresolver init\`; remove with \`npx blazeresolver remove\`.
 `;
   return style === 'esm'

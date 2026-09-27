@@ -17,7 +17,7 @@ npm install blazeresolver
 ```ts title="app/api/blaze/route.ts"
 import { createHandler } from 'blazeresolver/handler';
 
-// Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
+// Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only; a private repo also needs Contents: read-only).
 const handler = createHandler({ repo: 'your-org/your-repo' });
 
 // Triage and filing take a few seconds; room for a slow AI provider on serverless hosts.
@@ -113,7 +113,7 @@ Then point the widget at the full URL:
 
 | Variable | Needed | Purpose |
 | :--- | :--- | :--- |
-| `BLAZE_GITHUB_TOKEN` | Yes | Fine-grained token, Issues read and write on one repo. See [GitHub tokens](/docs/setup/github). |
+| `BLAZE_GITHUB_TOKEN` | Yes | Fine-grained token, Issues read and write on one repo, plus Contents read-only if the repo is private. See [GitHub tokens](/docs/setup/github). |
 | `API_KEYS` | Recommended | Any AI key(s) for triage. Without one, keyword rules classify reports. |
 | `BLAZE_NOTIFY_CUSTOMERS` | No | `true` keeps the reporter's email so they can be told about the fix. See [Customer notifications](/docs/setup/notifications). |
 | `BLAZE_RATE_LIMIT_PER_HOUR` | No | Total reports accepted per hour per instance. Default `100`. |

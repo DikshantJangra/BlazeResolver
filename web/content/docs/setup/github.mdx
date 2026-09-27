@@ -9,7 +9,7 @@ BlazeResolver keeps its GitHub access split in two, so the internet-facing part 
 | :--- | :--- | :--- |
 | **Where it runs** | Your backend, open to the internet | GitHub Actions, triggered by an issue |
 | **Token** | `BLAZE_GITHUB_TOKEN` in the backend's environment | The workflow's own `GITHUB_TOKEN`, a PAT in the `BLAZE_GITHUB_TOKEN` repo secret, or a GitHub App token |
-| **Needs** | Issues: read and write | Contents, Pull requests and Issues: write |
+| **Needs** | Issues: read and write (plus Contents: read-only if the repo is private) | Contents, Pull requests and Issues: write |
 | **Can push code?** | No | Yes, to its own `blazeresolver/fix-*` branch |
 
 ## The endpoint's token
@@ -17,7 +17,8 @@ BlazeResolver keeps its GitHub access split in two, so the internet-facing part 
 Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new):
 
 - **Repository access:** Only select repositories → your repo.
-- **Permissions:** Issues → **Read and write**. Nothing else.
+- **Permissions:** Issues → **Read and write**.
+- **Private repo only:** also Contents → **Read-only**. Customer questions are [answered from your README](/docs/setup/help-answers), and the Issues permission alone can't read a private repo's README. A public repo doesn't need it.
 
 Set it as `BLAZE_GITHUB_TOKEN` wherever the backend runs: `.env` locally, and your host's environment settings in production (Vercel, Railway, Fly and so on).
 
@@ -25,7 +26,7 @@ Set it as `BLAZE_GITHUB_TOKEN` wherever the backend runs: `.env` locally, and yo
   The workflow only picks up issues opened by an owner, member or collaborator. The issues this token opens are authored by the token's owner, so the token must belong to someone with write access to the repo.
 </Callout>
 
-If this token leaks, the worst anyone can do is open, comment on and label issues in that one repo.
+If this token leaks, the worst anyone can do is open, comment on and label issues in that one repo, and, with Contents: read-only on a private repo, read its code. If you'd rather the endpoint couldn't read your code, leave Contents off and pass your docs as [`helpDocs`](/docs/setup/help-answers#add-help-docs) instead.
 
 ## The workflow's token
 

@@ -210,7 +210,7 @@ try {
     const lines = describeProviders();
     console.log(lines.length ? lines.map((l, i) => `${i + 1}. ${l}`).join('\n') : 'No AI keys found. Put any provider key in .env as API_KEYS=...');
     const embedder = resolveEmbedder();
-    console.log(`\nHelp-doc search: ${embedder ? `keywords + semantic (${embedder.id})` : 'keywords only. For semantic search too, add a key for a provider with embeddings (OpenAI, Voyage, Gemini, Mistral, Cohere) or set BLAZE_EMBED_BASE_URL.'}`);
+    console.log(`\nHelp-doc search: ${embedder ? `keywords + semantic (${embedder.id})` : 'keywords only. For semantic search too, add a key for a provider with embeddings (OpenAI, Voyage, Gemini, Mistral, Cohere, NVIDIA) or set BLAZE_EMBED_BASE_URL.'}`);
   } else if (command === 'doctor') {
     const checks = await runDoctor({ cwd: process.cwd() });
     for (const check of checks) console.log(`${check.status === 'ok' ? 'OK' : check.status.toUpperCase()} ${check.name}: ${check.detail}`);

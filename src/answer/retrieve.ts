@@ -6,6 +6,7 @@
  * in the embeddings provider falls back to keyword ranking alone.
  */
 import type { Embedder } from './embed.js';
+import type { VectorStore } from './vector-store.js';
 
 
 export interface Chunk {
@@ -183,14 +184,63 @@ function markDown(embedder: Embedder, err: unknown) {
   downUntil.set(embedder.id, Date.now() + DOWN_MS);
 }
 
-/** Vectors for every chunk; the missing ones are embedded in one call. */
-function chunkVectors(chunks: Chunk[], embedder: Embedder): Promise<number[][]> {
+/** Forgets the vectors kept in memory, as a restart would; a vector store still has them. */
+export function clearVectorCache(): void {
+  vectors.clear();
+  downUntil.clear();
+}
+
+/** A stable id for a section's vector: a hash of the embedder and the text, so any change gets a new one. */
+async function vectorId(key: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Stores that just failed, so each failure is logged once rather than on every question. */
+const failingStores = new WeakSet<VectorStore>();
+function storeFailed(store: VectorStore, action: string, err: unknown) {
+  if (failingStores.has(store)) return;
+  failingStores.add(store);
+  console.warn(`[blazeresolver] vector store could not ${action}, embedding in memory instead: ${err instanceof Error ? err.message : err}`);
+}
+
+/**
+ * Vectors for every chunk. Those not in memory are read from the store, and only the rest are embedded, in one call,
+ * then written back to it. The store is never required: when it fails, vectors are embedded and kept in memory.
+ */
+function chunkVectors(chunks: Chunk[], embedder: Embedder, store?: VectorStore): Promise<number[][]> {
   const keys = chunks.map((c) => `${embedder.id}\u0000${chunkText(c)}`);
   const missing = [...new Set(keys.filter((key) => !vectors.has(key)))];
   if (missing.length) {
-    const batch = embedder.embed(missing.map((key) => key.slice(key.indexOf('\u0000') + 1)), 'document');
-    missing.forEach((key, n) => {
-      const vector = batch.then((all) => unit(all[n]));
+    const fetched = (async () => {
+      const texts = missing.map((key) => key.slice(key.indexOf('\u0000') + 1));
+      const ids = store ? await Promise.all(missing.map(vectorId)) : [];
+      let stored = new Map<string, number[]>();
+      if (store) {
+        try {
+          stored = await store.get(ids);
+          failingStores.delete(store);
+        } catch (err) {
+          storeFailed(store, 'be read', err);
+        }
+      }
+      const todo = missing.map((_, n) => n).filter((n) => !stored.has(ids[n]));
+      const embedded = todo.length ? await embedder.embed(todo.map((n) => texts[n]), 'document') : [];
+      const out = new Map<string, number[]>();
+      missing.forEach((key, n) => {
+        const vector = stored.get(ids[n]);
+        if (vector) out.set(key, vector);
+      });
+      todo.forEach((n, j) => out.set(missing[n], unit(embedded[j])));
+      if (store && todo.length) {
+        store
+          .set(todo.map((n) => ({ id: ids[n], embedder: embedder.id, text: texts[n], vector: out.get(missing[n])! })))
+          .catch((err) => storeFailed(store, 'be written', err));
+      }
+      return out;
+    })();
+    missing.forEach((key) => {
+      const vector = fetched.then((all) => unit(all.get(key)!));
       vector.catch(() => {
         if (vectors.get(key) === vector) vectors.delete(key);
       });
@@ -202,8 +252,8 @@ function chunkVectors(chunks: Chunk[], embedder: Embedder): Promise<number[][]> 
 }
 
 /** Sections at least `minSimilarity` like the question, most alike first. */
-async function rankSemantic(index: Index, question: string, embedder: Embedder, minSimilarity: number): Promise<Ranked[]> {
-  const [docVectors, [query]] = await Promise.all([chunkVectors(index.chunks, embedder), embedder.embed([question], 'query')]);
+async function rankSemantic(index: Index, question: string, embedder: Embedder, minSimilarity: number, store?: VectorStore): Promise<Ranked[]> {
+  const [docVectors, [query]] = await Promise.all([chunkVectors(index.chunks, embedder, store), embedder.embed([question], 'query')]);
   const q = unit(query);
   return docVectors
     .map((v, i) => ({ i, score: dot(q, v) }))
@@ -216,6 +266,8 @@ export interface SearchOptions {
   k?: number;
   /** Adds semantic ranking. Without one, `search` is `retrieve`. */
   embedder?: Embedder;
+  /** Keeps section vectors across restarts and instances. Without one, they're kept in memory only. */
+  store?: VectorStore;
   /**
    * How long to wait for embeddings before answering from keywords alone. Default 4s. The docs keep being embedded
    * in the background, so the next question gets the semantic ranking.
@@ -249,7 +301,7 @@ export async function search(docs: string, question: string, options: SearchOpti
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error('embeddings timed out')), options.timeoutMs ?? 4_000);
     });
-    semantic = await Promise.race([rankSemantic(index, question, embedder, minSimilarity), timeout]);
+    semantic = await Promise.race([rankSemantic(index, question, embedder, minSimilarity, options.store), timeout]);
   } catch (err) {
     // A timeout only means the docs are still being embedded; anything else is the provider failing.
     if (!(err instanceof Error && err.message === 'embeddings timed out')) markDown(embedder, err);

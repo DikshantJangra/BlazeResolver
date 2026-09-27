@@ -5,7 +5,7 @@ import { createSupportHandler, SupportStore } from './index.js';
 describe('createSupportHandler Web standard handler', () => {
   test('returns 200 and tickets list on GET /api/support/tickets', async () => {
     const store = new SupportStore();
-    const handler = createSupportHandler({ store });
+    const handler = createSupportHandler({ store, embed: false });
 
     const req = new Request('http://localhost:3000/api/support/tickets', { method: 'GET' });
     const res = await handler(req);
@@ -75,11 +75,30 @@ describe('createSupportHandler Web standard handler', () => {
   });
 
   test('handles options CORS preflight', async () => {
-    const handler = createSupportHandler();
+    const handler = createSupportHandler({ embed: false });
     const req = new Request('http://localhost:3000/api/support/tickets', { method: 'OPTIONS' });
     const res = await handler(req);
 
     assert.equal(res.status, 204);
     assert.equal(res.headers.get('access-control-allow-origin'), '*');
+  });
+});
+
+describe("a product's desk answers only from that product", () => {
+  test('starts with no saved replies, so no demo text reaches its customers', async () => {
+    const store = new SupportStore();
+    assert.deepEqual(store.getCannedResponses(), []);
+    // No model and nothing matching: the neutral holding reply, never a canned claim about the order or a credit.
+    const handler = createSupportHandler({ store, embed: false, complete: async () => { throw new Error('model down'); } });
+    const res = await handler(new Request('http://localhost/api/support/tickets', { method: 'POST', body: JSON.stringify({ rawText: 'My order never came and I want a refund' }) }));
+    const reply = JSON.stringify((await res.json()).data.aiReply);
+    assert.doesNotMatch(reply, /in transit|processed a credit|BlazeResolver|dev pipeline/i);
+    assert.match(reply, /Our team is checking this/);
+  });
+
+  test('keeps the saved replies it was given, also across a reset', async () => {
+    const store = new SupportStore({ savedReplies: [{ id: 'r1', title: 'Refunds', body: 'Refunds take 5 days.' }] });
+    store.resetAll();
+    assert.deepEqual(store.getCannedResponses().map((r) => r.title), ['Refunds']);
   });
 });

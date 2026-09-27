@@ -13,7 +13,7 @@ We assume a customer report can be **fully adversarial**: a crafted message that
 
 | Layer | What it does |
 | :--- | :--- |
-| **Split privileges** | The internet-facing endpoint holds an Issues-only token for one repo. It can't read code or push. The code-writing credentials exist only on the GitHub runner. |
+| **Split privileges** | The internet-facing endpoint holds a token for one repo that can write issues and nothing else, except, for a private repo, read its contents so questions can be answered from its README. It can't push. The code-writing credentials exist only on the GitHub runner. |
 | **Injection screen** | Reports that try to instruct the AI (addressing its instructions, fake role tags, steering the fix) are dropped at the endpoint before any model sees them. Text is normalized first: full-width letters folded, invisible characters removed, URLs decoded. |
 | **Data, not instructions** | Customer text is wrapped as data in every prompt, fenced in the issue so it can't render as markdown or `@mention` anyone, and stripped of markers before the fix engine reads it. |
 | **Trusted trigger** | The fix job only runs for issues labelled `blazeresolver` **and** opened by an owner, member or collaborator. The labels that mean "already handled" stop re-runs. |

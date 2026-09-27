@@ -2,19 +2,40 @@ import { commentOnIssue, listOpenIssues, openIssue } from '../github/index.js';
 import { ReportSchema, resolveComplete, triage, type Complete } from '../triage/index.js';
 import { emailMarker, groupKey, keyMarker, renderIssueBody, renderReport, symptomIn } from './issue.js';
 import { sameSymptom, symptomOf } from '../triage/grouping.js';
-import { answerQuestion, replyToCustomer } from '../answer/index.js';
+import { answerQuestion, productName, replyToCustomer } from '../answer/index.js';
 import { resolveEmbedder, type Embedder } from '../answer/embed.js';
 export { resolveEmbedder, type Embedder, type EmbedKind } from '../answer/embed.js';
+import { defaultVectorStore, type VectorStore } from '../answer/vector-store.js';
+export { defaultVectorStore, localVectorStore, sqliteVectorStore, postgresVectorStore, type VectorStore, type StoredVector } from '../answer/vector-store.js';
 
 export interface HandlerOptions {
   /** owner/name of the repo that gets the issues. */
   repo: string;
-  /** Needs Issues: write on that one repo and nothing else. Defaults to BLAZE_GITHUB_TOKEN. */
+  /**
+   * Needs Issues: write on that one repo. For a private repo also Contents: Read-only, so questions can be answered
+   * from its README. Defaults to BLAZE_GITHUB_TOKEN.
+   */
   githubToken?: string;
   /** Model for triage. Defaults to whichever AI provider has a key configured; without one, keyword rules are used. */
   complete?: Complete;
   /** Extra help docs, searched along with the repo's README when answering customer questions. */
   helpDocs?: string;
+  /**
+   * The product's name, so Blazzy answers for it and nothing else. Defaults to BLAZE_PRODUCT_NAME, else the repo's
+   * name (`acme/shop` -> `shop`).
+   */
+  product?: string;
+  /**
+   * The README on disk, read before GitHub's. By default the one at the root of this app's checkout, when its GitHub
+   * remote is `repo`. A path reads that file; `false` reads none (GitHub only).
+   */
+  readmePath?: string | false;
+  /**
+   * Where the docs' vectors are kept, when semantic search is on. Defaults to a SQLite file in the product,
+   * `.blazeresolver/vectors.db` (see `localVectorStore`); `sqliteVectorStore` / `postgresVectorStore` use a database the
+   * product has; `false` keeps them in memory only.
+   */
+  vectorStore?: VectorStore | false;
   /**
    * Semantic search over the docs, alongside keyword search. Defaults to whichever provider with embeddings has a key
    * configured (see `resolveEmbedder`); `false` keeps search keyword-only.
@@ -93,12 +114,15 @@ async function serialize<T>(key: string, run: () => Promise<T>): Promise<T> {
 /**
  * A Web-standard `(Request) => Response` handler for the widget. Mount it in Next.js, Cloudflare, Vercel, Deno or Bun as is,
  * or in Express with `nodeHandler`. It triages a report and files it as a GitHub issue; the workflow in that repo does the rest.
- * It holds no state and no secrets beyond an Issues-only token, and it can't push code.
+ * It holds no state and no secrets beyond a token that can only write issues (and read a private repo), and it can't push code.
  */
 export function createHandler(options: HandlerOptions): (req: Request) => Promise<Response> {
   const token = options.githubToken ?? env('BLAZE_GITHUB_TOKEN');
   const f = options.fetch ?? fetch;
   const embedder = options.embed === false ? undefined : (options.embed ?? resolveEmbedder());
+  const product = productName(options.product, options.repo);
+  // Only opened when there's something to keep: without embeddings there are no vectors.
+  const vectorStore = !embedder || options.vectorStore === false ? undefined : (options.vectorStore ?? defaultVectorStore());
   const storeEmails = options.storeEmails ?? env('BLAZE_NOTIFY_CUSTOMERS') === 'true';
   const perIp = options.rateLimit?.perIp ?? 10;
   const perHour = options.rateLimit?.perHour ?? (Number(env('BLAZE_RATE_LIMIT_PER_HOUR')) || 100);
@@ -139,7 +163,10 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
       complete: withDeadline(options.complete ?? resolveComplete({ timeoutMs: ANSWER_BUDGET_MS }), ANSWER_BUDGET_MS),
       helpDocs: options.helpDocs,
       readme: { repo: options.repo, token, fetch: f },
-      embedder
+      embedder,
+      product,
+      readmePath: options.readmePath,
+      vectorStore
     });
     if (answer) return reply(200, { received: true, answer });
     // Everything else gets a short acknowledgement of what they said, never the verdict. It's written while the
@@ -147,6 +174,7 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
     // when triage fell back to keyword rules: a model that just failed or hung isn't waited on twice.
     const replyBudget = Math.min(REPLY_BUDGET_MS, RESPONSE_BUDGET_MS - (Date.now() - started));
     const customerReply = replyToCustomer(report, verdict, {
+      product,
       complete: verdict.source === 'llm' && replyBudget >= 1_500 ? withDeadline(options.complete ?? resolveComplete({ timeoutMs: replyBudget }), replyBudget) : undefined
     });
     const ack = async () => reply(202, { received: true, reply: await customerReply });

@@ -114,6 +114,41 @@ export interface TicketRating {
   createdAt?: string;
 }
 
+/**
+ * Saved replies for BlazeResolver's own demo desk (the example business in server.ts). Never a product's default:
+ * they state things about orders and credits that are only true in the demo.
+ */
+export const DEMO_SAVED_REPLIES: SupportCannedResponse[] = [
+  {
+    id: 'canned-1',
+    title: 'Immediate Refund / Credit Confirmation',
+    body: 'We apologize for the inconvenience! We have processed a credit directly to your account with zero deduction. You should see this immediately reflected on your dashboard.',
+    category: 'refund',
+    isAutoReply: false
+  },
+  {
+    id: 'canned-2',
+    title: 'AI Diagnostic Resolution Note',
+    body: 'Our BlazeResolver AI triage engine verified this issue against our active policy. A fix has been recorded and relevant actions have been dispatched.',
+    category: 'technical',
+    isAutoReply: true
+  },
+  {
+    id: 'canned-3',
+    title: 'Escalated to Engineering Core',
+    body: 'We have logged this bug report into our dev pipeline. Our engineering team is currently investigating with high priority.',
+    category: 'technical',
+    isAutoReply: false
+  },
+  {
+    id: 'canned-4',
+    title: 'Order Status & Dispatch Check',
+    body: 'Your order is verified and currently in transit. Delivery partner has confirmed dispatch. Please allow a few minutes for arrival.',
+    category: 'orders',
+    isAutoReply: false
+  }
+];
+
 export class SupportStore {
   private tickets: Map<string, SupportTicket> = new Map();
   private messages: Map<string, SupportMessage[]> = new Map();
@@ -121,42 +156,20 @@ export class SupportStore {
   private ratings: Map<string, TicketRating> = new Map();
   private ticketSeq = 1001;
 
-  constructor() {
+  /** The saved replies a new or reset store starts with. */
+  private readonly initialReplies: SupportCannedResponse[];
+
+  /**
+   * Starts with no saved replies: a product's desk answers only from its own docs and the replies its team writes.
+   * The demo server passes DEMO_SAVED_REPLIES.
+   */
+  constructor(options: { savedReplies?: SupportCannedResponse[] } = {}) {
+    this.initialReplies = options.savedReplies ?? [];
     this.seedDefaults();
   }
 
   private seedDefaults() {
-    // Seed canned responses
-    this.cannedResponses = [
-      {
-        id: 'canned-1',
-        title: 'Immediate Refund / Credit Confirmation',
-        body: 'We apologize for the inconvenience! We have processed a credit directly to your account with zero deduction. You should see this immediately reflected on your dashboard.',
-        category: 'refund',
-        isAutoReply: false
-      },
-      {
-        id: 'canned-2',
-        title: 'AI Diagnostic Resolution Note',
-        body: 'Our BlazeResolver AI triage engine verified this issue against our active policy. A fix has been recorded and relevant actions have been dispatched.',
-        category: 'technical',
-        isAutoReply: true
-      },
-      {
-        id: 'canned-3',
-        title: 'Escalated to Engineering Core',
-        body: 'We have logged this bug report into our dev pipeline. Our engineering team is currently investigating with high priority.',
-        category: 'technical',
-        isAutoReply: false
-      },
-      {
-        id: 'canned-4',
-        title: 'Order Status & Dispatch Check',
-        body: 'Your order is verified and currently in transit. Delivery partner has confirmed dispatch. Please allow a few minutes for arrival.',
-        category: 'orders',
-        isAutoReply: false
-      }
-    ];
+    this.cannedResponses = this.initialReplies.map((reply) => ({ ...reply }));
   }
 
   public resetAll(): void {

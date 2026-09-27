@@ -155,6 +155,24 @@ describe('answering questions from the README', () => {
   });
 });
 
+describe("a product's README", () => {
+  it('warns once when it cannot be read, naming the private-repo fix', async () => {
+    const warned: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => void warned.push(args.join(' '));
+    try {
+      const opts = { complete: model('{"answer": null}').complete, readme: { repo: 'acme/private-1', fetch: readmeServer(null).f } };
+      await answerQuestion(question('how do I export?'), verdict('how_to'), opts);
+      await answerQuestion(question('how do I share?'), verdict('how_to'), opts);
+    } finally {
+      console.warn = original;
+    }
+    assert.equal(warned.length, 1);
+    assert.match(warned[0], /acme\/private-1/);
+    assert.match(warned[0], /Contents: Read-only/);
+  });
+});
+
 describe('handler: questions get answers, everything else an acknowledgement', () => {
   const gh = readmeServer();
   const complete: Complete = async (system) =>

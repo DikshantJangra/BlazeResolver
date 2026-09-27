@@ -57,6 +57,18 @@ function legacyManifest(root: string): Manifest {
  * Undoes `init`: deletes the files it created, takes its marked lines back out of files it edited, and uninstalls the
  * package. It only touches what the manifest in blazeresolver.config.json lists, so your own code is never removed.
  */
+const CACHE_DIR = '.blazeresolver';
+/** Everything BlazeResolver keeps in CACHE_DIR: the SQLite vector store, its WAL files, and the .gitignore for them. */
+const CACHE_FILES = /^(vectors\.db(-wal|-shm|-journal)?|\.gitignore)$/;
+
+/** Whether CACHE_DIR exists and holds only what BlazeResolver put there, so it can go without losing anything of yours. */
+function ownCache(root: string): boolean {
+  const dir = join(root, CACHE_DIR);
+  if (!existsSync(dir)) return false;
+  const entries = readdirSync(dir);
+  return entries.length > 0 && entries.every((f) => CACHE_FILES.test(f));
+}
+
 export async function runRemove(opts: RemoveOptions): Promise<RemoveResult> {
   const log = opts.log ?? console.log;
   const root = repoRoot(opts.cwd);
@@ -68,7 +80,7 @@ export async function runRemove(opts: RemoveOptions): Promise<RemoveResult> {
   const files = manifest.files.filter((f) => f !== CONFIG_FILE);
 
   if (!opts.yes && opts.confirm) {
-    const what = [...files, ...(manifest.appended ?? []).map((a) => `${a.file} (only the block init added)`), ...(manifest.secrets ?? []).map((n) => `repo secret ${n}`), ...(manifest.env ? [`${manifest.env.file} (only the variables init added)`] : []), ...manifest.edits.map((f) => `${f} (marked lines only)`), ...(manifest.dependency && !opts.noUninstall ? ['the blazeresolver package'] : []), CONFIG_FILE];
+    const what = [...files, ...(manifest.appended ?? []).map((a) => `${a.file} (only the block init added)`), ...(manifest.secrets ?? []).map((n) => `repo secret ${n}`), ...(manifest.env ? [`${manifest.env.file} (only the variables init added)`] : []), ...manifest.edits.map((f) => `${f} (marked lines only)`), ...(manifest.dependency && !opts.noUninstall ? ['the blazeresolver package'] : []), ...(ownCache(root) ? [`${CACHE_DIR}/ (the docs' vector store)`] : []), CONFIG_FILE];
     if (!(await opts.confirm(`Remove BlazeResolver? This deletes:\n  ${what.join('\n  ')}\nContinue?`))) {
       log('Cancelled. Nothing was changed.');
       return { cancelled: true, removed: [], stripped: [], kept: [], uninstalled: false };
@@ -94,6 +106,13 @@ export async function runRemove(opts: RemoveOptions): Promise<RemoveResult> {
       if (readdirSync(dir).length) break;
       rmdirSync(dir);
     }
+  }
+
+  // The vector store the handlers created at runtime: only a cache of the docs' embeddings.
+  if (ownCache(root)) {
+    rmSync(join(root, CACHE_DIR), { recursive: true, force: true });
+    result.removed.push(`${CACHE_DIR}/`);
+    log(`  removed  ${CACHE_DIR}/ (the docs' vector store)`);
   }
 
   for (const rel of manifest.edits) {

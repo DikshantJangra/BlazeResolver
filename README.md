@@ -68,7 +68,7 @@ npx blazeresolver remove    # take it all back out
 
 `remove` undoes exactly that: it deletes the files `init` created (a file you have since rewritten is kept), takes its marked lines back out of the files it edited, uninstalls the package, and removes the config. Values you typed into `.env` are never deleted. Your other code is never touched.
 
-Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo), paste any AI key into `.env` as `API_KEYS`, run `gh secret set API_KEYS`, allow Actions to create pull requests, and run `npx blazeresolver harden`. Run `npx blazeresolver doctor` to check setup. A human reviews and merges every PR.
+Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo; plus Contents read-only if the repo is private, so questions are answered from its README), paste any AI key into `.env` as `API_KEYS`, run `gh secret set API_KEYS`, allow Actions to create pull requests, and run `npx blazeresolver harden`. Run `npx blazeresolver doctor` to check setup. A human reviews and merges every PR.
 
 The endpoint defaults to per-process rate limits and issue locks. For a serverless deployment with multiple instances, pass `rateLimit.check` and `withIssueLock` callbacks backed by shared atomic storage. Store errors fail closed.
 

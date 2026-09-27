@@ -9,8 +9,8 @@ It works out of the box: the repo's README is the source. You can add more docs.
 
 ## How it works
 
-1. **Only questions.** Answering runs only for the `how_to` kind, only when an AI key is configured, and never for a report the injection screen flagged.
-2. **Collect the docs.** The endpoint fetches the README of the repo you passed to `createHandler`, with your token first (private repos), then without it (a public repo needs none). READMEs are cached for 10 minutes; a failed fetch is retried after a minute. Any extra `helpDocs` you pass are added.
+1. **Only questions.** Answering runs only for messages triage classifies as questions, only when an AI key is configured, and never for a report the injection screen flagged.
+2. **Collect the docs.** The endpoint reads your product's README straight from disk: the one at the root of the app's checkout (or its working directory, when deployed without `.git`), as long as that checkout's GitHub remote is the `repo` you passed. No token or network call is needed, private repos work, and edits are picked up as soon as the file changes. Where no README is deployed with the app, it fetches the README of `repo` from GitHub instead, with your token first, then without it. A public repo needs no token; a private one needs `BLAZE_GITHUB_TOKEN` to have **Contents: read-only**. When the README can't be read, the endpoint logs a warning once and answers from `helpDocs` alone. READMEs are cached for 10 minutes; a failed fetch is retried after a minute. Any extra `helpDocs` you pass are added.
 3. **Find the relevant sections.** The docs are split at their headings into sections of about 1,200 characters, and ranked against the question two ways: by keywords (BM25), and by meaning when an [embeddings provider](#semantic-search) is configured. The two rankings are merged (reciprocal rank fusion) and the top 4 sections go to the model.
 4. **Answer only from them.** The model is told to answer only from those excerpts, and to reply with no answer when they don't clearly cover the question. It never guesses. The question is wrapped as data that must not be followed, like every report.
 5. **Show it, or fall back.** A usable answer (up to 1,500 characters, plain text) comes back as `200 {"received": true, "answer": "…"}`, and the widget shows it as text, never as HTML. Otherwise the customer gets the usual short reply saying the question was passed to the team.
@@ -49,11 +49,12 @@ When a provider with an embeddings API has a key configured, sections are also f
 | Gemini | `GEMINI_API_KEY` / `GOOGLE_API_KEY`, or a Gemini key in `API_KEYS` | `gemini-embedding-001` |
 | Mistral | `MISTRAL_API_KEY` | `mistral-embed` |
 | Cohere | `COHERE_API_KEY` / `CO_API_KEY` | `embed-v4.0` |
+| NVIDIA NIM | `NVIDIA_API_KEY`, or an `nvapi-` key in `API_KEYS` | `nvidia/nemotron-3-embed-1b` |
 | Azure OpenAI | the Azure key and endpoint, plus `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | your deployment |
 | Ollama (local) | `OLLAMA_BASE_URL` or `OLLAMA_EMBED_MODEL` | `nomic-embed-text` |
 
 - **One provider, the first configured in that order.** It's never swapped for another mid-way, because vectors from different models can't be compared. `BLAZE_EMBED_PROVIDER` pins one (or `off` for keywords only), and `BLAZE_EMBED_MODEL` changes its model. Anthropic, Groq and most chat-only hosts have no embeddings API; with only those, search stays keyword-only. Run `npx blazeresolver providers` to see which is in use.
-- **Each section is embedded once** and kept in memory. When your docs change, only the sections that changed are embedded again.
+- **Each section is embedded once, ever.** Vectors are kept in a vector database inside your product (see below), so a restart or a new instance doesn't embed your docs again. When your docs change, only the sections that changed are embedded again.
 - **It never holds up a reply.** Search waits at most 4 seconds for embeddings, then answers from keywords while the docs finish embedding in the background for the next question. A provider that errors is left alone for a minute.
 - **Faint matches are dropped.** A section less alike than a cosine similarity of 0.25 doesn't count as a semantic match. Models spread their scores differently; raise `BLAZE_EMBED_MIN_SIMILARITY` if unrelated sections reach the model, or lower it if good ones are missed.
 
@@ -64,6 +65,28 @@ To choose in code, pass `embed` to `createHandler`: an embedder from `resolveEmb
 - **No bug is answered.** Bugs and outages always go to the fix workflow.
 - **Nothing is filed for questions**, answered or not. If you want unanswered questions in your support tool, wrap the handler. See [Library API](/docs/reference/library).
 - **No links or Markdown are invented.** Answers are plain text, and only contain links that appear in your docs.
+
+## The vector database
+
+Semantic search keeps your docs' vectors in a database in your product, set up on first use with nothing to install or run:
+
+- **By default, a SQLite file in your repo:** `.blazeresolver/vectors.db` at the root of the checkout, through Node's built-in SQLite. It's never committed: `init` adds `.blazeresolver/` to your root `.gitignore` (and the handler adds it too, the first time it creates the database in a checkout that doesn't ignore it yet), with a `.gitignore` inside the folder as a backstop. `npx blazeresolver remove` deletes the database and takes that line back out. Set `BLAZE_VECTOR_DB` to put it elsewhere. On a read-only filesystem (most serverless hosts) it goes to the temp directory, and without a writable disk the vectors are kept in memory.
+- **Or your own database**, so every instance shares one copy:
+
+```ts
+import Database from 'better-sqlite3';
+import postgres from 'postgres';
+import { createHandler, sqliteVectorStore, postgresVectorStore } from 'blazeresolver/handler';
+
+// A SQLite database you already have (better-sqlite3 or node:sqlite)
+createHandler({ repo: 'acme/shop', vectorStore: sqliteVectorStore(new Database('app.db')) });
+
+// Postgres through any client (a real[] column, no extension needed)
+const sql = postgres(process.env.DATABASE_URL!);
+createHandler({ repo: 'acme/shop', vectorStore: postgresVectorStore((text, params) => sql.unsafe(text, params)) });
+```
+
+The store only keeps vectors, in a `blazeresolver_vectors` table keyed by a hash of the embeddings model and the section. Matching is done exactly, in memory, over your product's own sections: help docs are small enough that an approximate index would gain nothing. `vectorStore: false` keeps vectors in memory only. `createSupportHandler` takes the same `vectorStore` and `readmePath` options.
 
 ## Privacy
 
