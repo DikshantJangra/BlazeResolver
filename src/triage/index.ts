@@ -68,6 +68,8 @@ export interface Triage {
   expected?: string;
   actual?: string;
   feature?: string;
+  /** Path of the page the report was sent from. Reports are grouped by it, since it is stable where `feature` isn't. */
+  page?: string;
   /** Only real bug candidates enter the fix loop. Injection attempts never do. */
   enterFixLoop: boolean;
   source: 'llm' | 'rules';
@@ -341,8 +343,8 @@ export async function triage(report: Report, complete: Complete | undefined = re
     }
   }
   result ??= triageByRules(report);
-  // Reports from the same page are the same feature when the model didn't name one; incidents group on this.
-  result.feature ||= pagePath(report.pageUrl);
+  const page = pagePath(report.pageUrl);
+  result.feature ||= page;
 
-  return { ...result, injection: false, enterFixLoop: result.kind === 'bug' || result.kind === 'outage' };
+  return { ...result, page, injection: false, enterFixLoop: result.kind === 'bug' || result.kind === 'outage' };
 }

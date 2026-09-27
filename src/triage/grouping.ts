@@ -14,8 +14,10 @@ import type { Triage } from './index.js';
  * one's fix merges.
  */
 export interface Symptom {
-  /** The affected feature or page, normalized. */
+  /** The affected feature (as the model named it) or page, normalized. */
   feature?: string;
+  /** The path of the page the report came from, normalized. */
+  page?: string;
   /** The first console error with volatile parts (URLs, file positions, numbers, ids) removed. */
   error?: string;
   /** Distinctive words of the symptom description, stemmed, sorted. */
@@ -37,11 +39,16 @@ const STOPWORDS = new Set(
   ).split(' ')
 );
 
+/** Crude, but enough that "applied"/"apply", "charges"/"charging" and "incorrectly"/"incorrect" compare equal. */
 function stem(word: string): string {
-  for (const suffix of ['ing', 'ed', 'es', 's']) {
-    if (word.endsWith(suffix) && word.length - suffix.length >= 3) return word.slice(0, -suffix.length);
-  }
-  return word;
+  const cut = (w: string, suffixes: string[]) => {
+    for (const suffix of suffixes) if (w.endsWith(suffix) && w.length - suffix.length >= 3) return w.slice(0, -suffix.length);
+    return w;
+  };
+  let w = cut(cut(word, ['ly']), ['ing', 'ed', 'es', 's']);
+  if (w.length > 3 && w.endsWith('e')) w = w.slice(0, -1);
+  if (w.length > 3 && w.endsWith('i')) w = `${w.slice(0, -1)}y`;
+  return w;
 }
 
 export function symptomWords(text: string): string[] {
@@ -70,23 +77,42 @@ export function normalizeError(error: string): string {
 const normalizeFeature = (feature: string | undefined) => feature?.toLowerCase().replace(/[^a-z0-9/]+/g, ' ').replace(/\s+/g, ' ').trim() || undefined;
 
 export function symptomOf(
-  triage: Pick<Triage, 'feature' | 'summary' | 'actual'> & { source?: Triage['source'] },
+  triage: Pick<Triage, 'feature' | 'summary' | 'actual'> & Partial<Pick<Triage, 'source' | 'page'>>,
   consoleErrors?: string[]
 ): Symptom {
   const error = consoleErrors?.map(normalizeError).find(Boolean);
   return {
     feature: normalizeFeature(triage.feature),
+    ...(triage.page && { page: normalizeFeature(triage.page) }),
     error,
     words: symptomWords([triage.summary, triage.actual].filter(Boolean).join(' ')),
     normalized: triage.source === 'llm'
   };
 }
 
-export function sameSymptom(a: Symptom, b: Symptom): boolean {
-  if (a.feature && b.feature && a.feature !== b.feature) return false;
+/**
+ * Whether two features can be the same one. Names are compared by their words, so "cart" and "cart / checkout" agree
+ * and "checkout" and "settings" don't. A feature with no distinctive words (the home page "/") rules nothing out.
+ */
+function sameFeature(a: string, b: string): boolean {
+  if (a === b) return true;
+  const wa = symptomWords(a);
+  const wb = symptomWords(b);
+  return !wa.length || !wb.length || wa.some((w) => wb.includes(w));
+}
+
+/**
+ * Whether two reports describe the same bug. `samePageIsEnough` (the default) lets reports whose wording can't be
+ * compared, because no model wrote it, join on the feature alone; pass false when only a real match should count.
+ */
+export function sameSymptom(a: Symptom, b: Symptom, samePageIsEnough = true): boolean {
+  // Pages when both reports have one: a model names the same feature differently from one report to the next
+  // ("cart", "cart/checkout", "cart discount calculation"), the page path doesn't change.
+  const [wa, wb] = a.page && b.page ? [a.page, b.page] : [a.feature, b.feature];
+  if (wa && wb && !sameFeature(wa, wb)) return false;
   if (a.error && b.error) return a.error === b.error;
   // Customer wording can't be compared reliably: on the same feature, treat it as the same bug.
-  if (!(a.normalized && b.normalized) && a.feature && b.feature) return true;
+  if (samePageIsEnough && !(a.normalized && b.normalized) && wa && wb) return true;
   if (!a.words.length || !b.words.length) return false;
   const shared = a.words.filter((w) => b.words.includes(w)).length;
   const union = new Set([...a.words, ...b.words]).size;

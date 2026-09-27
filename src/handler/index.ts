@@ -150,36 +150,41 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
       complete: verdict.source === 'llm' && replyBudget >= 1_500 ? withDeadline(options.complete ?? resolveComplete({ timeoutMs: replyBudget }), replyBudget) : undefined
     });
     const ack = async () => reply(202, { received: true, reply: await customerReply });
-    if (verdict.injection || !(verdict.enterFixLoop || verdict.kind === 'feature_request')) return ack();
+    // Questions (answered or not) and injection attempts are never filed.
+    if (verdict.injection || verdict.type !== 'report') return ack();
 
     try {
       const email = storeEmails ? report.email : undefined;
-      if (!verdict.enterFixLoop) {
-        await openIssue({ token, repo: options.repo, title: `[feature request] ${verdict.summary}`.slice(0, 200), body: renderIssueBody(report, verdict, groupKey(verdict), email), labels: ['customer-feedback'] }, f);
-        return ack();
-      }
-
       const key = groupKey(verdict);
       const symptom = symptomOf(verdict, report.consoleErrors);
+      let joined = false;
       await lockIssue(`${options.repo}:${key}`, async () => {
+        // A report of a bug that already has an issue joins it, however this one was classified: the same overcharge
+        // reads as a bug to one customer and a billing complaint to the next. Only bug reports join on the page alone.
         const existing = (await listOpenIssues(token, options.repo, 'blazeresolver', f)).find((i) => {
           const recorded = symptomIn(i.body);
           // Issues filed before symptom markers existed only carry the key.
-          return recorded ? sameSymptom(recorded, symptom) : !!i.body?.includes(keyMarker(key));
+          return recorded ? sameSymptom(recorded, symptom, verdict.enterFixLoop) : verdict.enterFixLoop && !!i.body?.includes(keyMarker(key));
         });
         if (existing) {
           await commentOnIssue(token, options.repo, existing.number, `Another customer reported this.\n\n${renderReport(report, verdict)}${email ? `\n\n${emailMarker(email)}` : ''}`, f);
-        } else {
+          joined = true;
+        } else if (verdict.enterFixLoop) {
           await openIssue(
             { token, repo: options.repo, title: `[${verdict.kind}] ${verdict.summary}`.slice(0, 200), body: renderIssueBody(report, verdict, key, email), labels: ['blazeresolver', ...(verdict.severity === 'critical' ? ['priority:critical'] : [])] },
             f
           );
         }
       });
+      if (!joined && verdict.kind === 'feature_request') {
+        await openIssue({ token, repo: options.repo, title: `[feature request] ${verdict.summary}`.slice(0, 200), body: renderIssueBody(report, verdict, key, email), labels: ['customer-feedback'] }, f);
+      }
       return ack();
     } catch (err) {
       // Loud on purpose: an expired token or a GitHub limit would otherwise drop every report without a trace.
       console.error(`[blazeresolver] could not file a report in ${options.repo}: ${err instanceof Error ? err.message : err}`);
+      // A report that would only have joined an existing issue loses nothing it was promised.
+      if (!verdict.enterFixLoop && verdict.kind !== 'feature_request') return ack();
       return reply(502, { error: 'could not file the report' });
     }
   };

@@ -287,6 +287,39 @@ describe('report validator: grouping reports into incidents', () => {
     assert.notStrictEqual(normalizeError("reading 'total'"), normalizeError("reading 'price'"));
   });
 
+  // What a real model (Groq, gpt-oss-120b) wrote for two customers reporting one overcharge from /cart. It names the
+  // feature differently each time and called the second report a billing complaint.
+  const OVERCHARGE = { kind: 'bug', severity: 'high', summary: 'Discount codes SAVE10 and SAVE25 apply incorrect discounts at checkout.', actual: 'Cart total is ₹990 after applying SAVE10 (only ₹10 off).', feature: 'cart / discount code application' };
+  const OVERCHARGE_AGAIN = { kind: 'account_billing', severity: 'high', summary: 'Discount code SAVE25 applied incorrectly, charging 375 rupees instead of 300 on a 400 rupee order.', actual: 'Total was charged as 375 rupees.', feature: 'cart discount calculation' };
+
+  it('joins a second report of the same bug however the model named the feature or classified it', async () => {
+    const s = store();
+    const add = async (message: string, verdict: object) => {
+      const report: Report = { message, pageUrl: 'https://shop.test/cart' };
+      return s.addReport('p', report, await triage(report, async () => JSON.stringify({ type: 'report', ...verdict })));
+    };
+    const first = await add('SAVE10 on ₹1000 charged ₹990', OVERCHARGE);
+    const again = await add('SAVE25 on 400 charged 375', OVERCHARGE_AGAIN);
+    const praise = await add('love the new cart!', { kind: 'other', severity: 'low', summary: 'Customer loves the new cart design', feature: 'cart' });
+    const unrelated = await add('charged twice', { kind: 'account_billing', severity: 'high', summary: 'Customer was charged twice for one order', feature: 'billing' });
+
+    assert.strictEqual(again.incident?.id, first.incident!.id, 'the billing-kinded duplicate joins the bug');
+    assert.strictEqual(again.isNew, false);
+    assert.strictEqual(praise.incident, undefined, 'praise from the same page joins nothing');
+    assert.strictEqual(unrelated.incident, undefined, 'a different billing problem opens no incident');
+    assert.strictEqual(s.incidents().length, 1);
+    assert.strictEqual(s.incidents()[0].reportIds.length, 2);
+  });
+
+  it('matches features by their words, and pages over model-named features', () => {
+    const at = (summary: string, feature: string, page?: string) => symptomOf({ summary, feature, page, source: 'llm' });
+    assert.ok(sameSymptom(at('Discount code not applied', 'cart'), at('Discount code not applied', 'cart / checkout')));
+    assert.ok(sameSymptom(at('Discount code not applied', 'discount codes', '/cart'), at('Discount code not applied', 'checkout total', '/cart')));
+    assert.ok(!sameSymptom(at('Discount code not applied', 'cart', '/cart'), at('Discount code not applied', 'cart', '/settings')));
+    // stems: "applied incorrectly" and "apply incorrect" are the same words
+    assert.ok(sameSymptom(at('SAVE25 applied incorrectly to the total', 'cart'), at('SAVE25 discount apply incorrect total', 'cart'), false));
+  });
+
   it('matches symptoms across features only when the features agree', () => {
     const a = symptomOf({ summary: 'Discount code not applied', feature: 'Checkout', source: 'llm' });
     const b = symptomOf({ summary: 'Discount code not applied', feature: 'Settings', source: 'llm' });
@@ -345,6 +378,26 @@ describe('report validator: serverless handler grouping', () => {
     assert.strictEqual(gh.issues[0].comments.length, 1, 'the repeat of the discount bug became a comment');
     assert.strictEqual(gh.issues[1].comments.length, 0);
     assert.ok(symptomIn(gh.issues[0].body), 'issues carry the symptom marker');
+  });
+
+  it('adds a same-bug report to the open issue even when it was classified as billing, and files nothing else', async () => {
+    const gh = fakeGithub();
+    let verdict: object = {};
+    const handler = createHandler({ repo: 'acme/shop', githubToken: 't', fetch: gh.f, complete: async () => JSON.stringify({ type: 'report', ...verdict }) });
+    const send = async (message: string, v: object, ip: string) => {
+      verdict = v;
+      return handler(post({ message, pageUrl: 'https://shop.test/cart' }, ip));
+    };
+    const overcharge = { kind: 'bug', severity: 'high', summary: 'Discount codes SAVE10 and SAVE25 apply incorrect discounts at checkout.', actual: 'Cart total is ₹990 after applying SAVE10 (only ₹10 off).', feature: 'cart / discount code application' };
+    const overchargeAgain = { kind: 'account_billing', severity: 'high', summary: 'Discount code SAVE25 applied incorrectly, charging 375 rupees instead of 300 on a 400 rupee order.', actual: 'Total was charged as 375 rupees.', feature: 'cart discount calculation' };
+
+    await send('SAVE10 on ₹1000 charged ₹990', overcharge, '10.1.0.1');
+    assert.strictEqual((await send('SAVE25 on 400 charged 375', overchargeAgain, '10.1.0.2')).status, 202);
+    assert.strictEqual((await send('love the new cart!', { kind: 'other', severity: 'low', summary: 'Customer loves the new cart design', feature: 'cart' }, '10.1.0.3')).status, 202);
+
+    assert.strictEqual(gh.issues.length, 1, 'no second issue for the same bug');
+    assert.strictEqual(gh.issues[0].comments.length, 1, 'the billing-kinded duplicate became a comment; the praise did not');
+    assert.match(gh.issues[0].comments[0], /^Another customer reported this\./);
   });
 
   it('writes a symptom marker that reads back and cannot break out of its HTML comment', () => {

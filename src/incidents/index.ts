@@ -66,7 +66,7 @@ export class IncidentStore {
   incidents = () => this.read<IncidentRecord>(this.incidentsFile);
   incident = (id: string) => this.incidents().find((i) => i.id === id);
 
-  /** Stores the report; bug candidates are attached to an incident, created if none matches. */
+  /** Stores the report and attaches it to the incident it matches; a bug candidate that matches none opens one. */
   addReport(projectId: string, report: Report, triage: Triage): { record: ReportRecord; incident?: IncidentRecord; isNew: boolean } {
     const record: ReportRecord = {
       id: newId('rep'),
@@ -79,7 +79,9 @@ export class IncidentStore {
 
     let incident: IncidentRecord | undefined;
     let isNew = false;
-    if (triage.enterFixLoop) {
+    // Any report may join an incident it matches (the same bug can read as a billing complaint); only bug candidates
+    // open one, and only they join on the page alone.
+    if (triage.type === 'report' && !triage.injection) {
       const incidents = this.incidents();
       const symptom = symptomOf(triage, report.consoleErrors);
       incident = incidents.find(
@@ -87,7 +89,7 @@ export class IncidentStore {
           i.projectId === projectId &&
           JOINABLE.includes(i.status) &&
           // Incidents stored before symptoms existed are matched on what they recorded.
-          sameSymptom(i.symptom ?? symptomOf({ feature: i.feature, summary: i.title }, i.stackTrace?.split('\n')), symptom)
+          sameSymptom(i.symptom ?? symptomOf({ feature: i.feature, summary: i.title }, i.stackTrace?.split('\n')), symptom, triage.enterFixLoop)
       );
       if (incident) {
         incident.reportIds.push(record.id);
@@ -98,7 +100,7 @@ export class IncidentStore {
           incident.symptom = { ...(incident.symptom ?? symptomOf({ feature: incident.feature, summary: incident.title })), error: symptom.error };
           incident.stackTrace ??= report.consoleErrors?.join('\n');
         }
-      } else {
+      } else if (triage.enterFixLoop) {
         isNew = true;
         incident = {
           id: newId('inc'),
@@ -121,8 +123,10 @@ export class IncidentStore {
         };
         incidents.push(incident);
       }
-      record.incidentId = incident.id;
-      this.write(this.incidentsFile, incidents);
+      if (incident) {
+        record.incidentId = incident.id;
+        this.write(this.incidentsFile, incidents);
+      }
     }
 
     this.write(this.reportsFile, [...this.reports(), record]);
