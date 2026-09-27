@@ -1,6 +1,6 @@
 {
   "name": "blazeresolver",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Open-source AI harness that turns customer bug reports into reviewed GitHub pull requests",
   "main": "dist/server/src/index.js",
   "type": "module",
@@ -113,6 +113,16 @@
         "default": "./dist/cjs/src/handler/index.js"
       }
     },
+    "./support": {
+      "import": {
+        "types": "./dist/server/src/support/index.d.ts",
+        "default": "./dist/server/src/support/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/src/support/index.d.ts",
+        "default": "./dist/cjs/src/support/index.js"
+      }
+    },
     "./react": {
       "types": "./dist/react/react.d.ts",
       "default": "./dist/react/react.js"
@@ -127,6 +137,9 @@
     "*": {
       "handler": [
         "dist/cjs/src/handler/index.d.ts"
+      ],
+      "support": [
+        "dist/server/src/support/index.d.ts"
       ],
       "react": [
         "dist/react/react.d.ts"

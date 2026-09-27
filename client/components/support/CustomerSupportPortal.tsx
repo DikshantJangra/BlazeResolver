@@ -60,12 +60,17 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
   const fetchTickets = async () => {
     try {
       const res = await fetch(`${baseUrl}/api/support/tickets`);
-      const json = await res.json();
-      if (json.success && json.data) {
-        setTickets(json.data);
-        if (!selectedTicket && json.data.length > 0) {
-          setSelectedTicket(json.data[0]);
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setTickets(json.data);
+          if (!selectedTicket && json.data.length > 0) {
+            setSelectedTicket(json.data[0]);
+          }
         }
+      } else {
+        console.warn('CustomerSupportPortal: Non-JSON response received from /api/support/tickets:', res.status);
       }
     } catch (e) {
       console.error('Failed to fetch customer tickets:', e);
@@ -77,8 +82,14 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
   const loadTicketMessages = async (ticketId: string) => {
     try {
       const [msgRes, ratingRes] = await Promise.all([
-        fetch(`${baseUrl}/api/support/tickets/${ticketId}/messages`).then((r) => r.json()),
-        fetch(`${baseUrl}/api/support/tickets/${ticketId}/rating`).then((r) => r.json())
+        fetch(`${baseUrl}/api/support/tickets/${ticketId}/messages`).then(async (r) => {
+          const ct = r.headers.get('content-type') || '';
+          return r.ok && ct.includes('application/json') ? r.json() : { success: false };
+        }).catch(() => ({ success: false })),
+        fetch(`${baseUrl}/api/support/tickets/${ticketId}/rating`).then(async (r) => {
+          const ct = r.headers.get('content-type') || '';
+          return r.ok && ct.includes('application/json') ? r.json() : { success: false };
+        }).catch(() => ({ success: false }))
       ]);
 
       if (msgRes.success) {
@@ -227,7 +238,8 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
         })
       });
 
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success && json.data?.ticket) {
           setShowCreateModal(false);
@@ -261,7 +273,8 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
         })
       });
 
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         setRatingSubmitted(true);
         const json = await res.json();
         if (json.data) setRating(json.data);

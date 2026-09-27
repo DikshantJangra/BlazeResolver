@@ -8,7 +8,7 @@ import {
   git, isNext, needsJsExtension, pickLayout, repoRoot, usesTypeScript
 } from './detect.js';
 import { MARK, hasManaged, indentOf, insertAfter, insertBefore, insertInline, lastImportLine } from './edit.js';
-import { expressRouterFile, pagesFile, routeFile, widgetTag, workflow, agentsRequirements, blazeTriageAgent, blazeResolverAgent, dbSchema, drizzleSchema, prismaSchema, type ModuleStyle } from './templates.js';
+import { expressRouterFile, pagesFile, routeFile, supportRouteFile, supportPagesFile, widgetTag, workflow, agentsRequirements, blazeTriageAgent, blazeResolverAgent, dbSchema, drizzleSchema, prismaSchema, type ModuleStyle } from './templates.js';
 
 /** Everything `init` changed, so `remove` can undo exactly that and nothing else. */
 export interface Manifest {
@@ -223,8 +223,13 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
         return;
       }
       const ext = usesTypeScript(root, pkg) ? 'ts' : 'js';
-      if (next.kind === 'app') createFile(`${next.dir}/api/blaze/route.${ext}`, routeFile(repo!));
-      else createFile(`${next.dir}/api/blaze.${ext}`, pagesFile(repo!));
+      if (next.kind === 'app') {
+        createFile(`${next.dir}/api/blaze/route.${ext}`, routeFile(repo!));
+        createFile(`${next.dir}/api/support/[...slug]/route.${ext}`, supportRouteFile());
+      } else {
+        createFile(`${next.dir}/api/blaze.${ext}`, pagesFile(repo!));
+        createFile(`${next.dir}/api/support/[...slug].${ext}`, supportPagesFile());
+      }
       addEnvExample(pkg);
       return;
     }

@@ -23,3 +23,4 @@ export type { GitWorkspaceOptions } from './codebase/git-workspace.js';
 export { CodeGraphAdapter } from './codebase/codegraph-adapter.js';
 export type { CodeGraphAdapterOptions } from './codebase/codegraph-adapter.js';
 export { PromptInjectionGuard } from './core/guardrails/index.js';
+export * from './support/index.js';

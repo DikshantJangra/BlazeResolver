@@ -63,7 +63,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
       const res = await fetch(`${baseUrl}/api/support/tickets?${params.toString()}`, {
         headers: { ...authHeaders }
       });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
           setTickets(json.data);
@@ -87,7 +88,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
       const res = await fetch(`${baseUrl}/api/support/canned-responses`, {
         headers: { ...authHeaders }
       });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success) setCannedResponses(json.data);
       }
@@ -180,9 +182,18 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
       setIsLoadingMessages(true);
       try {
         const [msgRes, ctxRes, ratingRes] = await Promise.all([
-          fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, { headers: { ...authHeaders } }).then((r) => r.json()).catch(() => null),
-          fetch(`${baseUrl}/api/support/context/${selectedTicket.customerId || selectedTicket.outletId || 'cust_user'}`, { headers: { ...authHeaders } }).then((r) => r.json()).catch(() => null),
-          fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/rating`, { headers: { ...authHeaders } }).then((r) => r.json()).catch(() => null)
+          fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, { headers: { ...authHeaders } }).then(async (r) => {
+            const ct = r.headers.get('content-type') || '';
+            return r.ok && ct.includes('application/json') ? r.json() : null;
+          }).catch(() => null),
+          fetch(`${baseUrl}/api/support/context/${selectedTicket.customerId || selectedTicket.outletId || 'cust_user'}`, { headers: { ...authHeaders } }).then(async (r) => {
+            const ct = r.headers.get('content-type') || '';
+            return r.ok && ct.includes('application/json') ? r.json() : null;
+          }).catch(() => null),
+          fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/rating`, { headers: { ...authHeaders } }).then(async (r) => {
+            const ct = r.headers.get('content-type') || '';
+            return r.ok && ct.includes('application/json') ? r.json() : null;
+          }).catch(() => null)
         ]);
 
         if (!cancelled) {
@@ -197,6 +208,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         if (!cancelled) setIsLoadingMessages(false);
       }
     };
+
 
     loadTicketDetails();
     return () => {
@@ -213,7 +225,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         body: JSON.stringify(updates)
       });
 
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success) {
           setSelectedTicket(json.data);
@@ -265,7 +278,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         })
       });
 
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success) {
           setMessages((prev) => [...prev, json.data]);
@@ -287,7 +301,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ enabled })
       });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success) {
           setSelectedTicket(json.data);
@@ -295,8 +310,11 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
           const msgRes = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
             headers: { ...authHeaders }
           });
-          const msgJson = await msgRes.json();
-          if (msgJson.success) setMessages(msgJson.data);
+          const msgCt = msgRes.headers.get('content-type') || '';
+          if (msgRes.ok && msgCt.includes('application/json')) {
+            const msgJson = await msgRes.json();
+            if (msgJson.success) setMessages(msgJson.data);
+          }
         }
       }
     } catch (err) {
@@ -312,7 +330,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ prompt })
       });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success && json.data?.draft) {
           return json.data.draft;
@@ -337,18 +356,25 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(data)
       });
-      const json = await res.json();
-      if (res.ok && json?.success) {
-        setSelectedTicket(json.data);
-        setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
-        const msgRes = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
-          headers: { ...authHeaders }
-        });
-        const msgJson = await msgRes.json();
-        if (msgJson.success) setMessages(msgJson.data);
-        return { success: true };
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
+        const json = await res.json();
+        if (json?.success) {
+          setSelectedTicket(json.data);
+          setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
+          const msgRes = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
+            headers: { ...authHeaders }
+          });
+          const msgCt = msgRes.headers.get('content-type') || '';
+          if (msgRes.ok && msgCt.includes('application/json')) {
+            const msgJson = await msgRes.json();
+            if (msgJson.success) setMessages(msgJson.data);
+          }
+          return { success: true };
+        }
+        return { success: false, error: json?.error || 'Failed to escalate ticket' };
       }
-      return { success: false, error: json?.error || 'Failed to escalate ticket' };
+      return { success: false, error: `HTTP ${res.status}: Failed to escalate ticket` };
     } catch (err) {
       console.error('Failed to escalate ticket:', err);
       return { success: false, error: 'Connection error while escalating' };
@@ -363,13 +389,17 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ password })
       });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setSelectedTicket(json.data);
-        setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
-        return { success: true };
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
+        const json = await res.json();
+        if (json.success) {
+          setSelectedTicket(json.data);
+          setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
+          return { success: true };
+        }
+        return { success: false, error: json?.error || 'Failed to close ticket' };
       }
-      return { success: false, error: json?.error || 'Failed to close ticket' };
+      return { success: false, error: `HTTP ${res.status}: Failed to close ticket` };
     } catch (err) {
       console.error('Failed to close ticket:', err);
       return { success: false, error: 'Error occurred while closing ticket' };
@@ -383,7 +413,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ title, body })
       });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success) setCannedResponses((prev) => [json.data, ...prev]);
       }
@@ -399,7 +430,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ title, body })
       });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success) setCannedResponses((prev) => prev.map((c) => (c.id === id ? json.data : c)));
       }
@@ -428,7 +460,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         method: 'POST',
         headers: { ...authHeaders }
       });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const json = await res.json();
         if (json.success) setCannedResponses(json.data);
       }
@@ -449,16 +482,22 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ action, amount, reason: `Admin 1-Click Action: ${action}` })
       });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setSelectedTicket(json.data.ticket);
-        setTickets((prev) => prev.map((t) => (t.id === json.data.ticket.id ? json.data.ticket : t)));
-        // Refresh messages
-        const msgRes = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
-          headers: { ...authHeaders }
-        });
-        const msgJson = await msgRes.json();
-        if (msgJson.success) setMessages(msgJson.data);
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
+        const json = await res.json();
+        if (json.success) {
+          setSelectedTicket(json.data.ticket);
+          setTickets((prev) => prev.map((t) => (t.id === json.data.ticket.id ? json.data.ticket : t)));
+          // Refresh messages
+          const msgRes = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
+            headers: { ...authHeaders }
+          });
+          const msgCt = msgRes.headers.get('content-type') || '';
+          if (msgRes.ok && msgCt.includes('application/json')) {
+            const msgJson = await msgRes.json();
+            if (msgJson.success) setMessages(msgJson.data);
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to execute ticket action:', err);
@@ -475,10 +514,13 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders }
       });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setSelectedTicket(json.data.ticket);
-        setTickets((prev) => prev.map((t) => (t.id === json.data.ticket.id ? json.data.ticket : t)));
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
+        const json = await res.json();
+        if (json.success) {
+          setSelectedTicket(json.data.ticket);
+          setTickets((prev) => prev.map((t) => (t.id === json.data.ticket.id ? json.data.ticket : t)));
+        }
       }
     } catch (err) {
       console.error('Failed to diagnose ticket:', err);
@@ -486,6 +528,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
       setIsDiagnosing(false);
     }
   };
+
 
   const handleSendCannedDirectly = async (bodyText: string) => {
     await handleSendMessage({ body: bodyText, file: null, isInternalNote: false });

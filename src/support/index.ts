@@ -463,3 +463,6 @@ export class SupportStore {
     return r;
   }
 }
+
+export * from './handler.js';
+

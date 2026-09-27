@@ -225,12 +225,58 @@ export const POST = handler;
 export const OPTIONS = handler;
 `;
 
+/** Next.js App Router support catch-all route handler for /api/support/[...slug]. */
+export const supportRouteFile = () => `import { createSupportHandler } from 'blazeresolver/support';
+
+// Handles Customer Support Portal & Admin Support Desk API endpoints (tickets, chat, RAG triage, HITL actions).
+// Added by \`npx blazeresolver init\`; remove with \`npx blazeresolver remove\`.
+const handler = createSupportHandler();
+
+export const maxDuration = 60;
+
+export const GET = handler;
+export const POST = handler;
+export const PATCH = handler;
+export const DELETE = handler;
+export const OPTIONS = handler;
+`;
+
 /** Next.js Pages Router API route (Node req/res). */
 export const pagesFile = (repo: string) => `import { createHandler, nodeHandler } from 'blazeresolver/handler';
 
 // Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
 // Added by \`npx blazeresolver init\`; remove with \`npx blazeresolver remove\`.
 export default nodeHandler(createHandler({ repo: '${repo}' }));
+`;
+
+/** Next.js Pages Router support catch-all API route (/pages/api/support/[...slug].ts). */
+export const supportPagesFile = () => `import { createSupportHandler } from 'blazeresolver/support';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+const webHandler = createSupportHandler();
+
+export default async function handler(req: any, res: any) {
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.headers.host || 'localhost';
+  const url = new URL(req.url || '', \`\${protocol}://\${host}\`);
+
+  const init: RequestInit = {
+    method: req.method,
+    headers: req.headers as HeadersInit,
+  };
+
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+    init.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+  }
+
+  const webReq = new Request(url.toString(), init);
+  const webRes = await webHandler(webReq);
+
+  res.status(webRes.status);
+  webRes.headers.forEach((val, key) => res.setHeader(key, val));
+  const data = await webRes.text();
+  res.send(data);
+}
 `;
 
 export type ModuleStyle = 'esm' | 'cjs';
@@ -254,6 +300,65 @@ export default nodeHandler(${config});
 module.exports = nodeHandler(${config});
 `;
 };
+
+export const supportExpressRouterFile = (style: ModuleStyle) => {
+  const head = `// Support portal & desk API router. Added by \`npx blazeresolver init\`.
+`;
+  return style === 'esm'
+    ? `${head}import { createSupportHandler } from 'blazeresolver/support';
+
+const webHandler = createSupportHandler();
+
+export default async function supportRouter(req, res) {
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost';
+  const url = new URL(req.originalUrl || req.url, \`\${protocol}://\${host}\`);
+
+  const init = {
+    method: req.method,
+    headers: req.headers,
+  };
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+    init.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+  }
+
+  const webReq = new Request(url.toString(), init);
+  const webRes = await webHandler(webReq);
+
+  res.status(webRes.status);
+  webRes.headers.forEach((val, key) => res.setHeader(key, val));
+  const data = await webRes.text();
+  res.send(data);
+}
+`
+    : `${head}const { createSupportHandler } = require('blazeresolver/support');
+
+const webHandler = createSupportHandler();
+
+module.exports = async function supportRouter(req, res) {
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost';
+  const url = new URL(req.originalUrl || req.url, \`\${protocol}://\${host}\`);
+
+  const init = {
+    method: req.method,
+    headers: req.headers,
+  };
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+    init.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+  }
+
+  const webReq = new Request(url.toString(), init);
+  const webRes = await webHandler(webReq);
+
+  res.status(webRes.status);
+  webRes.headers.forEach((val, key) => res.setHeader(key, val));
+  const data = await webRes.text();
+  res.send(data);
+};
+`;
+};
+
 
 export const widgetTag = (endpoint: string, pin?: string) =>
   `<script src="https://cdn.jsdelivr.net/npm/blazeresolver@${pin ?? 'latest'}/widget/widget.js" data-endpoint="${endpoint}"></script>`;
