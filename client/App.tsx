@@ -19,14 +19,23 @@ import {
   FiDatabase,
   FiLock,
   FiInbox,
-  FiTrendingUp
+  FiTrendingUp,
+  FiPlus,
+  FiX
 } from 'react-icons/fi';
 import { TbGitFork, TbArrowsExchange } from 'react-icons/tb';
-import { RiCustomerService2Line, RiCpuLine } from 'react-icons/ri';
+import { RiCustomerService2Line, RiCpuLine, RiRobot2Line, RiSparklingLine } from 'react-icons/ri';
 import { VoiceAgentConsole } from './components/VoiceAgentConsole.js';
-import { AdminSupportDesk } from './components/support/AdminSupportDesk.js';
+import { TicketFeed } from './components/support/TicketFeed.js';
+import { TicketChatThread } from './components/support/TicketChatThread.js';
+import { CustomerContextPanel } from './components/support/CustomerContextPanel.js';
+import { CannedResponsesDrawer } from './components/support/CannedResponsesDrawer.js';
+import { CloseTicketModal } from './components/support/CloseTicketModal.js';
+import { EscalateTicketModal } from './components/support/EscalateTicketModal.js';
+import { BlazzyIcon, BlazzyBadge } from './components/support/BlazzyMascot.js';
+import type { SupportTicket, SupportMessage, CustomerContext, SupportCannedResponse, TicketRating } from './components/support/types.js';
 
-interface PipelineResult {
+export interface PipelineResult {
   complaintId: string;
   input: {
     id: string;
@@ -108,7 +117,7 @@ interface PipelineResult {
   timestamp: string;
 }
 
-interface SignalSummary {
+export interface SignalSummary {
   metric: string;
   label: string;
   unit: string;
@@ -117,7 +126,7 @@ interface SignalSummary {
   ratio: number;
 }
 
-interface CorrelatedIncident {
+export interface CorrelatedIncident {
   incidentId: string;
   title: string;
   summary: string;
@@ -133,7 +142,6 @@ interface CorrelatedIncident {
   createdAt: string;
 }
 
-/** Subset of the server's DomainProfile served by GET /api/profile. */
 export interface ProfileInfo {
   id: string;
   name: string;
@@ -151,7 +159,7 @@ export interface ProfileInfo {
   };
 }
 
-interface HitlAction {
+export interface HitlAction {
   id: string;
   complaintId: string;
   actionType: string;
@@ -165,29 +173,54 @@ interface HitlAction {
 }
 
 export default function App() {
+  // Live Support State
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [messages, setMessages] = useState<SupportMessage[]>([]);
+  const [customerContext, setCustomerContext] = useState<CustomerContext | null>(null);
+  const [cannedResponses, setCannedResponses] = useState<SupportCannedResponse[]>([]);
+  const [isLoadingTickets, setIsLoadingTickets] = useState(true);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
+  // Filters & Search
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [priorityFilter, setPriorityFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Modals & Rating
+  const [showCannedModal, setShowCannedModal] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [showEscalateModal, setShowEscalateModal] = useState(false);
+  const [showNewTicketModal, setShowNewTicketModal] = useState(false);
+  const [ticketRating, setTicketRating] = useState<TicketRating | null>(null);
+
+  // Engine & Diagnostics State
   const [feed, setFeed] = useState<PipelineResult[]>([]);
   const [incidents, setIncidents] = useState<CorrelatedIncident[]>([]);
   const [hitlQueue, setHitlQueue] = useState<HitlAction[]>([]);
   const [adaptersData, setAdaptersData] = useState<any>(null);
-  const [primaryMode, setPrimaryMode] = useState<'support' | 'engine'>('support');
-  const [activeTab, setActiveTab] = useState<'feed' | 'incidents' | 'hitl' | 'adapters' | 'byo' | 'voice'>('voice');
-  const [adapterSubTab, setAdapterSubTab] = useState<'orderSource' | 'refundGateway' | 'ticketSink' | 'availabilityControl'>('orderSource');
   const [profile, setProfile] = useState<ProfileInfo | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<'context' | 'voice' | 'pipeline' | 'incidents' | 'hitl' | 'adapters'>('context');
+  const [adapterSubTab, setAdapterSubTab] = useState<'orderSource' | 'refundGateway' | 'ticketSink' | 'availabilityControl'>('orderSource');
 
-  const [inputText, setInputText] = useState('');
-  const [inputOrderId, setInputOrderId] = useState('');
-  const [inputResource, setInputResource] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  // New Ticket / Inbound Input State
+  const [newTicketSubject, setNewTicketSubject] = useState('');
+  const [newTicketMessage, setNewTicketMessage] = useState('');
+  const [newTicketCategory, setNewTicketCategory] = useState('FOOD_QUALITY');
+  const [newTicketPriority, setNewTicketPriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal');
+  const [newTicketChannel, setNewTicketChannel] = useState<'text' | 'voice' | 'webhook' | 'email'>('text');
+  const [newTicketOrderId, setNewTicketOrderId] = useState('');
+  const [newTicketCustomerName, setNewTicketCustomerName] = useState('');
+  const [isCreatingTicket, setIsCreatingTicket] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
-  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState('');
   const [wsConnected, setWsConnected] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Fetch state on mount & set up WebSocket
+  // Sync state & live WebSocket
   useEffect(() => {
-    fetchState();
+    fetchAllState();
     fetchProfile();
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -197,53 +230,66 @@ export default function App() {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      ws.onopen = () => {
-        setWsConnected(true);
-      };
-
+      ws.onopen = () => setWsConnected(true);
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'pipeline_result') {
             setFeed((prev) => [msg.data, ...prev]);
-            fetchState();
-          } else if (msg.type === 'hitl_updated' || msg.type === 'pipeline_reset') {
-            fetchState();
+            fetchAllState();
+          } else if (msg.type === 'hitl_updated' || msg.type === 'pipeline_reset' || msg.type === 'ticket_updated') {
+            fetchAllState();
           }
         } catch (e) {
           console.error('WS parse error:', e);
         }
       };
-
-      ws.onclose = () => {
-        setWsConnected(false);
-      };
+      ws.onclose = () => setWsConnected(false);
     } catch (err) {
       console.warn('WS connection skipped:', err);
     }
 
+    const interval = setInterval(fetchAllState, 4000);
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      clearInterval(interval);
+      if (wsRef.current) wsRef.current.close();
     };
-  }, []);
+  }, [statusFilter, priorityFilter, categoryFilter, searchQuery]);
 
-  const fetchState = async () => {
+  const fetchAllState = async () => {
     try {
-      const [feedRes, incRes, hitlRes, adaptRes] = await Promise.all([
-        fetch('/api/pipeline/feed').then((r) => r.json()),
-        fetch('/api/correlate/incidents').then((r) => r.json()),
-        fetch('/api/hitl/queue').then((r) => r.json()),
-        fetch('/api/adapters/overview').then((r) => r.json()),
+      const params = new URLSearchParams();
+      if (statusFilter) params.set('status', statusFilter);
+      if (priorityFilter) params.set('priority', priorityFilter);
+      if (categoryFilter) params.set('category', categoryFilter);
+      if (searchQuery) params.set('search', searchQuery);
+
+      const [ticketsRes, feedRes, incRes, hitlRes, adaptRes, cannedRes] = await Promise.all([
+        fetch(`/api/support/tickets?${params.toString()}`).then((r) => r.json()).catch(() => ({ data: [] })),
+        fetch('/api/pipeline/feed').then((r) => r.json()).catch(() => ({ results: [] })),
+        fetch('/api/correlate/incidents').then((r) => r.json()).catch(() => ({ incidents: [] })),
+        fetch('/api/hitl/queue').then((r) => r.json()).catch(() => ({ queue: [] })),
+        fetch('/api/adapters/overview').then((r) => r.json()).catch(() => null),
+        fetch('/api/support/canned-responses').then((r) => r.json()).catch(() => ({ data: [] }))
       ]);
 
+      if (ticketsRes.success && Array.isArray(ticketsRes.data)) {
+        setTickets(ticketsRes.data);
+        setSelectedTicket((prev) => {
+          if (!prev) return ticketsRes.data[0] || null;
+          const match = ticketsRes.data.find((t: SupportTicket) => t.id === prev.id);
+          return match ? { ...prev, ...match } : prev;
+        });
+      }
       if (feedRes.results) setFeed(feedRes.results);
       if (incRes.incidents) setIncidents(incRes.incidents);
       if (hitlRes.queue) setHitlQueue(hitlRes.queue);
       if (adaptRes) setAdaptersData(adaptRes);
+      if (cannedRes.success) setCannedResponses(cannedRes.data);
     } catch (err) {
-      console.error('Error fetching dashboard state:', err);
+      console.error('Error fetching state:', err);
+    } finally {
+      setIsLoadingTickets(false);
     }
   };
 
@@ -251,18 +297,154 @@ export default function App() {
     try {
       const data: ProfileInfo = await fetch('/api/profile').then((r) => r.json());
       setProfile(data);
-      setInputOrderId(data.demo.sampleOrders[0]?.id ?? '');
-      setInputResource(data.resources[0]?.id ?? '');
+      if (!newTicketOrderId && data.demo.sampleOrders[0]) {
+        setNewTicketOrderId(data.demo.sampleOrders[0].id);
+      }
     } catch (err) {
       console.error('Error fetching domain profile:', err);
     }
   };
 
-  const money = (amount: number | undefined) => `${profile?.currency.symbol ?? ''}${amount ?? 0}`;
-  const resourceName = (id: string) => profile?.resources.find((r) => r.id === id)?.name ?? id;
-  const itemLabel = profile?.labels.item ?? 'Item';
-  const resourceLabel = profile?.labels.resource ?? 'Location';
-  const approvalThreshold = profile?.moneyPolicy.autoApproveThreshold ?? 0;
+  // When selected ticket changes, load messages & context
+  useEffect(() => {
+    if (!selectedTicket) {
+      setMessages([]);
+      setCustomerContext(null);
+      setTicketRating(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadDetails = async () => {
+      setIsLoadingMessages(true);
+      try {
+        const [msgRes, ctxRes, ratingRes] = await Promise.all([
+          fetch(`/api/support/tickets/${selectedTicket.id}/messages`).then((r) => r.json()).catch(() => null),
+          fetch(`/api/support/context/${selectedTicket.customerId || selectedTicket.outletId || 'cust_user'}`).then((r) => r.json()).catch(() => null),
+          fetch(`/api/support/tickets/${selectedTicket.id}/rating`).then((r) => r.json()).catch(() => null)
+        ]);
+
+        if (!cancelled) {
+          if (msgRes?.success) setMessages(msgRes.data || []);
+          if (ctxRes?.success) setCustomerContext(ctxRes.data || null);
+          if (ratingRes?.success && ratingRes.data) setTicketRating(ratingRes.data);
+          else setTicketRating(null);
+        }
+      } catch (err) {
+        console.error('Failed to load ticket details:', err);
+      } finally {
+        if (!cancelled) setIsLoadingMessages(false);
+      }
+    };
+
+    loadDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTicket?.id]);
+
+  const handleUpdateTicket = async (updates: Partial<SupportTicket>) => {
+    if (!selectedTicket) return;
+    try {
+      const res = await fetch(`/api/support/tickets/${selectedTicket.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          setSelectedTicket(json.data);
+          setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update ticket:', err);
+    }
+  };
+
+  const handleSendMessage = async ({
+    body,
+    file,
+    isInternalNote
+  }: {
+    body: string;
+    file: File | null;
+    isInternalNote: boolean;
+  }): Promise<{ success: boolean; error?: string }> => {
+    if (!selectedTicket) return { success: false, error: 'No ticket selected' };
+
+    try {
+      const payload: Record<string, any> = {
+        body,
+        isInternalNote,
+        senderType: isInternalNote ? 'agent' : selectedTicket.handledBy === 'ai' ? 'ai' : 'agent',
+        senderName: isInternalNote ? 'Admin Operator' : selectedTicket.handledBy === 'ai' ? 'Blazzy AI' : 'Support Specialist'
+      };
+
+      if (file) {
+        payload.attachmentUrl = URL.createObjectURL(file);
+        payload.attachmentName = file.name;
+        payload.attachmentType = file.type;
+      }
+
+      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          setMessages((prev) => [...prev, json.data]);
+          fetchAllState();
+          return { success: true };
+        }
+      }
+      return { success: false, error: 'Failed to send message' };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  };
+
+  const handleCreateNewTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTicketSubject.trim() || !newTicketMessage.trim()) return;
+
+    setIsCreatingTicket(true);
+    try {
+      const res = await fetch('/api/support/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: newTicketSubject,
+          message: newTicketMessage,
+          category: newTicketCategory,
+          priority: newTicketPriority,
+          channel: newTicketChannel,
+          orderNumber: newTicketOrderId || undefined,
+          customerName: newTicketCustomerName || 'Valued Customer',
+          customerEmail: 'customer@example.com'
+        })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          setShowNewTicketModal(false);
+          setNewTicketSubject('');
+          setNewTicketMessage('');
+          await fetchAllState();
+          setSelectedTicket(json.data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to create ticket:', err);
+    } finally {
+      setIsCreatingTicket(false);
+    }
+  };
 
   const handleRunSeedDemo = async () => {
     setIsSeeding(true);
@@ -270,7 +452,7 @@ export default function App() {
       const res = await fetch('/api/pipeline/seed', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        await fetchState();
+        await fetchAllState();
       }
     } catch (err) {
       console.error('Error running seed demo:', err);
@@ -285,37 +467,9 @@ export default function App() {
       setFeed([]);
       setIncidents([]);
       setHitlQueue([]);
-      await fetchState();
+      await fetchAllState();
     } catch (err) {
       console.error('Error resetting state:', err);
-    }
-  };
-
-  const handleSendComplaint = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
-
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/pipeline/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rawText: inputText,
-          orderId: inputOrderId || undefined,
-          resourceId: inputResource || undefined,
-          channel: 'text',
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setInputText('');
-        await fetchState();
-      }
-    } catch (err) {
-      console.error('Error processing complaint:', err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -324,778 +478,803 @@ export default function App() {
       await fetch('/api/hitl/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actionId, decision }),
+        body: JSON.stringify({ actionId, decision })
       });
-      await fetchState();
+      await fetchAllState();
     } catch (err) {
       console.error('Error updating HITL decision:', err);
     }
   };
 
-  const handleSimulateVoice = () => {
-    setActiveTab('voice');
+  const handleToggleTakeover = async (enabled: boolean) => {
+
+    if (!selectedTicket) return;
+    try {
+      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/takeover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          setSelectedTicket(json.data);
+          setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
+          const msgRes = await fetch(`/api/support/tickets/${selectedTicket.id}/messages`);
+          const msgJson = await msgRes.json();
+          if (msgJson.success) setMessages(msgJson.data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle takeover:', err);
+    }
   };
 
+  const handleGenerateBlazzyDraft = async (prompt?: string): Promise<string | null> => {
+    if (!selectedTicket) return null;
+    try {
+      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/blazzy-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data?.draft) {
+          return json.data.draft;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to generate Blazzy draft:', err);
+    }
+    return null;
+  };
+
+  const handleConfirmEscalate = async (data: {
+    title: string;
+    type: 'bug' | 'feature' | 'note';
+    priority: 'low' | 'medium' | 'high' | 'urgent';
+    note: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    if (!selectedTicket) return { success: false, error: 'No ticket selected' };
+    try {
+      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/escalate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        setSelectedTicket(json.data);
+        setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
+        const msgRes = await fetch(`/api/support/tickets/${selectedTicket.id}/messages`);
+        const msgJson = await msgRes.json();
+        if (msgJson.success) setMessages(msgJson.data);
+        return { success: true };
+      }
+      return { success: false, error: json?.error || 'Failed to escalate ticket' };
+    } catch (err) {
+      console.error('Failed to escalate ticket:', err);
+      return { success: false, error: 'Connection error while escalating' };
+    }
+  };
+
+  const handleConfirmCloseTicket = async (password: string): Promise<{ success: boolean; error?: string }> => {
+    if (!selectedTicket) return { success: false, error: 'No ticket selected' };
+    try {
+      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSelectedTicket(json.data);
+        setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
+        return { success: true };
+      }
+      return { success: false, error: json?.error || 'Failed to close ticket' };
+    } catch (err) {
+      console.error('Failed to close ticket:', err);
+      return { success: false, error: 'Error occurred while closing ticket' };
+    }
+  };
+
+  const handleAddCannedResponse = async (title: string, body: string) => {
+    try {
+      const res = await fetch('/api/support/canned-responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, body })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setCannedResponses((prev) => [json.data, ...prev]);
+      }
+    } catch (err) {
+      console.error('Failed to add canned response:', err);
+    }
+  };
+
+  const handleUpdateCannedResponse = async (id: string, title: string, body: string) => {
+    try {
+      const res = await fetch(`/api/support/canned-responses/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, body })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setCannedResponses((prev) => prev.map((c) => (c.id === id ? json.data : c)));
+      }
+    } catch (err) {
+      console.error('Failed to update canned response:', err);
+    }
+  };
+
+  const handleDeleteCannedResponse = async (id: string) => {
+    try {
+      const res = await fetch(`/api/support/canned-responses/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setCannedResponses((prev) => prev.filter((c) => c.id !== id));
+      }
+    } catch (err) {
+      console.error('Failed to delete canned response:', err);
+    }
+  };
+
+  const handleSetAutoReply = async (id: string) => {
+    try {
+      const res = await fetch(`/api/support/canned-responses/${id}/set-auto-reply`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setCannedResponses(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to set auto reply:', err);
+    }
+  };
+
+  const handleSendCannedDirectly = async (bodyText: string) => {
+    await handleSendMessage({ body: bodyText, file: null, isInternalNote: false });
+  };
+
+
+  const money = (amount: number | undefined) => `${profile?.currency.symbol ?? '$'}${amount ?? 0}`;
+  const approvalThreshold = profile?.moneyPolicy.autoApproveThreshold ?? 300;
+  const resourceLabel = profile?.labels.resource ?? 'Location';
+  const itemLabel = profile?.labels.item ?? 'Item';
+
   // Metrics
-  const totalCount = feed.length;
-  const autoResolvedCount = feed.filter(
-    (f) => f.resolution.actions[0]?.approvalStatus === 'executed' && !f.triage.isPromptInjection
-  ).length;
-  const autoResolvedRate = totalCount > 0 ? Math.round((autoResolvedCount / totalCount) * 100) : 0;
+  const totalTickets = tickets.length;
+  const openTickets = tickets.filter((t) => t.status === 'open').length;
+  const aiHandledCount = tickets.filter((t) => t.handledBy === 'ai').length;
+  const autoResolvedRate = totalTickets > 0 ? Math.round((aiHandledCount / totalTickets) * 100) : 100;
   const hitlPendingCount = hitlQueue.length;
   const attacksBlockedCount = feed.filter((f) => f.triage.isPromptInjection).length;
 
   return (
-    <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col font-sans">
-      {/* Top Navigation */}
-      <header className="border-b border-slate-800/80 bg-[#0f172a]/80 backdrop-blur-md sticky top-0 z-40 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div className="h-screen flex flex-col bg-slate-50 text-slate-900 font-sans overflow-hidden">
+      {/* Universal Command Header */}
+      <header className="h-14 bg-white border-b border-slate-200 px-5 flex items-center justify-between gap-4 shrink-0 shadow-2xs z-30">
         <div className="flex items-center gap-3">
-          <img
-            src="/blazyy.png"
-            alt="Blazyy"
-            className="h-9 w-9 rounded-xl object-cover border border-orange-500/30 shadow-md"
-          />
+          <BlazzyIcon className="w-8 h-8 rounded-xl object-contain border border-orange-200 bg-orange-50 p-1 shadow-2xs" />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-extrabold text-base tracking-tight text-white">BlazeResolver</h1>
-              <span className="text-[10.5px] font-mono font-medium px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                v1.0 • AI Support Engine{profile ? ` • ${profile.name}` : ''}
+              <h1 className="font-extrabold text-sm tracking-tight text-slate-900">BlazeResolver</h1>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-800 border border-orange-200">
+                AI Customer Resolution Command Center{profile ? ` • ${profile.name}` : ''}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              Full End-to-End Customer Support, AI Triage & Self-Healing Pipeline
+            <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
+              Unified Autonomous Support Desk, Real-Time Voice Layer & Self-Healing Pipeline
             </p>
           </div>
         </div>
 
-        {/* Primary Workspace Navigation Switcher */}
-        <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setPrimaryMode('support')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all ${
-              primaryMode === 'support'
-                ? 'bg-orange-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <RiCustomerService2Line className="w-4 h-4 text-orange-200" />
-            <span>Support Desk & Portal</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setPrimaryMode('engine')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all ${
-              primaryMode === 'engine'
-                ? 'bg-orange-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <RiCpuLine className="w-4 h-4 text-orange-200" />
-            <span>Engine Pipeline & Voice</span>
-          </button>
+        {/* Global Live Stats Strip */}
+        <div className="hidden xl:flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-50 border border-slate-200">
+            <span className="text-slate-500 font-medium">Active Tickets:</span>
+            <span className="font-bold text-slate-900 font-mono">{totalTickets}</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-50 border border-purple-200">
+            <span className="text-purple-700 font-medium">Incidents:</span>
+            <span className="font-bold text-purple-900 font-mono">{incidents.length}</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-200">
+            <span className="text-emerald-700 font-medium">AI Resolution:</span>
+            <span className="font-bold text-emerald-900 font-mono">{autoResolvedRate}%</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-amber-50 border border-amber-200">
+            <span className="text-amber-700 font-medium">HITL Gated:</span>
+            <span className="font-bold text-amber-900 font-mono">{hitlPendingCount}</span>
+          </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 mr-1">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                wsConnected ? 'bg-emerald-500 badge-pulse' : 'bg-amber-500'
-              }`}
-            ></span>
-            <span className="text-[10.5px] font-mono text-slate-400 hidden md:inline">
+            <span className={`h-2 w-2 rounded-full ${wsConnected ? 'bg-emerald-500 badge-pulse' : 'bg-amber-500'}`}></span>
+            <span className="text-[10.5px] font-mono font-medium text-slate-500 hidden md:inline">
               {wsConnected ? 'Socket Live' : 'Connecting...'}
             </span>
           </div>
 
           <button
+            onClick={() => setShowNewTicketModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold transition-all shadow-xs"
+          >
+            <FiPlus className="w-3.5 h-3.5" />
+            <span>+ New Claim / Ticket</span>
+          </button>
+
+          <button
             onClick={handleRunSeedDemo}
             disabled={isSeeding}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold transition-all disabled:opacity-50 border border-orange-400/30"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all disabled:opacity-50 border border-slate-200"
+            title="Seed real-world customer complaints benchmark"
           >
-            <FiPlay className={isSeeding ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">{isSeeding ? 'Running...' : 'Run Seed Claims'}</span>
+            <FiPlay className={`w-3.5 h-3.5 text-orange-600 ${isSeeding ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{isSeeding ? 'Seeding...' : 'Seed Benchmark'}</span>
           </button>
 
           <button
             onClick={handleResetState}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-all border border-slate-700"
-            title="Reset pipeline and stores"
+            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs transition-all border border-slate-200"
+            title="Reset pipeline & ticket stores"
           >
             <FiRefreshCw className="h-3.5 w-3.5" />
           </button>
         </div>
       </header>
 
-      {primaryMode === 'support' ? (
-        <div className="flex-1 flex min-h-0 overflow-hidden">
-          <AdminSupportDesk />
-        </div>
-      ) : (
-        <>
-          {/* Metrics Row */}
-          <section className="px-6 py-4 grid grid-cols-2 md:grid-cols-5 gap-3.5 bg-[#0b101b] border-b border-slate-800/60">
-        <div className="glass-card p-3.5 rounded-xl flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            <FiInbox className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Ingested Complaints</div>
-            <div className="text-xl font-bold text-white font-mono">{totalCount}</div>
-          </div>
-        </div>
+      {/* Main 3-Column Unified Workspace */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* LEFT COLUMN: Unified Ingest & Ticket Feed */}
+        <TicketFeed
+          tickets={tickets}
+          selectedTicket={selectedTicket}
+          onSelectTicket={(ticket) => setSelectedTicket(ticket)}
+          isLoading={isLoadingTickets}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          categoryFilter={categoryFilter}
+          onCategoryFilterChange={setCategoryFilter}
+          priorityFilter={priorityFilter}
+          onPriorityFilterChange={setPriorityFilter}
+        />
 
-        <div className="glass-card p-3.5 rounded-xl flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-            <FiActivity className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Systemic Incidents</div>
-            <div className="text-xl font-bold text-purple-400 font-mono">{incidents.length}</div>
-          </div>
-        </div>
-
-        <div className="glass-card p-3.5 rounded-xl flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <FiCheckCircle className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Auto-Resolved Rate</div>
-            <div className="text-xl font-bold text-emerald-400 font-mono">{autoResolvedRate}%</div>
-          </div>
+        {/* CENTER COLUMN: Real-Time Live Resolution Desk & Conversation */}
+        <div className="flex-1 flex flex-col min-w-0 border-r border-slate-200 bg-white overflow-hidden">
+          <TicketChatThread
+            selectedTicket={selectedTicket}
+            messages={messages}
+            cannedResponses={cannedResponses}
+            isLoadingMessages={isLoadingMessages}
+            ticketRating={ticketRating}
+            onSendMessage={handleSendMessage}
+            onUpdateTicket={handleUpdateTicket}
+            onToggleTakeover={handleToggleTakeover}
+            onGenerateBlazzyDraft={handleGenerateBlazzyDraft}
+            onOpenEscalate={() => setShowEscalateModal(true)}
+            onOpenCloseTicket={() => setShowCloseModal(true)}
+          />
         </div>
 
-        <div className="glass-card p-3.5 rounded-xl flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <FiUserCheck className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Money Gate (HITL Queue)</div>
-            <div className="text-xl font-bold text-amber-400 font-mono">{hitlPendingCount}</div>
-          </div>
-        </div>
-
-        <div className="glass-card p-3.5 rounded-xl flex items-center gap-3 col-span-2 md:col-span-1">
-          <div className="p-2.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
-            <FiShield className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="text-xs text-slate-400 font-medium">Attacks Blocked</div>
-            <div className="text-xl font-bold text-red-400 font-mono">{attacksBlockedCount}</div>
-          </div>
-        </div>
-      </section>
-
-      {/* Main Content Area */}
-      <main className="flex-1 px-6 py-5 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1600px] w-full mx-auto">
-        {/* Left Column (7 cols): Live Feed & Interactive Input */}
-        <section className="lg:col-span-7 flex flex-col gap-4">
-          {/* Custom Input Bar */}
-          <div className="glass-panel p-4 rounded-2xl shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <FiSend className="text-orange-400" /> Test Customer Complaint Input
-              </span>
-              <div className="flex items-center gap-2">
-                <select
-                  value={inputResource}
-                  onChange={(e) => setInputResource(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 text-[11px] rounded-lg px-2 py-1 text-slate-300 focus:outline-none focus:border-orange-500"
-                >
-                  <option value="">Any {resourceLabel.toLowerCase()}</option>
-                  {profile?.resources.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder={`Order ID${profile?.demo.sampleOrders[0] ? ` (e.g. ${profile.demo.sampleOrders[0].id})` : ''}`}
-                  value={inputOrderId}
-                  onChange={(e) => setInputOrderId(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 text-[11px] rounded-lg px-2 py-1 text-slate-300 w-28 focus:outline-none focus:border-orange-500 font-mono"
-                />
-              </div>
-            </div>
-
-            <form onSubmit={handleSendComplaint} className="flex gap-2">
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder={profile?.demo.complaintPlaceholder ?? 'Describe a customer complaint...'}
-                className="flex-1 bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500"
-              />
-              <button
-                type="submit"
-                disabled={isLoading || !inputText.trim()}
-                className="px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {isLoading ? <FiRefreshCw className="animate-spin" /> : <FiSend />}
-                <span>Process</span>
-              </button>
-            </form>
-          </div>
-
-          {/* Feed Tabs Header */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <FiZap className="text-amber-400" /> Real-Time Pipeline Execution Feed
-              </h2>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
-                {feed.length} events
-              </span>
-            </div>
-          </div>
-
-          {/* Feed List */}
-          <div className="space-y-3.5 overflow-y-auto max-h-[calc(100vh-280px)] pr-1">
-            {feed.length === 0 ? (
-              <div className="glass-card p-10 rounded-2xl text-center flex flex-col items-center justify-center">
-                <div className="p-4 rounded-2xl bg-orange-500/10 text-orange-400 mb-3 border border-orange-500/20">
-                  <FiPlay className="h-6 w-6" />
-                </div>
-                <h3 className="text-sm font-bold text-slate-200">No Complaints Ingested Yet</h3>
-                <p className="text-xs text-slate-400 max-w-sm mt-1 mb-4">
-                  Click "Run Demo Script" above to benchmark the entire harness with the example's real-world customer complaints!
-                </p>
-                <button
-                  onClick={handleRunSeedDemo}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-semibold transition-all"
-                >
-                  Run Complaint Benchmark
-                </button>
-              </div>
-            ) : (
-              feed.map((item) => (
-                <div
-                  key={item.complaintId}
-                  className={`glass-panel p-4 rounded-2xl border transition-all ${
-                    item.correlation.isSystemic
-                      ? 'border-purple-500/40 bg-purple-950/10'
-                      : item.triage.isPromptInjection
-                      ? 'border-red-500/40 bg-red-950/10'
-                      : item.resolution.hitlRequired
-                      ? 'border-amber-500/40 bg-amber-950/10'
-                      : 'border-slate-800/80 hover:border-slate-700'
-                  }`}
-                >
-                  {/* Top line: Channel, Order, Timestamp */}
-                  <div className="flex items-center justify-between text-xs mb-2">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded-md ${
-                          item.input.channel === 'voice'
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                            : 'bg-slate-800 text-slate-300 border border-slate-700'
-                        }`}
-                      >
-                        {item.input.channel === 'voice' ? '🎙️ VOICE' : '💬 TEXT'}
-                      </span>
-
-                      {item.triage.orderId && (
-                        <span className="font-mono text-[11px] text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                          {item.triage.orderId}
-                        </span>
-                      )}
-
-                      {item.triage.resourceId && (
-                        <span className="text-[11px] text-slate-400">{resourceName(item.triage.resourceId)}</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-slate-500">
-                        {item.executionDurationMs}ms latency
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Customer raw quote */}
-                  <p className="text-xs text-slate-200 mb-3 bg-slate-950/40 p-2.5 rounded-lg border border-slate-900 italic">
-                    "{item.input.rawText}"
-                  </p>
-
-                  {/* 4 Pipeline Stages Execution Breakdown */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-[11px]">
-                    {/* 1. TRIAGE */}
-                    <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                      <div className="text-[10px] uppercase font-bold text-sky-400 mb-1 flex items-center justify-between">
-                        <span>1. Triage</span>
-                        <span className="text-slate-500 font-mono">{Math.round(item.triage.urgencyScore * 100)}%</span>
-                      </div>
-                      <div className="font-semibold text-slate-200 truncate">
-                        {profile?.categories.find((c) => c.id === item.triage.category)?.label ?? item.triage.category.replace(/_/g, ' ')}
-                      </div>
-                      <div className="text-[10px] text-slate-400 truncate">
-                        {item.triage.itemName || item.triage.intent}
-                      </div>
-                    </div>
-
-                    {/* 2. CORRELATE (The Differentiator) */}
-                    <div
-                      className={`p-2 rounded-lg border ${
-                        item.correlation.isSystemic
-                          ? 'bg-purple-900/30 border-purple-500/40 text-purple-200'
-                          : 'bg-slate-900/60 border-slate-800 text-slate-400'
-                      }`}
-                    >
-                      <div className="text-[10px] uppercase font-bold mb-1 flex items-center justify-between">
-                        <span className={item.correlation.isSystemic ? 'text-purple-300' : 'text-slate-400'}>
-                          2. Correlate
-                        </span>
-                        {item.correlation.isSystemic && <span className="animate-pulse">🚨</span>}
-                      </div>
-                      {item.correlation.isSystemic ? (
-                        <div>
-                          <div className="font-bold text-purple-300">Systemic Incident</div>
-                          {item.correlation.incident?.signal && (
-                            <div className="text-[10px] text-purple-400 font-mono">
-                              {item.correlation.incident.signal.average}
-                              {item.correlation.incident.signal.unit} vs {item.correlation.incident.signal.baseline}
-                              {item.correlation.incident.signal.unit} base
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="text-slate-300">Isolated Case</div>
-                          <div className="text-[10px] text-slate-500">1-off complaint</div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 3. RESOLVE */}
-                    <div
-                      className={`p-2 rounded-lg border ${
-                        item.triage.isPromptInjection
-                          ? 'bg-red-950/30 border-red-500/40'
-                          : item.resolution.hitlRequired
-                          ? 'bg-amber-950/30 border-amber-500/40'
-                          : 'bg-emerald-950/30 border-emerald-500/40'
-                      }`}
-                    >
-                      <div className="text-[10px] uppercase font-bold mb-1 flex items-center justify-between">
-                        <span
-                          className={
-                            item.triage.isPromptInjection
-                              ? 'text-red-400'
-                              : item.resolution.hitlRequired
-                              ? 'text-amber-400'
-                              : 'text-emerald-400'
-                          }
-                        >
-                          3. Resolve
-                        </span>
-                      </div>
-                      {item.triage.isPromptInjection ? (
-                        <div className="text-red-300 font-bold">Attack Defended</div>
-                      ) : item.resolution.hitlRequired ? (
-                        <div>
-                          <div className="text-amber-300 font-bold">HITL Gated</div>
-                          <div className="text-[10px] text-amber-400">Claim &gt; {money(approvalThreshold)}</div>
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="text-emerald-300 font-bold truncate">
-                            {item.resolution.actions[0]?.actionType.toUpperCase() || 'SAFE'} (
-                            {money(item.resolution.actions[0]?.amount)})
-                          </div>
-                          <div className="text-[9px] text-emerald-400/80 font-mono truncate">
-                            Idem: {item.resolution.actions[0]?.idempotencyKey.substring(0, 14)}...
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 4. RESPOND */}
-                    <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 flex flex-col justify-between">
-                      <div>
-                        <div className="text-[10px] uppercase font-bold text-amber-400 mb-1 flex items-center justify-between">
-                          <span>4. Respond</span>
-                          <span className="text-[9px] text-emerald-400">✓ Quality Pass</span>
-                        </div>
-                        <div className="text-[10px] text-slate-300 line-clamp-2">
-                          "{item.response.text}"
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-
-        {/* Right Column (5 cols): Correlate Incident Center, HITL Queue, & 4-Adapter Explorer */}
-        <section className="lg:col-span-5 flex flex-col gap-5">
-          {/* Sub-Tabs: Incidents / HITL / Adapters / BYO Agent / Live Voice */}
-          <div className="flex bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs font-medium overflow-x-auto">
+        {/* RIGHT COLUMN: Multi-Tab Intelligence, Voice Layer & Engine Telemetry Inspector */}
+        <div className="w-80 xl:w-96 bg-slate-50 flex flex-col min-h-0 overflow-hidden shrink-0 border-l border-slate-200">
+          {/* Sub-Tabs Selector */}
+          <div className="p-2 border-b border-slate-200 bg-white flex items-center gap-1 overflow-x-auto shadow-2xs">
             <button
-              onClick={() => setActiveTab('voice')}
-              className={`flex-1 min-w-[120px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                activeTab === 'voice'
-                  ? 'bg-orange-600 text-white font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+              onClick={() => setInspectorTab('context')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap ${
+                inspectorTab === 'context' ? 'bg-orange-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <FiMic className="text-orange-300" /> Voice Agent
+              Customer 360
             </button>
             <button
-              onClick={() => setActiveTab('incidents')}
-              className={`flex-1 min-w-[100px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                activeTab === 'incidents'
-                  ? 'bg-purple-600 text-white font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+              onClick={() => setInspectorTab('voice')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
+                inspectorTab === 'voice' ? 'bg-orange-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <FiMic /> Voice Bridge
+            </button>
+            <button
+              onClick={() => setInspectorTab('pipeline')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
+                inspectorTab === 'pipeline' ? 'bg-orange-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <FiZap /> Pipeline ({feed.length})
+            </button>
+            <button
+              onClick={() => setInspectorTab('incidents')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
+                inspectorTab === 'incidents' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <FiActivity /> Incidents ({incidents.length})
             </button>
             <button
-              onClick={() => setActiveTab('hitl')}
-              className={`flex-1 min-w-[100px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                activeTab === 'hitl'
-                  ? 'bg-amber-600 text-white font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+              onClick={() => setInspectorTab('hitl')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
+                inspectorTab === 'hitl' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <FiUserCheck /> HITL ({hitlQueue.length})
             </button>
             <button
-              onClick={() => setActiveTab('adapters')}
-              className={`flex-1 min-w-[80px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                activeTab === 'adapters'
-                  ? 'bg-slate-700 text-white font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+              onClick={() => setInspectorTab('adapters')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
+                inspectorTab === 'adapters' ? 'bg-slate-800 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <TbGitFork /> Adapters
             </button>
-            <button
-              onClick={() => setActiveTab('byo')}
-              className={`flex-1 min-w-[90px] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                activeTab === 'byo'
-                  ? 'bg-cyan-600 text-white font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <FiCpu /> BYO
-            </button>
           </div>
 
-          {/* TAB 0: Live Voice Agent Console */}
-          {activeTab === 'voice' && (
-            <div className="h-[640px]">
-              <VoiceAgentConsole
-                profile={profile}
-                onIncidentDetected={fetchState}
-                onHitlUpdated={fetchState}
+          {/* Inspector Content Area */}
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
+            {/* TAB 1: Customer Context & AI Triage Diagnostics */}
+            {inspectorTab === 'context' && (
+              <CustomerContextPanel
+                customerContext={customerContext}
+                selectedTicket={selectedTicket}
+                ticketRating={ticketRating}
               />
-            </div>
-          )}
+            )}
 
-          {/* TAB 1: Correlate Incident Hub (The Star Feature) */}
-          {activeTab === 'incidents' && (
-            <div className="glass-panel p-5 rounded-2xl flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <FiActivity className="text-purple-400" /> Correlate Operational Intelligence
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Cross-referencing customer complaints with live operational signals
-                  </p>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 text-xs font-mono font-bold border border-purple-500/30">
-                  {incidents.length} Active
-                </span>
+
+            {/* TAB 2: Live Voice Agent Console */}
+            {inspectorTab === 'voice' && (
+              <div className="h-full min-h-[580px]">
+                <VoiceAgentConsole
+                  profile={profile}
+                  onIncidentDetected={fetchAllState}
+                  onHitlUpdated={fetchAllState}
+                />
               </div>
+            )}
 
-              {incidents.length === 0 ? (
-                <div className="p-8 rounded-xl bg-slate-900/40 border border-slate-800 text-center">
-                  <FiCheckCircle className="h-8 w-8 text-slate-600 mx-auto mb-2" />
-                  <p className="text-xs text-slate-400">No operational bottlenecks detected in the buffer window.</p>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Feed 3+ similar complaints from the same {resourceLabel.toLowerCase()} to trigger anomaly detection.
-                  </p>
+            {/* TAB 3: 4-Stage Engine Pipeline Execution Stream */}
+            {inspectorTab === 'pipeline' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <FiZap className="text-amber-500" /> Real-Time 4-Stage Execution
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold">
+                    {feed.length} Events
+                  </span>
                 </div>
-              ) : (
-                incidents.map((inc) => (
-                  <div
-                    key={inc.incidentId}
-                    className="p-4 rounded-xl bg-gradient-to-br from-purple-950/40 to-slate-900/80 border border-purple-500/50 shadow-sm flex flex-col gap-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="text-[10px] font-mono text-purple-400 font-bold uppercase tracking-wider">
-                          SYSTEMIC INCIDENT • {resourceName(inc.resourceId).toUpperCase()}
-                        </div>
-                        <h4 className="text-sm font-bold text-white mt-0.5">{inc.title}</h4>
-                      </div>
-                      {inc.signal && (
-                        <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px] font-bold border border-red-500/30">
-                          {inc.signal.ratio}x {inc.signal.label}
+
+                {feed.length === 0 ? (
+                  <div className="p-6 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiPlay className="w-6 h-6 text-orange-600 mx-auto mb-2" />
+                    <p className="text-xs text-slate-700 font-bold">No pipeline executions yet</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      File a claim or click "Seed Benchmark" to stream live evaluations.
+                    </p>
+                  </div>
+                ) : (
+                  feed.map((item) => (
+                    <div
+                      key={item.complaintId}
+                      className={`p-3 bg-white rounded-xl border shadow-2xs space-y-2 ${
+                        item.correlation.isSystemic
+                          ? 'border-purple-300 bg-purple-50/20'
+                          : item.triage.isPromptInjection
+                          ? 'border-red-300 bg-red-50/20'
+                          : 'border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-mono font-bold text-slate-700 uppercase">
+                          {item.input.channel === 'voice' ? '🎙️ VOICE' : '💬 TEXT'} • #{item.triage.orderId || 'ORDER'}
                         </span>
-                      )}
-                    </div>
-
-                    <p className="text-xs text-slate-300">{inc.summary}</p>
-
-                    {/* Operational Signal Telemetry */}
-                    <div className="grid grid-cols-3 gap-2 bg-purple-950/30 p-2.5 rounded-lg border border-purple-900/40 font-mono text-center">
-                      <div>
-                        <div className="text-[10px] text-slate-400">Clustered Tickets</div>
-                        <div className="text-base font-bold text-white">{inc.complaintCount}</div>
+                        <span className="text-[10px] font-mono text-slate-500">{item.executionDurationMs}ms</span>
                       </div>
-                      <div>
-                        <div className="text-[10px] text-slate-400">{inc.signal ? `Avg ${inc.signal.label}` : 'Signal'}</div>
-                        <div className="text-base font-bold text-red-400">
-                          {inc.signal ? `${inc.signal.average}${inc.signal.unit}` : 'n/a'}
+
+                      <p className="text-[11px] text-slate-800 italic bg-slate-50 p-2 rounded-lg border border-slate-200 font-normal">
+                        "{item.input.rawText}"
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                        <div className="p-1.5 bg-slate-50 rounded border border-slate-200">
+                          <span className="font-bold text-sky-700 block">1. TRIAGE</span>
+                          <span className="text-slate-600 truncate block">{item.triage.category}</span>
                         </div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-slate-400">{resourceLabel} Baseline</div>
-                        <div className="text-base font-bold text-emerald-400">
-                          {inc.signal ? `${inc.signal.baseline}${inc.signal.unit}` : 'n/a'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Root Cause & Actions Taken */}
-                    <div className="space-y-1.5 text-[11px]">
-                      <div className="flex items-center gap-2 text-slate-300">
-                        <span className="text-emerald-400 font-bold">✓ TicketSink:</span>
-                        <span>Single root incident routed to the {resourceName(inc.resourceId)} manager</span>
-                      </div>
-                      {inc.itemDisabled && (
-                        <div className="flex items-center gap-2 text-slate-300">
-                          <span className="text-amber-400 font-bold">✓ AvailabilityControl:</span>
-                          <span>
-                            {itemLabel} {inc.itemName ?? ''} paused at {resourceName(inc.resourceId)}
+                        <div className="p-1.5 bg-slate-50 rounded border border-slate-200">
+                          <span className="font-bold text-purple-700 block">2. CORRELATE</span>
+                          <span className="text-slate-600 truncate block">
+                            {item.correlation.isSystemic ? 'Systemic' : 'Isolated'}
                           </span>
                         </div>
-                      )}
-                      <div className="flex items-center gap-2 text-slate-300">
-                        <span className="text-emerald-400 font-bold">✓ Policy:</span>
-                        <span>{inc.recommendedAction}</span>
+                        <div className="p-1.5 bg-slate-50 rounded border border-slate-200">
+                          <span className="font-bold text-emerald-700 block">3. RESOLVE</span>
+                          <span className="text-slate-600 truncate block">
+                            {item.triage.isPromptInjection
+                              ? 'Blocked'
+                              : item.resolution.hitlRequired
+                              ? 'HITL'
+                              : item.resolution.actions[0]?.actionType || 'Safe'}
+                          </span>
+                        </div>
+                        <div className="p-1.5 bg-slate-50 rounded border border-slate-200">
+                          <span className="font-bold text-amber-700 block">4. RESPOND</span>
+                          <span className="text-slate-600 truncate block">Pass</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: HITL Money-Gate Queue */}
-          {activeTab === 'hitl' && (
-            <div className="glass-panel p-5 rounded-2xl flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <FiUserCheck className="text-amber-400" /> Human-In-The-Loop Approval Queue
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Policy Money-Gate: Auto-resolves ≤ {money(approvalThreshold)}, gates &gt; {money(approvalThreshold)} for human signoff
-                  </p>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-mono font-bold border border-amber-500/30">
-                  {hitlQueue.length} Pending
-                </span>
-              </div>
-
-              {hitlQueue.length === 0 ? (
-                <div className="p-8 rounded-xl bg-slate-900/40 border border-slate-800 text-center">
-                  <FiCheckCircle className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-                  <p className="text-xs text-slate-300">HITL Queue is clean. No high-risk claims waiting.</p>
-                </div>
-              ) : (
-                hitlQueue.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/40 flex flex-col gap-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="text-[10px] font-mono text-amber-400 uppercase font-bold">
-                          HIGH-VALUE FINANCIAL MUTATION
-                        </span>
-                        <h4 className="text-xs font-bold text-white mt-0.5">
-                          Claimed Refund: {money(item.amount)} ({item.orderId || 'Order'})
-                        </h4>
-                      </div>
-                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
-                        Awaiting Human
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-300">{item.reason}</p>
-
-                    <div className="text-[10px] font-mono text-slate-400 bg-slate-900/80 p-2 rounded border border-slate-800">
-                      IdempotencyKey: {item.idempotencyKey}
-                    </div>
-
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        onClick={() => handleHitlDecision(item.id, 'approve')}
-                        className="flex-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all"
-                      >
-                        Approve {money(item.amount)} Refund
-                      </button>
-                      <button
-                        onClick={() => handleHitlDecision(item.id, 'reject')}
-                        className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-all border border-slate-700"
-                      >
-                        Reject Claim
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: 4-Adapter Explorer */}
-          {activeTab === 'adapters' && (
-            <div className="glass-panel p-5 rounded-2xl flex flex-col gap-4">
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <TbGitFork className="text-sky-400" /> Adapter Architecture Explorer
-                </h3>
-                <p className="text-xs text-slate-400">
-                  The core engine never touches a DB directly; it only talks to these adapter interfaces
-                </p>
-              </div>
-
-              {/* Sub tabs */}
-              <div className="grid grid-cols-4 gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px] font-mono">
-                <button
-                  onClick={() => setAdapterSubTab('orderSource')}
-                  className={`py-1 rounded-lg ${
-                    adapterSubTab === 'orderSource' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'
-                  }`}
-                >
-                  OrderSource
-                </button>
-                <button
-                  onClick={() => setAdapterSubTab('refundGateway')}
-                  className={`py-1 rounded-lg ${
-                    adapterSubTab === 'refundGateway' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'
-                  }`}
-                >
-                  RefundGateway
-                </button>
-                <button
-                  onClick={() => setAdapterSubTab('ticketSink')}
-                  className={`py-1 rounded-lg ${
-                    adapterSubTab === 'ticketSink' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'
-                  }`}
-                >
-                  TicketSink
-                </button>
-                <button
-                  onClick={() => setAdapterSubTab('availabilityControl')}
-                  className={`py-1 rounded-lg ${
-                    adapterSubTab === 'availabilityControl' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'
-                  }`}
-                >
-                  Availability
-                </button>
-              </div>
-
-              {/* Adapter Data Viewer */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300 max-h-64 overflow-y-auto">
-                {adapterSubTab === 'orderSource' && (
-                  <div>
-                    <div className="text-sky-400 font-bold mb-2">// OrderSource (Live Order Data)</div>
-                    <pre className="text-[10px] text-slate-400 whitespace-pre-wrap">
-                      {JSON.stringify(adaptersData?.orders?.slice(0, 4) || [], null, 2)}
-                    </pre>
-                  </div>
+                  ))
                 )}
-                {adapterSubTab === 'refundGateway' && (
-                  <div>
-                    <div className="text-emerald-400 font-bold mb-2">// RefundGateway (Processed Idempotent Receipts)</div>
-                    <pre className="text-[10px] text-slate-400 whitespace-pre-wrap">
+              </div>
+            )}
+
+            {/* TAB 4: Correlated Incidents */}
+            {inspectorTab === 'incidents' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <FiActivity className="text-purple-600" /> Correlated Systemic Incidents
+                  </h3>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                    {incidents.length} Active
+                  </span>
+                </div>
+
+                {incidents.length === 0 ? (
+                  <div className="p-6 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiCheckCircle className="w-6 h-6 text-emerald-600 mx-auto mb-2" />
+                    <p className="text-xs text-slate-700 font-bold">No operational anomalies</p>
+                    <p className="text-[11px] text-slate-500 mt-1">Buffer window is stable.</p>
+                  </div>
+                ) : (
+                  incidents.map((inc) => (
+                    <div
+                      key={inc.incidentId}
+                      className="p-3.5 bg-white border border-purple-200 rounded-xl shadow-2xs space-y-2"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="text-[9px] font-mono font-bold text-purple-700 uppercase">
+                            SYSTEMIC INCIDENT • {inc.resourceId.toUpperCase()}
+                          </span>
+                          <h4 className="text-xs font-bold text-slate-900">{inc.title}</h4>
+                        </div>
+                        {inc.signal && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800">
+                            {inc.signal.ratio}x {inc.signal.label}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-slate-700">{inc.summary}</p>
+
+                      <div className="grid grid-cols-3 gap-1 bg-purple-50/50 p-2 rounded-lg border border-purple-100 text-center font-mono text-[10px]">
+                        <div>
+                          <div className="text-slate-500 font-sans text-[9px]">Tickets</div>
+                          <div className="font-bold text-slate-900">{inc.complaintCount}</div>
+                        </div>
+                        <div>
+                          <div className="text-slate-500 font-sans text-[9px]">Signal</div>
+                          <div className="font-bold text-red-600">{inc.signal?.average ?? 'n/a'}</div>
+                        </div>
+                        <div>
+                          <div className="text-slate-500 font-sans text-[9px]">Baseline</div>
+                          <div className="font-bold text-emerald-600">{inc.signal?.baseline ?? 'n/a'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* TAB 5: HITL Money-Gate Queue */}
+            {inspectorTab === 'hitl' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <FiUserCheck className="text-amber-600" /> Human Approval Queue
+                  </h3>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                    {hitlQueue.length} Pending
+                  </span>
+                </div>
+
+                {hitlQueue.length === 0 ? (
+                  <div className="p-6 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiCheckCircle className="w-6 h-6 text-emerald-600 mx-auto mb-2" />
+                    <p className="text-xs text-slate-700 font-bold">HITL Queue Clean</p>
+                    <p className="text-[11px] text-slate-500 mt-1">No claims waiting for human approval.</p>
+                  </div>
+                ) : (
+                  hitlQueue.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3.5 bg-white border border-amber-200 rounded-xl shadow-2xs space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="text-[9px] font-mono font-bold text-amber-800 uppercase">
+                            HIGH-VALUE REFUND
+                          </span>
+                          <h4 className="text-xs font-bold text-slate-900">
+                            Refund {money(item.amount)} ({item.orderId || 'Order'})
+                          </h4>
+                        </div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                          Pending Signoff
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-700">{item.reason}</p>
+
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => handleHitlDecision(item.id, 'approve')}
+                          className="flex-1 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all shadow-2xs"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleHitlDecision(item.id, 'reject')}
+                          className="flex-1 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-medium transition-all border border-slate-200"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* TAB 6: Adapters & BYO Hub */}
+            {inspectorTab === 'adapters' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <TbGitFork className="text-sky-600" /> Adapter Telemetry
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-[10px] font-mono">
+                  <button
+                    onClick={() => setAdapterSubTab('orderSource')}
+                    className={`py-1 rounded ${
+                      adapterSubTab === 'orderSource' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'text-slate-600'
+                    }`}
+                  >
+                    OrderSource
+                  </button>
+                  <button
+                    onClick={() => setAdapterSubTab('refundGateway')}
+                    className={`py-1 rounded ${
+                      adapterSubTab === 'refundGateway' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'text-slate-600'
+                    }`}
+                  >
+                    RefundGateway
+                  </button>
+                  <button
+                    onClick={() => setAdapterSubTab('ticketSink')}
+                    className={`py-1 rounded ${
+                      adapterSubTab === 'ticketSink' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'text-slate-600'
+                    }`}
+                  >
+                    TicketSink
+                  </button>
+                  <button
+                    onClick={() => setAdapterSubTab('availabilityControl')}
+                    className={`py-1 rounded ${
+                      adapterSubTab === 'availabilityControl' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'text-slate-600'
+                    }`}
+                  >
+                    Availability
+                  </button>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200 font-mono text-[10px] text-slate-800 max-h-64 overflow-y-auto">
+                  {adapterSubTab === 'orderSource' && (
+                    <pre className="text-slate-600 whitespace-pre-wrap">
+                      {JSON.stringify(adaptersData?.orders?.slice(0, 3) || [], null, 2)}
+                    </pre>
+                  )}
+                  {adapterSubTab === 'refundGateway' && (
+                    <pre className="text-slate-600 whitespace-pre-wrap">
                       {JSON.stringify(adaptersData?.refunds || [], null, 2)}
                     </pre>
-                  </div>
-                )}
-                {adapterSubTab === 'ticketSink' && (
-                  <div>
-                    <div className="text-purple-400 font-bold mb-2">// TicketSink (Incidents & Manager Dispatches)</div>
-                    <pre className="text-[10px] text-slate-400 whitespace-pre-wrap">
+                  )}
+                  {adapterSubTab === 'ticketSink' && (
+                    <pre className="text-slate-600 whitespace-pre-wrap">
                       {JSON.stringify(adaptersData?.incidents || [], null, 2)}
                     </pre>
-                  </div>
-                )}
-                {adapterSubTab === 'availabilityControl' && (
-                  <div>
-                    <div className="text-amber-400 font-bold mb-2">// AvailabilityControl (Paused {itemLabel}s & Safeguards)</div>
-                    <pre className="text-[10px] text-slate-400 whitespace-pre-wrap">
+                  )}
+                  {adapterSubTab === 'availabilityControl' && (
+                    <pre className="text-slate-600 whitespace-pre-wrap">
                       {JSON.stringify(adaptersData?.disabledItems || [], null, 2)}
                     </pre>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+      </div>
 
-          {/* TAB 4: Bring Your Own Agent (BYO Agent) Tool Spec */}
-          {activeTab === 'byo' && (
-            <div className="glass-panel p-5 rounded-2xl flex flex-col gap-4">
+      {/* New Claim / Ticket Modal */}
+      {showNewTicketModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <BlazzyIcon className="w-5 h-5" />
+                <h3 className="font-bold text-sm text-slate-900">File Customer Claim / Inbound Ticket</h3>
+              </div>
+              <button
+                onClick={() => setShowNewTicketModal(false)}
+                className="p-1 rounded-lg hover:bg-slate-200 text-slate-500 transition-colors"
+              >
+                <FiX className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNewTicket} className="p-5 space-y-3.5">
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <FiCpu className="text-orange-400" /> Bring Your Own Agent (BYO-Agent)
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Exposes standard JSON schemas for OpenAI, Claude, LangGraph, or CrewAI agents
-                </p>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Subject</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Cold Biryani delivered or Missing Item"
+                  value={newTicketSubject}
+                  onChange={(e) => setNewTicketSubject(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium bg-slate-50 focus:bg-white"
+                />
               </div>
 
-              <div className="space-y-2.5 text-xs text-slate-300">
-                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                  <div className="font-bold text-orange-400 font-mono">blaze_triage(rawText, channel)</div>
-                  <div className="text-slate-400 text-[11px] mt-0.5">
-                    Classifies intent, category, urgency, and tests prompt-injection security.
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Customer Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Alex Morgan"
+                    value={newTicketCustomerName}
+                    onChange={(e) => setNewTicketCustomerName(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 bg-slate-50 focus:bg-white"
+                  />
                 </div>
-
-                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                  <div className="font-bold text-purple-400 font-mono">blaze_correlate(complaintId, resourceId)</div>
-                  <div className="text-slate-400 text-[11px] mt-0.5">
-                    Cross-references with live operational signals to identify systemic bottlenecks.
-                  </div>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                  <div className="font-bold text-emerald-400 font-mono">blaze_resolve(triageId, orderId)</div>
-                  <div className="text-slate-400 text-[11px] mt-0.5">
-                    Executes policy-gated idempotent financial mutations or routes to HITL.
-                  </div>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                  <div className="font-bold text-amber-400 font-mono">blaze_respond(triageId, channel)</div>
-                  <div className="text-slate-400 text-[11px] mt-0.5">
-                    Generates empathetic contextual replies with a second-pass quality review.
-                  </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Order Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. ORD-9821"
+                    value={newTicketOrderId}
+                    onChange={(e) => setNewTicketOrderId(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 font-mono focus:outline-none focus:border-orange-500 bg-slate-50 focus:bg-white"
+                  />
                 </div>
               </div>
-            </div>
-          )}
-        </section>
-      </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/60 px-6 py-3 text-center text-xs text-slate-500 font-mono flex items-center justify-between">
-        <span>BlazeResolver • Open Source AI Harness for Customer Service</span>
-        <span>Apache-2.0 License • Plug Into Any Backend or Agent</span>
-      </footer>
-        </>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Category</label>
+                  <select
+                    value={newTicketCategory}
+                    onChange={(e) => setNewTicketCategory(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-orange-500 font-medium"
+                  >
+                    <option value="FOOD_QUALITY">Food Quality</option>
+                    <option value="DELIVERY_DELAY">Delivery Delay</option>
+                    <option value="MISSING_ITEM">Missing Item</option>
+                    <option value="BILLING">Billing</option>
+                    <option value="PROMPT_INJECTION">Security / Probe</option>
+                    <option value="GENERAL">General</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Priority</label>
+                  <select
+                    value={newTicketPriority}
+                    onChange={(e) => setNewTicketPriority(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-orange-500 font-medium"
+                  >
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Channel</label>
+                  <select
+                    value={newTicketChannel}
+                    onChange={(e) => setNewTicketChannel(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-orange-500 font-medium"
+                  >
+                    <option value="text">💬 Text / Chat</option>
+                    <option value="voice">🎙️ Voice Bridge</option>
+                    <option value="email">✉️ Email</option>
+                    <option value="webhook">⚡ Webhook</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Customer Complaint Message</label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Describe the complaint in detail..."
+                  value={newTicketMessage}
+                  onChange={(e) => setNewTicketMessage(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium bg-slate-50 focus:bg-white resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowNewTicketModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingTicket || !newTicketSubject.trim() || !newTicketMessage.trim()}
+                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold transition-all disabled:opacity-50 shadow-xs"
+                >
+                  {isCreatingTicket ? 'Submitting...' : 'Ingest & Trigger AI Triage'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
+
+      {/* Canned Responses Drawer */}
+      <CannedResponsesDrawer
+        isOpen={showCannedModal}
+        onClose={() => setShowCannedModal(false)}
+        cannedResponses={cannedResponses}
+        onAddCannedResponse={handleAddCannedResponse}
+        onUpdateCannedResponse={handleUpdateCannedResponse}
+        onDeleteCannedResponse={handleDeleteCannedResponse}
+        onSetAutoReply={handleSetAutoReply}
+        onSendDirectly={handleSendCannedDirectly}
+        onInsertText={(bodyText) => {
+          handleSendMessage({ body: bodyText, file: null, isInternalNote: false });
+        }}
+      />
+
+      {/* Close Ticket Modal */}
+      <CloseTicketModal
+        isOpen={showCloseModal}
+        onClose={() => setShowCloseModal(false)}
+        onConfirmClose={handleConfirmCloseTicket}
+      />
+
+      {/* Escalate Ticket Modal */}
+      <EscalateTicketModal
+        isOpen={showEscalateModal}
+        onClose={() => setShowEscalateModal(false)}
+        selectedTicket={selectedTicket}
+        onConfirmEscalate={handleConfirmEscalate}
+      />
     </div>
   );
 }
+
+
