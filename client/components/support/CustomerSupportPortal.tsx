@@ -16,15 +16,20 @@ import {
 import { BlazzyIcon, BlazzyBadge } from './BlazzyMascot.js';
 import type { SupportTicket, SupportMessage, TicketRating } from './types.js';
 
-interface CustomerSupportPortalProps {
-  onOpenNewTicketModal: () => void;
+export interface CustomerSupportPortalProps {
+  apiBaseUrl?: string;
+  wsUrl?: string;
+  onOpenNewTicketModal?: () => void;
   onRefreshFeed?: () => void;
 }
 
 export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
+  apiBaseUrl = '',
+  wsUrl,
   onOpenNewTicketModal,
   onRefreshFeed
 }) => {
+  const baseUrl = apiBaseUrl ? apiBaseUrl.replace(/\/$/, '') : '';
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
@@ -36,6 +41,9 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
   const [submittingRating, setSubmittingRating] = useState(false);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  const selectedTicketRef = useRef<SupportTicket | null>(null);
+  selectedTicketRef.current = selectedTicket;
 
   // New ticket modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -51,7 +59,7 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
 
   const fetchTickets = async () => {
     try {
-      const res = await fetch('/api/support/tickets');
+      const res = await fetch(`${baseUrl}/api/support/tickets`);
       const json = await res.json();
       if (json.success && json.data) {
         setTickets(json.data);
@@ -69,8 +77,8 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
   const loadTicketMessages = async (ticketId: string) => {
     try {
       const [msgRes, ratingRes] = await Promise.all([
-        fetch(`/api/support/tickets/${ticketId}/messages`).then((r) => r.json()),
-        fetch(`/api/support/tickets/${ticketId}/rating`).then((r) => r.json())
+        fetch(`${baseUrl}/api/support/tickets/${ticketId}/messages`).then((r) => r.json()),
+        fetch(`${baseUrl}/api/support/tickets/${ticketId}/rating`).then((r) => r.json())
       ]);
 
       if (msgRes.success) {
@@ -88,11 +96,64 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
     }
   };
 
+  // Real-time WebSocket connection
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const defaultWs = `${protocol}//${window.location.host}/ws`;
+    const targetWs = wsUrl || (baseUrl ? baseUrl.replace(/^http/, 'ws') + '/ws' : defaultWs);
+
+    let ws: WebSocket | null = null;
+    let retryTimer: any = null;
+    let isMounted = true;
+
+    const connect = () => {
+      if (!isMounted) return;
+      try {
+        ws = new WebSocket(targetWs);
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'support_message_created') {
+              const { ticketId, message } = payload.data;
+              if (selectedTicketRef.current?.id === ticketId) {
+                setMessages((prev) => {
+                  if (prev.some((m) => m.id === message.id)) return prev;
+                  return [...prev, message];
+                });
+              }
+            } else if (payload.type === 'support_ticket_updated') {
+              setTickets((prev) => prev.map((t) => (t.id === payload.data.id ? payload.data : t)));
+              setSelectedTicket((prev) => (prev?.id === payload.data.id ? { ...prev, ...payload.data } : prev));
+            } else if (payload.type === 'support_ticket_created') {
+              setTickets((prev) => [payload.data, ...prev.filter((t) => t.id !== payload.data.id)]);
+            }
+          } catch {}
+        };
+        ws.onclose = () => {
+          if (isMounted) retryTimer = setTimeout(connect, 3000);
+        };
+      } catch {
+        if (isMounted) retryTimer = setTimeout(connect, 3000);
+      }
+    };
+
+    connect();
+    return () => {
+      isMounted = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
+  }, [wsUrl, baseUrl]);
+
   useEffect(() => {
     fetchTickets();
-    const interval = setInterval(fetchTickets, 4000);
+    const interval = setInterval(fetchTickets, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [baseUrl]);
 
   useEffect(() => {
     if (selectedTicket) {
@@ -123,7 +184,7 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
     setInputMessage('');
 
     try {
-      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/messages`, {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,7 +214,7 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
 
     setIsCreating(true);
     try {
-      const res = await fetch('/api/support/tickets/create', {
+      const res = await fetch(`${baseUrl}/api/support/tickets/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -191,7 +252,7 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
     if (!selectedTicket || submittingRating) return;
     setSubmittingRating(true);
     try {
-      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/rating`, {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/rating`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

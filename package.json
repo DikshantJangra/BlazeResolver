@@ -1,6 +1,6 @@
 {
   "name": "blazeresolver",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Open-source AI harness that turns customer bug reports into reviewed GitHub pull requests",
   "main": "dist/server/src/index.js",
   "type": "module",
@@ -10,13 +10,14 @@
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm run dev:server\" \"npm run dev:client\"",
     "build:server": "tsc -p tsconfig.server.json",
     "build:client": "vite build",
-    "build": "npm run build:server && npm run build:cjs && npm run build:client",
+    "build:react": "tsc -p tsconfig.react.json",
+    "build": "npm run build:server && npm run build:cjs && npm run build:react && npm run build:client",
     "start": "node dist/server/src/server.js",
     "demo": "tsx src/cli/demo.ts",
     "demo:fix": "tsx src/cli/fix-demo.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.react.json",
     "test": "tsx --test src/**/*.test.ts",
-    "prepublishOnly": "npm run build:server && npm run build:cjs",
+    "prepublishOnly": "npm run build:server && npm run build:cjs && npm run build:react",
     "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/cjs-marker.mjs"
   },
   "keywords": [
@@ -26,10 +27,29 @@
     "automated-fixes",
     "pull-requests",
     "triage",
-    "blazeresolver"
+    "blazeresolver",
+    "customer-support",
+    "support-desk",
+    "react"
   ],
   "author": "DJ",
   "license": "Apache-2.0",
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0",
+    "react-icons": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "react-icons": {
+      "optional": true
+    }
+  },
   "dependencies": {
     "@lzehrung/codegraph": "^2.3.31",
     "@modelcontextprotocol/client": "^2.1.0",
@@ -68,6 +88,7 @@
   "files": [
     "dist/server/src",
     "dist/cjs",
+    "dist/react",
     "!dist/server/src/tests",
     "!dist/**/*.map",
     "widget",
@@ -91,6 +112,10 @@
         "default": "./dist/cjs/src/handler/index.js"
       }
     },
+    "./react": {
+      "types": "./dist/react/react.d.ts",
+      "default": "./dist/react/react.js"
+    },
     "./widget.js": "./widget/widget.js",
     "./assets/blazyy.svg": "./assets/blazyy.svg",
     "./package.json": "./package.json"
@@ -100,6 +125,9 @@
     "*": {
       "handler": [
         "dist/cjs/src/handler/index.d.ts"
+      ],
+      "react": [
+        "dist/react/react.d.ts"
       ]
     }
   }

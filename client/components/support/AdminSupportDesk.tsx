@@ -9,8 +9,23 @@ import { EscalateTicketModal } from './EscalateTicketModal.js';
 import { CustomerSupportPortal } from './CustomerSupportPortal.js';
 import type { SupportTicket, SupportMessage, CustomerContext, SupportCannedResponse, TicketRating } from './types.js';
 
-export const AdminSupportDesk: React.FC = () => {
-  const [viewMode, setViewMode] = useState<'admin' | 'customer'>('admin');
+export interface AdminSupportDeskProps {
+  apiBaseUrl?: string;
+  wsUrl?: string;
+  adminToken?: string;
+  className?: string;
+  initialViewMode?: 'admin' | 'customer';
+}
+
+export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
+  apiBaseUrl = '',
+  wsUrl,
+  adminToken = '',
+  className = '',
+  initialViewMode = 'admin'
+}) => {
+  const baseUrl = apiBaseUrl ? apiBaseUrl.replace(/\/$/, '') : '';
+  const [viewMode, setViewMode] = useState<'admin' | 'customer'>(initialViewMode);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
@@ -18,6 +33,11 @@ export const AdminSupportDesk: React.FC = () => {
   const [cannedResponses, setCannedResponses] = useState<SupportCannedResponse[]>([]);
   const [isLoadingTickets, setIsLoadingTickets] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
+  const selectedTicketRef = useRef<SupportTicket | null>(null);
+  selectedTicketRef.current = selectedTicket;
+
+  const authHeaders: Record<string, string> = adminToken ? { Authorization: `Bearer ${adminToken}` } : {};
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -40,7 +60,9 @@ export const AdminSupportDesk: React.FC = () => {
       if (categoryFilter) params.set('category', categoryFilter);
       if (searchQuery) params.set('search', searchQuery);
 
-      const res = await fetch(`/api/support/tickets?${params.toString()}`);
+      const res = await fetch(`${baseUrl}/api/support/tickets?${params.toString()}`, {
+        headers: { ...authHeaders }
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
@@ -62,7 +84,9 @@ export const AdminSupportDesk: React.FC = () => {
   // Fetch canned responses
   const fetchCannedResponses = async () => {
     try {
-      const res = await fetch('/api/support/canned-responses');
+      const res = await fetch(`${baseUrl}/api/support/canned-responses`, {
+        headers: { ...authHeaders }
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success) setCannedResponses(json.data);
@@ -72,12 +96,74 @@ export const AdminSupportDesk: React.FC = () => {
     }
   };
 
+  // Real-time WebSocket connection
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const defaultWs = `${protocol}//${window.location.host}/ws`;
+    const targetWs = wsUrl || (baseUrl ? baseUrl.replace(/^http/, 'ws') + '/ws' : defaultWs);
+
+    let ws: WebSocket | null = null;
+    let retryTimer: any = null;
+    let isMounted = true;
+
+    const connect = () => {
+      if (!isMounted) return;
+      try {
+        ws = new WebSocket(targetWs);
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'support_ticket_created') {
+              setTickets((prev) => [payload.data, ...prev.filter((t) => t.id !== payload.data.id)]);
+            } else if (payload.type === 'support_ticket_updated') {
+              setTickets((prev) => prev.map((t) => (t.id === payload.data.id ? payload.data : t)));
+              setSelectedTicket((prev) => (prev?.id === payload.data.id ? { ...prev, ...payload.data } : prev));
+            } else if (payload.type === 'support_message_created') {
+              const { ticketId, message } = payload.data;
+              setMessages((prev) => {
+                if (selectedTicketRef.current?.id === ticketId) {
+                  if (prev.some((m) => m.id === message.id)) return prev;
+                  return [...prev, message];
+                }
+                return prev;
+              });
+              fetchTickets();
+            } else if (payload.type === 'support_rating_updated') {
+              const { ticketId, rating } = payload.data;
+              if (selectedTicketRef.current?.id === ticketId) {
+                setTicketRating(rating);
+              }
+            }
+          } catch {
+            // ignore non-json
+          }
+        };
+        ws.onclose = () => {
+          if (isMounted) retryTimer = setTimeout(connect, 3000);
+        };
+      } catch {
+        if (isMounted) retryTimer = setTimeout(connect, 3000);
+      }
+    };
+
+    connect();
+    return () => {
+      isMounted = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
+  }, [wsUrl, baseUrl]);
+
   useEffect(() => {
     fetchTickets();
     fetchCannedResponses();
-    const interval = setInterval(fetchTickets, 4000);
+    const interval = setInterval(fetchTickets, 5000);
     return () => clearInterval(interval);
-  }, [statusFilter, priorityFilter, categoryFilter, searchQuery]);
+  }, [statusFilter, priorityFilter, categoryFilter, searchQuery, baseUrl]);
 
   // When ticket selected -> load messages & customer context
   useEffect(() => {
@@ -94,9 +180,9 @@ export const AdminSupportDesk: React.FC = () => {
       setIsLoadingMessages(true);
       try {
         const [msgRes, ctxRes, ratingRes] = await Promise.all([
-          fetch(`/api/support/tickets/${selectedTicket.id}/messages`).then((r) => r.json()).catch(() => null),
-          fetch(`/api/support/context/${selectedTicket.customerId || selectedTicket.outletId || 'cust_user'}`).then((r) => r.json()).catch(() => null),
-          fetch(`/api/support/tickets/${selectedTicket.id}/rating`).then((r) => r.json()).catch(() => null)
+          fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, { headers: { ...authHeaders } }).then((r) => r.json()).catch(() => null),
+          fetch(`${baseUrl}/api/support/context/${selectedTicket.customerId || selectedTicket.outletId || 'cust_user'}`, { headers: { ...authHeaders } }).then((r) => r.json()).catch(() => null),
+          fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/rating`, { headers: { ...authHeaders } }).then((r) => r.json()).catch(() => null)
         ]);
 
         if (!cancelled) {
@@ -121,9 +207,9 @@ export const AdminSupportDesk: React.FC = () => {
   const handleUpdateTicket = async (updates: Partial<SupportTicket>) => {
     if (!selectedTicket) return;
     try {
-      const res = await fetch(`/api/support/tickets/${selectedTicket.id}`, {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(updates)
       });
 
@@ -165,9 +251,9 @@ export const AdminSupportDesk: React.FC = () => {
     }
 
     try {
-      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/messages`, {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           body: body.trim(),
           content: body.trim(),
@@ -196,9 +282,9 @@ export const AdminSupportDesk: React.FC = () => {
   const handleToggleTakeover = async (enabled: boolean) => {
     if (!selectedTicket) return;
     try {
-      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/takeover`, {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/takeover`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ enabled })
       });
       if (res.ok) {
@@ -206,7 +292,9 @@ export const AdminSupportDesk: React.FC = () => {
         if (json.success) {
           setSelectedTicket(json.data);
           setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
-          const msgRes = await fetch(`/api/support/tickets/${selectedTicket.id}/messages`);
+          const msgRes = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
+            headers: { ...authHeaders }
+          });
           const msgJson = await msgRes.json();
           if (msgJson.success) setMessages(msgJson.data);
         }
@@ -219,9 +307,9 @@ export const AdminSupportDesk: React.FC = () => {
   const handleGenerateBlazzyDraft = async (prompt?: string): Promise<string | null> => {
     if (!selectedTicket) return null;
     try {
-      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/blazzy-draft`, {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/blazzy-draft`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ prompt })
       });
       if (res.ok) {
@@ -244,16 +332,18 @@ export const AdminSupportDesk: React.FC = () => {
   }): Promise<{ success: boolean; error?: string }> => {
     if (!selectedTicket) return { success: false, error: 'No ticket selected' };
     try {
-      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/escalate`, {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/escalate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(data)
       });
       const json = await res.json();
       if (res.ok && json?.success) {
         setSelectedTicket(json.data);
         setTickets((prev) => prev.map((t) => (t.id === json.data.id ? json.data : t)));
-        const msgRes = await fetch(`/api/support/tickets/${selectedTicket.id}/messages`);
+        const msgRes = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
+          headers: { ...authHeaders }
+        });
         const msgJson = await msgRes.json();
         if (msgJson.success) setMessages(msgJson.data);
         return { success: true };
@@ -268,9 +358,9 @@ export const AdminSupportDesk: React.FC = () => {
   const handleConfirmCloseTicket = async (password: string): Promise<{ success: boolean; error?: string }> => {
     if (!selectedTicket) return { success: false, error: 'No ticket selected' };
     try {
-      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/close`, {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/close`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ password })
       });
       const json = await res.json();
@@ -288,9 +378,9 @@ export const AdminSupportDesk: React.FC = () => {
 
   const handleAddCannedResponse = async (title: string, body: string) => {
     try {
-      const res = await fetch('/api/support/canned-responses', {
+      const res = await fetch(`${baseUrl}/api/support/canned-responses`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ title, body })
       });
       if (res.ok) {
@@ -304,9 +394,9 @@ export const AdminSupportDesk: React.FC = () => {
 
   const handleUpdateCannedResponse = async (id: string, title: string, body: string) => {
     try {
-      const res = await fetch(`/api/support/canned-responses/${id}`, {
+      const res = await fetch(`${baseUrl}/api/support/canned-responses/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ title, body })
       });
       if (res.ok) {
@@ -320,8 +410,9 @@ export const AdminSupportDesk: React.FC = () => {
 
   const handleDeleteCannedResponse = async (id: string) => {
     try {
-      const res = await fetch(`/api/support/canned-responses/${id}`, {
-        method: 'DELETE'
+      const res = await fetch(`${baseUrl}/api/support/canned-responses/${id}`, {
+        method: 'DELETE',
+        headers: { ...authHeaders }
       });
       if (res.ok) {
         setCannedResponses((prev) => prev.filter((c) => c.id !== id));
@@ -333,8 +424,9 @@ export const AdminSupportDesk: React.FC = () => {
 
   const handleSetAutoReply = async (id: string) => {
     try {
-      const res = await fetch(`/api/support/canned-responses/${id}/set-auto-reply`, {
-        method: 'POST'
+      const res = await fetch(`${baseUrl}/api/support/canned-responses/${id}/set-auto-reply`, {
+        method: 'POST',
+        headers: { ...authHeaders }
       });
       if (res.ok) {
         const json = await res.json();
