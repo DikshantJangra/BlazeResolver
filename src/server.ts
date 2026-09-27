@@ -23,6 +23,7 @@ import { MAX_HELP_DOCS, answerQuestion } from './answer/index.js';
 import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { SupportStore } from './support/index.js';
 
 const app = express();
 app.set('trust proxy', 1); // behind a host's proxy, req.ip is the real client
@@ -409,6 +410,365 @@ app.get('/api/byo-agent/tools', (req, res) => {
     description: 'BlazeResolver Pipeline Tools for OpenAI / Anthropic / LangGraph Agents',
     tools: getAgentToolSchemas()
   });
+});
+
+// --- Support Desk & Customer Portal Endpoints ---
+const supportStore = new SupportStore();
+
+// Get Tickets
+app.get('/api/support/tickets', (req, res) => {
+  try {
+    const { status, priority, category, search } = req.query as Record<string, string>;
+    const tickets = supportStore.getTickets({ status, priority, category, search });
+    return res.json({ success: true, data: tickets });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Get Single Ticket
+app.get('/api/support/tickets/:id', (req, res) => {
+  const ticket = supportStore.getTicket(req.params.id);
+  if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+  return res.json({ success: true, data: ticket });
+});
+
+// Update Ticket
+app.patch('/api/support/tickets/:id', (req, res) => {
+  try {
+    const updated = supportStore.updateTicket(req.params.id, req.body);
+    broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
+    return res.json({ success: true, data: updated });
+  } catch (err: unknown) {
+    return res.status(400).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Create Ticket (Customer Portal or Inbound API)
+app.post('/api/support/tickets/create', async (req, res) => {
+  try {
+    const { subject, rawText, category, orderId, customerId, customerName, customerEmail, customerPhone, outletName } = req.body;
+    if (!rawText) return res.status(400).json({ success: false, error: 'rawText is required' });
+
+    const result = await supportStore.createTicketFromCustomer(
+      {
+        subject,
+        rawText,
+        category,
+        orderId,
+        customerId,
+        customerName,
+        customerEmail,
+        customerPhone,
+        outletName
+      },
+      pipeline
+    );
+
+    broadcastLiveEvent('support_ticket_created', result.ticket, 'everyone');
+    return res.status(201).json({ success: true, data: result });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Get Ticket Messages
+app.get('/api/support/tickets/:id/messages', (req, res) => {
+  try {
+    const messages = supportStore.getMessages(req.params.id);
+    return res.json({ success: true, data: messages });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Send Message in Ticket
+app.post('/api/support/tickets/:id/messages', async (req, res) => {
+  try {
+    const ticketId = req.params.id;
+    const { body, content, role = 'agent', senderType = 'agent', authorName = 'Support Staff', internalNote = false, attachments } = req.body;
+    const text = body || content;
+    if (!text && (!attachments || attachments.length === 0)) {
+      return res.status(400).json({ success: false, error: 'Message content is required' });
+    }
+
+    const ticket = supportStore.getTicket(ticketId);
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+
+    const newMessage = supportStore.addMessage(ticketId, {
+      ticketId,
+      role: role as any,
+      senderType: senderType as any,
+      authorName,
+      senderName: authorName,
+      body: text,
+      content: text,
+      internalNote,
+      attachments
+    });
+
+    broadcastLiveEvent('support_message_created', { ticketId, message: newMessage }, 'everyone');
+
+    // If customer sent message and AI Auto-Pilot is active (not human takeover) and ticket is open, generate AI response
+    if (senderType === 'user' && !ticket.isHumanTakeover && ticket.status !== 'closed' && !internalNote) {
+      setTimeout(async () => {
+        try {
+          const input: CustomerInput = {
+            id: `msg_pipe_${Date.now()}`,
+            channel: 'text',
+            rawText: text,
+            orderId: ticket.orderId,
+            customerId: ticket.customerId,
+            timestamp: new Date()
+          };
+
+          const aiResult = await pipeline.processComplaint(input);
+          const aiReply = supportStore.addMessage(ticketId, {
+            ticketId,
+            role: 'agent',
+            senderType: 'bot',
+            authorName: 'Blazzy AI',
+            senderName: 'Blazzy AI',
+            body: aiResult.response.text,
+            content: aiResult.response.text
+          });
+
+          // Update ticket AI report
+          supportStore.updateTicket(ticketId, {
+            aiReport: {
+              ...ticket.aiReport,
+              intent: aiResult.triage.intent,
+              sentiment: aiResult.triage.sentiment,
+              urgencyScore: aiResult.triage.urgencyScore,
+              policyAllowed: aiResult.resolution.policyDecision.allowed,
+              policyRationale: aiResult.resolution.policyDecision.rationale,
+              suggestedAction: aiResult.resolution.policyDecision.recommendedAction,
+              executionDurationMs: aiResult.executionDurationMs,
+              processedAt: aiResult.timestamp instanceof Date ? aiResult.timestamp.toISOString() : String(aiResult.timestamp)
+            }
+          });
+
+          broadcastLiveEvent('support_message_created', { ticketId, message: aiReply }, 'everyone');
+        } catch (e) {
+          console.error('Error generating AI auto reply:', e);
+        }
+      }, 600);
+    }
+
+    return res.json({ success: true, data: newMessage });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Toggle Human Takeover
+app.post('/api/support/tickets/:id/takeover', (req, res) => {
+  try {
+    const { enabled, reason } = req.body;
+    const ticketId = req.params.id;
+    const ticket = supportStore.getTicket(ticketId);
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+
+    const updated = supportStore.updateTicket(ticketId, {
+      isHumanTakeover: enabled,
+      humanTakeoverReason: enabled ? reason || 'Support agent manual intervention activated.' : null
+    });
+
+    supportStore.addMessage(ticketId, {
+      ticketId,
+      role: 'system',
+      senderType: 'system',
+      content: enabled
+        ? '👤 Human Specialist took over conversation. Autonomous AI auto-replies paused.'
+        : '🤖 Conversation handed back to Blazzy AI Auto-Pilot.',
+      body: enabled
+        ? '👤 Human Specialist took over conversation. Autonomous AI auto-replies paused.'
+        : '🤖 Conversation handed back to Blazzy AI Auto-Pilot.'
+    });
+
+    broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
+    return res.json({ success: true, data: updated });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Generate AI Copilot Draft
+app.post('/api/support/tickets/:id/blazzy-draft', async (req, res) => {
+  try {
+    const ticketId = req.params.id;
+    const { prompt } = req.body;
+    const ticket = supportStore.getTicket(ticketId);
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+
+    const messages = supportStore.getMessages(ticketId);
+    const lastUserMsg = [...messages].reverse().find((m) => m.senderType === 'user')?.body || ticket.subject;
+
+    let draft = '';
+    if (prompt?.includes('Apology') || prompt?.includes('Delay')) {
+      draft = `Dear ${ticket.customerName || 'Customer'}, we sincerely apologize for the delay. We are actively expediting order #${ticket.orderNumber || 'your order'} with high priority. Thank you for your patience!`;
+    } else if (prompt?.includes('Refund') || prompt?.includes('Credit')) {
+      draft = `Hi ${ticket.customerName || 'Customer'}, we have authorized an instant credit of ₹${ticket.aiReport?.claimedAmount || '150'} directly to your account. You should see the updated balance immediately.`;
+    } else if (prompt?.includes('Summarize')) {
+      draft = `Summary: Customer reported '${ticket.subject}'. AI Triage intent: ${ticket.aiReport?.intent || ticket.category} with sentiment '${ticket.aiReport?.sentiment || 'frustrated'}'. Resolution decision: ${ticket.aiReport?.suggestedAction || 'Agent review required'}.`;
+    } else {
+      draft = `Hello ${ticket.customerName || 'Customer'}, thank you for contacting support regarding ${ticket.subject}. Our team has reviewed your request and we are ensuring this is resolved immediately. Please let us know if you need any additional assistance!`;
+    }
+
+    return res.json({ success: true, data: { draft } });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Escalate Ticket to Pulse / Dev Pipeline
+app.post('/api/support/tickets/:id/escalate', (req, res) => {
+  try {
+    const ticketId = req.params.id;
+    const { title, type = 'bug', priority = 'high', note } = req.body;
+    const ticket = supportStore.getTicket(ticketId);
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+
+    const updated = supportStore.updateTicket(ticketId, {
+      isEscalated: true,
+      pulseStatus: 'backlog',
+      priority: priority as any
+    });
+
+    supportStore.addMessage(ticketId, {
+      ticketId,
+      role: 'system',
+      senderType: 'system',
+      content: `⚡ Escalated to Pulse Dev Pipeline [${type.toUpperCase()}]: ${title}`,
+      body: `⚡ Escalated to Pulse Dev Pipeline [${type.toUpperCase()}]: ${title}`
+    });
+
+    if (note) {
+      supportStore.addMessage(ticketId, {
+        ticketId,
+        role: 'agent',
+        senderType: 'agent',
+        authorName: 'Support Agent',
+        internalNote: true,
+        content: `Dev Notes: ${note}`,
+        body: `Dev Notes: ${note}`
+      });
+    }
+
+    broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
+    return res.json({ success: true, data: updated });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Close Ticket
+app.post('/api/support/tickets/:id/close', (req, res) => {
+  try {
+    const ticketId = req.params.id;
+    const { password } = req.body;
+    // For demo / admin usability: any non-empty password or 'admin' accepted
+    if (!password) {
+      return res.status(400).json({ success: false, error: 'Admin password required to close ticket.' });
+    }
+
+    const updated = supportStore.updateTicket(ticketId, {
+      status: 'closed'
+    });
+
+    supportStore.addMessage(ticketId, {
+      ticketId,
+      role: 'system',
+      senderType: 'system',
+      content: '🔒 Ticket permanently closed and archived by Admin.',
+      body: '🔒 Ticket permanently closed and archived by Admin.'
+    });
+
+    broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
+    return res.json({ success: true, data: updated });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Customer Context 360
+app.get('/api/support/context/:id', (req, res) => {
+  try {
+    const context = supportStore.getCustomerContext(req.params.id);
+    return res.json({ success: true, data: context });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Canned Responses
+app.get('/api/support/canned-responses', (_req, res) => {
+  return res.json({ success: true, data: supportStore.getCannedResponses() });
+});
+
+app.post('/api/support/canned-responses', (req, res) => {
+  try {
+    const { title, body, category } = req.body;
+    if (!title || !body) return res.status(400).json({ success: false, error: 'Title and body are required' });
+    const created = supportStore.addCannedResponse(title, body, category);
+    return res.status(201).json({ success: true, data: created });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.patch('/api/support/canned-responses/:id', (req, res) => {
+  try {
+    const { title, body } = req.body;
+    const updated = supportStore.updateCannedResponse(req.params.id, title, body);
+    return res.json({ success: true, data: updated });
+  } catch (err: unknown) {
+    return res.status(400).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.delete('/api/support/canned-responses/:id', (req, res) => {
+  const deleted = supportStore.deleteCannedResponse(req.params.id);
+  return res.json({ success: deleted });
+});
+
+app.post('/api/support/canned-responses/:id/set-auto-reply', (req, res) => {
+  const updated = supportStore.setAutoReply(req.params.id);
+  return res.json({ success: true, data: updated });
+});
+
+// Ticket Rating CSAT
+app.get('/api/support/tickets/:id/rating', (req, res) => {
+  const rating = supportStore.getRating(req.params.id);
+  return res.json({ success: true, data: rating });
+});
+
+app.post('/api/support/tickets/:id/rating', (req, res) => {
+  const { rating, comment } = req.body;
+  if (typeof rating !== 'number' || rating < 1 || rating > 5) {
+    return res.status(400).json({ success: false, error: 'Rating must be a number between 1 and 5' });
+  }
+  const saved = supportStore.setRating(req.params.id, rating, comment);
+  broadcastLiveEvent('support_rating_updated', { ticketId: req.params.id, rating: saved }, 'everyone');
+  return res.json({ success: true, data: saved });
+});
+
+// Attachments Upload Simulation
+app.post('/api/support/tickets/:id/attachments', (req, res) => {
+  return res.json({
+    success: true,
+    data: {
+      name: 'receipt_attachment.png',
+      url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=400&q=80',
+      size: 142800,
+      mimeType: 'image/png'
+    }
+  });
+});
+
+// WS Token endpoint
+app.post('/api/support/tickets/:id/ws-token', (req, res) => {
+  return res.json({ token: `ws_tok_${Date.now()}` });
 });
 
 // 10. Health check

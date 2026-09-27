@@ -22,7 +22,9 @@ import {
   FiTrendingUp
 } from 'react-icons/fi';
 import { TbGitFork, TbArrowsExchange } from 'react-icons/tb';
+import { RiCustomerService2Line, RiCpuLine } from 'react-icons/ri';
 import { VoiceAgentConsole } from './components/VoiceAgentConsole.js';
+import { AdminSupportDesk } from './components/support/AdminSupportDesk.js';
 
 interface PipelineResult {
   complaintId: string;
@@ -167,6 +169,7 @@ export default function App() {
   const [incidents, setIncidents] = useState<CorrelatedIncident[]>([]);
   const [hitlQueue, setHitlQueue] = useState<HitlAction[]>([]);
   const [adaptersData, setAdaptersData] = useState<any>(null);
+  const [primaryMode, setPrimaryMode] = useState<'support' | 'engine'>('support');
   const [activeTab, setActiveTab] = useState<'feed' | 'incidents' | 'hitl' | 'adapters' | 'byo' | 'voice'>('voice');
   const [adapterSubTab, setAdapterSubTab] = useState<'orderSource' | 'refundGateway' | 'ticketSink' | 'availabilityControl'>('orderSource');
   const [profile, setProfile] = useState<ProfileInfo | null>(null);
@@ -345,89 +348,94 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col font-sans">
       {/* Top Navigation */}
-      <header className="border-b border-slate-800/80 bg-[#0f172a]/80 backdrop-blur-md sticky top-0 z-40 px-6 py-3.5 flex items-center justify-between">
+      <header className="border-b border-slate-800/80 bg-[#0f172a]/80 backdrop-blur-md sticky top-0 z-40 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <img
             src="/blazyy.png"
             alt="Blazyy"
-            className="h-10 w-10 rounded-xl object-cover border border-orange-500/30 shadow-md"
+            className="h-9 w-9 rounded-xl object-cover border border-orange-500/30 shadow-md"
           />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-extrabold text-lg tracking-tight text-white">BlazeResolver</h1>
-              <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                v1.0 • Correlate Engine{profile ? ` • ${profile.name}` : ''}
+              <h1 className="font-extrabold text-base tracking-tight text-white">BlazeResolver</h1>
+              <span className="text-[10.5px] font-mono font-medium px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
+                v1.0 • AI Support Engine{profile ? ` • ${profile.name}` : ''}
               </span>
             </div>
-            <p className="text-xs text-slate-400 hidden sm:block">
-              Business-Agnostic AI Harness • 4-Adapter Pipeline • Guardrail Gated
+            <p className="text-[11px] text-slate-400 hidden sm:block">
+              Full End-to-End Customer Support, AI Triage & Self-Healing Pipeline
             </p>
           </div>
         </div>
 
-        {/* 4 Pipeline Stages Indicator */}
-        <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs font-mono">
-          <span className="text-sky-400 font-semibold flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-sky-400"></span> TRIAGE
-          </span>
-          <FiChevronRight className="text-slate-600" />
-          <span className="text-purple-400 font-semibold flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse"></span> CORRELATE
-          </span>
-          <FiChevronRight className="text-slate-600" />
-          <span className="text-emerald-400 font-semibold flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> RESOLVE
-          </span>
-          <FiChevronRight className="text-slate-600" />
-          <span className="text-amber-400 font-semibold flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400"></span> RESPOND
-          </span>
+        {/* Primary Workspace Navigation Switcher */}
+        <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setPrimaryMode('support')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all ${
+              primaryMode === 'support'
+                ? 'bg-orange-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <RiCustomerService2Line className="w-4 h-4 text-orange-200" />
+            <span>Support Desk & Portal</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPrimaryMode('engine')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all ${
+              primaryMode === 'engine'
+                ? 'bg-orange-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <RiCpuLine className="w-4 h-4 text-orange-200" />
+            <span>Engine Pipeline & Voice</span>
+          </button>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 mr-2">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 mr-1">
             <span
               className={`h-2 w-2 rounded-full ${
                 wsConnected ? 'bg-emerald-500 badge-pulse' : 'bg-amber-500'
               }`}
             ></span>
-            <span className="text-[11px] font-mono text-slate-400 hidden md:inline">
-              {wsConnected ? 'Live Socket Active' : 'Connecting...'}
+            <span className="text-[10.5px] font-mono text-slate-400 hidden md:inline">
+              {wsConnected ? 'Socket Live' : 'Connecting...'}
             </span>
           </div>
 
           <button
             onClick={handleRunSeedDemo}
             disabled={isSeeding}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold transition-all disabled:opacity-50 border border-orange-400/30"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold transition-all disabled:opacity-50 border border-orange-400/30"
           >
             <FiPlay className={isSeeding ? 'animate-spin' : ''} />
-            {isSeeding ? 'Processing Claims...' : 'Run Demo Script'}
-          </button>
-
-          <button
-            onClick={handleSimulateVoice}
-            disabled={isRecordingVoice}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-all border border-slate-700"
-            title="Simulate live microphone voice complaint"
-          >
-            {isRecordingVoice ? <FiMic className="text-red-400 animate-pulse" /> : <FiMic className="text-orange-400" />}
-            <span>Voice Mic</span>
+            <span className="hidden sm:inline">{isSeeding ? 'Running...' : 'Run Seed Claims'}</span>
           </button>
 
           <button
             onClick={handleResetState}
-            className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs transition-all border border-slate-700"
-            title="Reset engine and adapter state"
+            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-all border border-slate-700"
+            title="Reset pipeline and stores"
           >
             <FiRefreshCw className="h-3.5 w-3.5" />
           </button>
         </div>
       </header>
 
-      {/* Metrics Row */}
-      <section className="px-6 py-4 grid grid-cols-2 md:grid-cols-5 gap-3.5 bg-[#0b101b] border-b border-slate-800/60">
+      {primaryMode === 'support' ? (
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          <AdminSupportDesk />
+        </div>
+      ) : (
+        <>
+          {/* Metrics Row */}
+          <section className="px-6 py-4 grid grid-cols-2 md:grid-cols-5 gap-3.5 bg-[#0b101b] border-b border-slate-800/60">
         <div className="glass-card p-3.5 rounded-xl flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
             <FiInbox className="h-5 w-5" />
@@ -1086,6 +1094,8 @@ export default function App() {
         <span>BlazeResolver • Open Source AI Harness for Customer Service</span>
         <span>Apache-2.0 License • Plug Into Any Backend or Agent</span>
       </footer>
+        </>
+      )}
     </div>
   );
 }
