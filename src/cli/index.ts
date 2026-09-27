@@ -13,6 +13,7 @@ import { runInit } from './init.js';
 import { runNotifyCommand } from './notify.js';
 import { runRemove } from './remove.js';
 import { runDoctor } from './doctor.js';
+import { runIndexCommand } from './index-docs.js';
 import { runTryCommand } from './try.js';
 import { describeProviders } from '../triage/providers.js';
 import { resolveEmbedder } from '../answer/embed.js';
@@ -27,6 +28,7 @@ Usage: npx blazeresolver@latest <command> [options]
   npx blazeresolver app       create a GitHub App for the fix job: short-lived, one-repo tokens, and PRs that trigger your CI
   npx blazeresolver harden    set up branch protection, CODEOWNERS, safe Actions defaults and secret scanning on GitHub
   npx blazeresolver providers show which AI providers your keys were recognized as, in failover order
+  npx blazeresolver index     build the vector database of your README and docs, for Blazzy's answers (RAG)
   npx blazeresolver doctor    check this install, GitHub access, Actions secrets, sandbox and branch protection
   npx blazeresolver try       run the real fix engine on your machine: real AI, real tests/build, a local branch
   blazeresolver fix           run by the workflow: fix the issue that triggered it
@@ -45,6 +47,14 @@ Docs: https://github.com/DikshantJangra/BlazeResolver#readme`;
 
 /** `blazeresolver <command> --help`. Checked before a command runs, so asking for help never changes anything. */
 const COMMAND_HELP: Record<string, string> = {
+  index: `blazeresolver index: build the vector database Blazzy answers from
+
+Usage: npx blazeresolver index [--docs <file>]...
+
+Embeds your README (the one at the root of this repo, else your repo's on GitHub) and any --docs files, and stores the
+vectors in .blazeresolver/vectors.db (git-ignored; BLAZE_VECTOR_DB moves it). Only new or changed sections are
+embedded, so re-run it whenever your docs change, or in your build. The handlers also build it on their first request.
+Needs a key for a provider with embeddings (OpenAI, Gemini, Voyage, Mistral, Cohere, NVIDIA).`,
   doctor: `blazeresolver doctor: check this installation
 
 Usage: npx blazeresolver doctor
@@ -211,6 +221,18 @@ try {
     console.log(lines.length ? lines.map((l, i) => `${i + 1}. ${l}`).join('\n') : 'No AI keys found. Put any provider key in .env as API_KEYS=...');
     const embedder = resolveEmbedder();
     console.log(`\nHelp-doc search: ${embedder ? `keywords + semantic (${embedder.id})` : 'keywords only. For semantic search too, add a key for a provider with embeddings (OpenAI, Voyage, Gemini, Mistral, Cohere, NVIDIA) or set BLAZE_EMBED_BASE_URL.'}`);
+  } else if (command === 'index') {
+    const dotenv = await import('dotenv');
+    // Next.js apps keep keys in .env.local; neither file overrides what's already set.
+    for (const path of ['.env.local', '.env']) dotenv.config({ path, quiet: true });
+    const { values } = parseArgs({ args: rest, options: { docs: { type: 'string', multiple: true } } });
+    let repo: string | undefined;
+    try {
+      repo = config().repo;
+    } catch {
+      repo = detectRepo(repoRoot(process.cwd()));
+    }
+    console.log(await runIndexCommand({ repo, docs: values.docs }));
   } else if (command === 'doctor') {
     const checks = await runDoctor({ cwd: process.cwd() });
     for (const check of checks) console.log(`${check.status === 'ok' ? 'OK' : check.status.toUpperCase()} ${check.name}: ${check.detail}`);

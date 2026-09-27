@@ -1,6 +1,6 @@
 import type { Complete, Report, Triage } from '../triage/index.js';
 import { getReadme } from '../github/index.js';
-import { search } from './retrieve.js';
+import { indexDocs, search } from './retrieve.js';
 import type { Embedder } from './embed.js';
 import type { VectorStore } from './vector-store.js';
 import { builtin } from './runtime.js';
@@ -181,6 +181,60 @@ async function localReadme(explicitPath: string | undefined, repo: string | unde
   } catch {
     return undefined;
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Building the vector database ahead of the first question
+// ---------------------------------------------------------------------------------------------------------------
+
+const WARM_RETRY_MS = 60_000;
+let toldNoEmbedder = false;
+
+/** Said once per process: without embeddings there are no vectors, so there's no vector database to build. */
+export function noEmbedderNotice(): void {
+  if (toldNoEmbedder) return;
+  toldNoEmbedder = true;
+  console.warn(
+    '[blazeresolver] no embeddings provider is configured, so no vector database is built and help-doc search is keyword-only. ' +
+      'Add a key for OpenAI, Gemini, Voyage, Mistral, Cohere or NVIDIA (or set BLAZE_EMBED_BASE_URL), then run `npx blazeresolver index`.'
+  );
+}
+
+/**
+ * A handler's warm-up: called at the start of every request, it builds the vector database of `load()`'s docs in the
+ * background on the first one, so the docs are embedded before the first question needs them. Never at import time
+ * (a framework building the app imports its routes), and never blocking a request. A failed build is retried after a
+ * minute; until then, search embeds on demand or falls back to keywords.
+ */
+export function vectorWarmer(load: () => Promise<string>, embedder: Embedder | undefined, store: VectorStore | undefined, explain = true): () => void {
+  let state: 'idle' | 'running' | 'done' = 'idle';
+  let failedAt = 0;
+  return () => {
+    if (state !== 'idle' || Date.now() - failedAt < WARM_RETRY_MS) return;
+    if (!embedder) {
+      state = 'done';
+      if (explain) noEmbedderNotice();
+      return;
+    }
+    state = 'running';
+    void (async () => {
+      try {
+        const docs = await load();
+        if (docs) {
+          const r = await indexDocs(docs, { embedder, store });
+          console.log(
+            `[blazeresolver] vector database ready${store?.location ? ` at ${store.location}` : ' (in memory)'}: ` +
+              `${r.sections} sections of your docs, ${r.embedded} embedded now, ${r.reused} already stored (${embedder.id}).`
+          );
+        }
+        state = 'done';
+      } catch (err) {
+        failedAt = Date.now();
+        state = 'idle';
+        console.warn(`[blazeresolver] could not build the vector database yet, retrying in a minute: ${err instanceof Error ? err.message : err}`);
+      }
+    })();
+  };
 }
 
 /** Strips a tag's closing form so text can't end the block it sits in. */

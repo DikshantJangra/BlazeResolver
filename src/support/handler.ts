@@ -1,6 +1,6 @@
 import { SupportStore, type SupportTicket, type SupportMessage } from './index.js';
 import { retrieve, search, type Chunk } from '../answer/retrieve.js';
-import { identity, loadDocs, productName } from '../answer/index.js';
+import { identity, loadDocs, productName, vectorWarmer } from '../answer/index.js';
 import { resolveEmbedder, type Embedder } from '../answer/embed.js';
 export { resolveEmbedder, type Embedder, type EmbedKind } from '../answer/embed.js';
 import { defaultVectorStore, type VectorStore } from '../answer/vector-store.js';
@@ -153,13 +153,12 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
     ? { repo: options.repo, token: options.githubToken ?? env.BLAZE_GITHUB_TOKEN, fetch: options.fetch }
     : undefined;
 
-  /** The help docs, README and saved replies that best match `text`: the knowledge Blazzy answers from. */
-  const searchKnowledge = async (text: string, k = 4): Promise<Chunk[]> => {
-    const docs = [await loadDocs({ helpDocs: options.helpDocs, readme, readmePath: options.readmePath }), savedRepliesDoc(store)]
-      .filter(Boolean)
-      .join('\n\n');
-    return search(docs, text, { k, embedder, store: vectorStore });
-  };
+  /** Everything Blazzy answers from: the help docs, the README and the saved replies. */
+  const knowledge = async () =>
+    [await loadDocs({ helpDocs: options.helpDocs, readme, readmePath: options.readmePath }), savedRepliesDoc(store)].filter(Boolean).join('\n\n');
+  /** The sections of the knowledge that best match `text`. */
+  const searchKnowledge = async (text: string, k = 4): Promise<Chunk[]> => search(await knowledge(), text, { k, embedder, store: vectorStore });
+  const warm = vectorWarmer(knowledge, embedder, vectorStore, options.embed !== false);
 
   /** Blazzy's reply to a customer's message: hands over to a human when asked, otherwise answers unless a human has taken over. */
   const respondToCustomer = async (ticketId: string, text: string): Promise<SupportMessage | undefined> => {
@@ -210,6 +209,7 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
   };
 
   return async (req: Request): Promise<Response> => {
+    warm();
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders });
     }

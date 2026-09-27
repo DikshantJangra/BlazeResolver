@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadDocs } from '../answer/index.js';
+import { loadDocs, vectorWarmer } from '../answer/index.js';
 import { clearVectorCache, search } from '../answer/retrieve.js';
 import { localVectorStore, postgresVectorStore, sqliteVectorStore, type SqliteDatabase, type VectorStore } from '../answer/vector-store.js';
 import type { Embedder } from '../answer/embed.js';
@@ -11,6 +11,8 @@ import { createSupportHandler, SupportStore } from '../support/index.js';
 import { GITIGNORE_BLOCK, gitignoreAddition } from '../answer/gitignore.js';
 import { runInit } from '../cli/init.js';
 import { runRemove } from '../cli/remove.js';
+import { runIndexCommand } from '../cli/index-docs.js';
+import { createHandler } from '../handler/index.js';
 import { execFileSync } from 'node:child_process';
 
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite') as { DatabaseSync: new (file: string) => SqliteDatabase & { close(): void } };
@@ -250,5 +252,75 @@ describe('the vector database is never committed', () => {
 
     await runRemove({ cwd: dir, yes: true, noUninstall: true, log: () => {} });
     assert.equal(readFileSync(join(dir, '.gitignore'), 'utf8'), 'node_modules\n.env\n');
+  });
+});
+
+describe('the vector database is created without waiting for a question', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 100));
+  const rowsIn = (root: string) => {
+    const db = new DatabaseSync(join(root, '.blazeresolver', 'vectors.db'));
+    const rows = db.prepare('SELECT text FROM blazeresolver_vectors').all() as { text: string }[];
+    db.close();
+    return rows.map((r) => r.text);
+  };
+
+  it('`blazeresolver index` builds it from the README and docs files, and re-runs only embed what changed', async () => {
+    const root = product('# Shop\n\n## Returns\n\nFree returns for 30 days.\n\n## Shipping\n\nTwo-day delivery.', 'acme/shop');
+    writeFileSync(join(root, 'faq.md'), '# FAQ\n\n## Gift cards\n\nGift cards never expire.');
+    process.chdir(root);
+    const { embedder, documents } = countingEmbedder('count-idx');
+
+    const first = await runIndexCommand({ repo: 'acme/shop', docs: [join(root, 'faq.md')], embedder, env: {} });
+    assert.match(first, new RegExp(`Vector database: .*${join('.blazeresolver', 'vectors.db').replace(/[.]/g, '\\.')}`));
+    assert.match(first, /3 sections of your docs: 3 embedded now, 0 already stored/);
+    assert.ok(rowsIn(root).some((t) => /Free returns/.test(t)) && rowsIn(root).some((t) => /Gift cards never expire/.test(t)));
+    assert.match(readFileSync(join(root, '.gitignore'), 'utf8'), /^\.blazeresolver\/$/m);
+
+    clearVectorCache();
+    const again = await runIndexCommand({ repo: 'acme/shop', docs: [join(root, 'faq.md')], embedder, env: {} });
+    assert.match(again, /0 embedded now, 3 already stored[\s\S]*Nothing changed/);
+    assert.equal(documents.length, 3);
+  });
+
+  it('says exactly why it cannot, instead of silently building nothing', async () => {
+    process.chdir(product('# Shop', 'acme/shop'));
+    await assert.rejects(runIndexCommand({ env: { GROQ_API_KEY: 'gsk_1' } }), /No embeddings provider is configured[\s\S]*Groq have no embeddings/);
+    process.chdir(mkdtempSync(join(tmpdir(), 'blaze-empty-')));
+    await assert.rejects(runIndexCommand({ embedder: countingEmbedder('count-none').embedder, env: {} }), /Found nothing to index/);
+  });
+
+  it("the support desk builds it on its first request of any kind, such as the portal loading its tickets", async () => {
+    const root = product('# Desk\n\n## Hours\n\nWe answer within a day.', 'acme/desk');
+    process.chdir(root);
+    const handler = createSupportHandler({ repo: 'acme/desk', embed: countingEmbedder('count-warm').embedder });
+    assert.equal(existsSync(join(root, '.blazeresolver')), false, 'not before a request');
+    await handler(new Request('http://localhost/api/support/tickets'));
+    await settle();
+    assert.ok(rowsIn(root).some((t) => /We answer within a day/.test(t)));
+  });
+
+  it('the widget endpoint builds it on its first request too', async () => {
+    const root = product('# Widget\n\n## Pricing\n\nThe Pro plan is $10.', 'acme/widget');
+    process.chdir(root);
+    const handler = createHandler({ repo: 'acme/widget', githubToken: 't', embed: countingEmbedder('count-warm2').embedder, complete: async () => '{}' });
+    await handler(new Request('http://localhost/api/blaze', { method: 'OPTIONS' }));
+    await settle();
+    assert.ok(rowsIn(root).some((t) => /Pro plan is \$10/.test(t)));
+  });
+
+  it('explains once, when there is no embeddings provider, why there is no vector database', () => {
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (m: string) => warnings.push(m);
+    try {
+      const warm = vectorWarmer(async () => '# docs', undefined, undefined);
+      warm();
+      warm();
+      vectorWarmer(async () => '# docs', undefined, undefined)();
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /no embeddings provider is configured, so no vector database is built[\s\S]*npx blazeresolver index/);
   });
 });

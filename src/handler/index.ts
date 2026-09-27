@@ -2,7 +2,7 @@ import { commentOnIssue, listOpenIssues, openIssue } from '../github/index.js';
 import { ReportSchema, resolveComplete, triage, type Complete } from '../triage/index.js';
 import { emailMarker, groupKey, keyMarker, renderIssueBody, renderReport, symptomIn } from './issue.js';
 import { sameSymptom, symptomOf } from '../triage/grouping.js';
-import { answerQuestion, productName, replyToCustomer } from '../answer/index.js';
+import { answerQuestion, loadDocs, productName, replyToCustomer, vectorWarmer } from '../answer/index.js';
 import { resolveEmbedder, type Embedder } from '../answer/embed.js';
 export { resolveEmbedder, type Embedder, type EmbedKind } from '../answer/embed.js';
 import { defaultVectorStore, type VectorStore } from '../answer/vector-store.js';
@@ -123,6 +123,12 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
   const product = productName(options.product, options.repo);
   // Only opened when there's something to keep: without embeddings there are no vectors.
   const vectorStore = !embedder || options.vectorStore === false ? undefined : (options.vectorStore ?? defaultVectorStore());
+  const warm = vectorWarmer(
+    () => loadDocs({ helpDocs: options.helpDocs, readme: { repo: options.repo, token, fetch: f }, readmePath: options.readmePath }),
+    embedder,
+    vectorStore,
+    options.embed !== false
+  );
   const storeEmails = options.storeEmails ?? env('BLAZE_NOTIFY_CUSTOMERS') === 'true';
   const perIp = options.rateLimit?.perIp ?? 10;
   const perHour = options.rateLimit?.perHour ?? (Number(env('BLAZE_RATE_LIMIT_PER_HOUR')) || 100);
@@ -134,6 +140,7 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
     new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...cors } });
 
   return async (req) => {
+    warm();
     if (req.method === 'OPTIONS') return reply(204);
     if (req.method !== 'POST') return reply(405, { error: 'POST only' });
     if (!token) return reply(500, { error: 'BLAZE_GITHUB_TOKEN is not set' });

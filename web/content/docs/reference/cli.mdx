@@ -79,6 +79,20 @@ $ npx blazeresolver providers
 
 Each key shows how it was recognized: `key format`, or the variable it came from.
 
+## `index`
+
+Builds the vector database Blazzy answers from: embeds your README (the one at the root of the repo, else your repo's on GitHub) and any `--docs` files, and stores the vectors in `.blazeresolver/vectors.db`, which it adds to your `.gitignore`. Only new or changed sections are embedded, so re-run it whenever your docs change, or add it to your build. It reads `.env.local` and `.env` in the current folder. See [The vector database](/docs/setup/help-answers#the-vector-database).
+
+```bash
+$ npx blazeresolver index --docs docs/help.md
+Vector database: /app/.blazeresolver/vectors.db
+  12 sections of your docs: 12 embedded now, 0 already stored
+  embeddings: openai:text-embedding-3-small
+  Blazzy now finds these by meaning as well as by keywords.
+```
+
+It needs a key for a provider with embeddings (OpenAI, Gemini, Voyage, Mistral, Cohere or NVIDIA), and says so, and what to add, when there is none. You don't have to run it: the handlers build the same database in the background on their first request.
+
 ## `fix`
 
 Run by the workflow, not by you. It reads the issue from `GITHUB_EVENT_PATH` and uses `GITHUB_TOKEN`, then runs the [fix engine](/docs/concepts/fix-engine) for that issue. It needs `blazeresolver.config.json` at the repo root.

@@ -190,6 +190,39 @@ export function clearVectorCache(): void {
   downUntil.clear();
 }
 
+export interface IndexResult {
+  /** Sections the docs split into. */
+  sections: number;
+  /** Sections embedded now: new, or changed since they were last embedded. */
+  embedded: number;
+  /** Sections whose vectors were already in the store. */
+  reused: number;
+}
+
+/**
+ * Builds the vector database for `docs` now, rather than on the first question: every section's vector is read from the
+ * store or embedded, and written to the store before this returns. Throws when the embedder or the store fails, so a
+ * caller (the `index` command) can say so.
+ */
+export async function indexDocs(docs: string, options: { embedder: Embedder; store?: VectorStore }): Promise<IndexResult> {
+  const { embedder, store } = options;
+  const chunks = indexFor(docs).chunks;
+  const keys = [...new Set(chunks.map((c) => `${embedder.id}\u0000${chunkText(c)}`))];
+  const texts = keys.map((key) => key.slice(key.indexOf('\u0000') + 1));
+  const ids = await Promise.all(keys.map(vectorId));
+  const stored = store ? await store.get(ids) : new Map<string, number[]>();
+  const todo = keys.map((_, n) => n).filter((n) => !stored.has(ids[n]));
+  const embedded = todo.length ? await embedder.embed(todo.map((n) => texts[n]), 'document') : [];
+  const fresh = todo.map((n, j) => ({ id: ids[n], embedder: embedder.id, text: texts[n], vector: unit(embedded[j]) }));
+  if (store && fresh.length) await store.set(fresh);
+  // Searches in this process use them straight away.
+  keys.forEach((key, n) => {
+    const vector = stored.get(ids[n]) ?? fresh.find((f) => f.id === ids[n])!.vector;
+    vectors.set(key, Promise.resolve(unit(vector)));
+  });
+  return { sections: keys.length, embedded: fresh.length, reused: keys.length - fresh.length };
+}
+
 /** A stable id for a section's vector: a hash of the embedder and the text, so any change gets a new one. */
 async function vectorId(key: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));

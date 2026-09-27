@@ -396,6 +396,8 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     say(`  ${step++}. Paste any AI key into .env as API_KEYS= (or API_KEY_1, API_KEY_2).`);
     say('     Universal auto-detection works with Gemini, Claude, OpenAI, Groq, NVIDIA, DeepSeek, xAI, etc.');
     say('     Check recognized providers anytime: npx blazeresolver providers');
+    say(`  ${step++}. Build the vector database Blazzy answers from (your README, in ${VECTOR_DIR}/, git-ignored): npx blazeresolver index`);
+    say('     Needs a key with embeddings (OpenAI, Gemini, Voyage, Mistral, Cohere or NVIDIA). Re-run it when your docs change.');
     say(`  ${step++}. Give the GitHub Actions workflow the same keys:   gh secret set API_KEYS`);
     say(`  ${step++}. GitHub, Settings, Actions, General: turn on "Allow GitHub Actions to create and approve pull requests".`);
     say(`  ${step++}. Run npx blazeresolver harden to require human review on ${branch}.`);

@@ -68,7 +68,7 @@ To choose in code, pass `embed` to `createHandler`: an embedder from `resolveEmb
 
 ## The vector database
 
-Semantic search keeps your docs' vectors in a database in your product, set up on first use with nothing to install or run:
+Semantic search keeps your docs' vectors in a database in your product, with nothing to install or run. Build it with `npx blazeresolver index` (re-run it when your docs change), or let the handlers build it in the background on their first request. Without an embeddings provider there are no vectors, so no database is built; the handlers log that once, and `index` says what key to add.
 
 - **By default, a SQLite file in your repo:** `.blazeresolver/vectors.db` at the root of the checkout, through Node's built-in SQLite. It's never committed: `init` adds `.blazeresolver/` to your root `.gitignore` (and the handler adds it too, the first time it creates the database in a checkout that doesn't ignore it yet), with a `.gitignore` inside the folder as a backstop. `npx blazeresolver remove` deletes the database and takes that line back out. Set `BLAZE_VECTOR_DB` to put it elsewhere. On a read-only filesystem (most serverless hosts) it goes to the temp directory, and without a writable disk the vectors are kept in memory.
 - **Or your own database**, so every instance shares one copy:

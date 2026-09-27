@@ -28,6 +28,8 @@ export interface VectorStore {
   get(ids: string[]): Promise<Map<string, number[]>>;
   /** Stores vectors, replacing any with the same id. */
   set(rows: StoredVector[]): Promise<void>;
+  /** Where it keeps them, for messages (a file path, or a description). */
+  location?: string;
 }
 
 const DEFAULT_TABLE = 'blazeresolver_vectors';
@@ -188,6 +190,9 @@ export function defaultVectorStore(): VectorStore {
     get: async (ids) => (await open()?.get(ids)) ?? new Map(),
     set: async (rows) => {
       await open()?.set(rows);
+    },
+    get location() {
+      return open()?.location;
     }
   };
 }
@@ -236,7 +241,7 @@ function openSqliteFile(fs: Fs, path: Path, file: string): VectorStore | undefin
     db.exec('PRAGMA journal_mode = WAL');
     db.exec('PRAGMA busy_timeout = 2000');
     if (path.basename(path.dirname(file)) === VECTOR_DIR) keepOutOfGit(fs, path, path.dirname(file));
-    return sqliteVectorStore(db);
+    return { ...sqliteVectorStore(db), location: file };
   } catch {
     return undefined;
   }
