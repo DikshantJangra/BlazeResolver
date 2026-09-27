@@ -661,7 +661,10 @@ app.post('/api/support/tickets/:id/messages', async (req, res) => {
                 incidentTitle: aiResult.correlation.incident?.title,
                 clusterKey: aiResult.correlation.cluster?.clusterKey,
                 isSystemic: aiResult.correlation.isSystemic,
-                ragMatches: relevantChunks.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+                ragMatches: relevantChunks.map((chunk) => {
+                  const excerpt = chunk.text.replace(/\s+/g, ' ').trim();
+                  return `${chunk.headings.join(' > ') || 'Knowledge'}: ${excerpt.slice(0, 180)}${excerpt.length > 180 ? '…' : ''}`;
+                }),
                 ragApplied,
                 resolutionActions: aiResult.resolution.actions.map(({ actionType, approvalStatus, amount, reason }) => ({
                   actionType,
@@ -887,7 +890,10 @@ app.post('/api/support/tickets/:id/diagnose', async (req, res) => {
         incidentTitle: aiResult.correlation.incident?.title,
         clusterKey: aiResult.correlation.cluster?.clusterKey,
         isSystemic: aiResult.correlation.isSystemic,
-        ragMatches: relevant.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+        ragMatches: relevant.map((chunk) => {
+          const excerpt = chunk.text.replace(/\s+/g, ' ').trim();
+          return `${chunk.headings.join(' > ') || 'Knowledge'}: ${excerpt.slice(0, 180)}${excerpt.length > 180 ? '…' : ''}`;
+        }),
         ragApplied: false,
         resolutionActions: aiResult.resolution.actions.map(({ actionType, approvalStatus, amount, reason }) => ({
           actionType,

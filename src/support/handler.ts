@@ -162,7 +162,10 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
       lastAiReplyAt: new Date().toISOString(),
       aiReport: {
         ...ticket.aiReport,
-        ragMatches: knowledge.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+        ragMatches: knowledge.map((chunk) => {
+          const excerpt = chunk.text.replace(/\s+/g, ' ').trim();
+          return `${chunk.headings.join(' > ') || 'Knowledge'}: ${excerpt.slice(0, 180)}${excerpt.length > 180 ? '…' : ''}`;
+        }),
         ragApplied: knowledge.length > 0,
         responseChannel: 'text',
         processedAt: new Date().toISOString()
@@ -441,7 +444,10 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
         const updatedReport: SupportTicket['aiReport'] = {
           ...ticket.aiReport,
           processedAt: new Date().toISOString(),
-          ragMatches: relevant.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+          ragMatches: relevant.map((chunk) => {
+            const excerpt = chunk.text.replace(/\s+/g, ' ').trim();
+            return `${chunk.headings.join(' > ') || 'Knowledge'}: ${excerpt.slice(0, 180)}${excerpt.length > 180 ? '…' : ''}`;
+          }),
           ragApplied: false
         };
 

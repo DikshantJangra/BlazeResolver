@@ -185,7 +185,7 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
             </div>
             {aiReport.ragMatches?.length ? (
               <ul className="list-disc pl-4 text-blue-900 space-y-0.5">
-                {aiReport.ragMatches.map((match, index) => <li key={`${match}-${index}`}>{match}</li>)}
+                {aiReport.ragMatches.map((match, index) => <li key={`${match}-${index}`} className="line-clamp-3">{match}</li>)}
               </ul>
             ) : (
               <p className="text-blue-900/70">{aiReport.ragMatches ? 'No knowledge sections matched this message.' : 'No retrieval run is recorded for this analysis.'}</p>

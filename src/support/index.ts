@@ -293,7 +293,10 @@ export class SupportStore {
           suggestedAction: result.resolution.policyDecision.recommendedAction,
           requiresHitl: result.resolution.hitlRequired,
           claimedAmount: result.triage.claimedAmount,
-          ragMatches: relevant.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+          ragMatches: relevant.map((chunk) => {
+            const excerpt = chunk.text.replace(/\s+/g, ' ').trim();
+            return `${chunk.headings.join(' > ') || 'Knowledge'}: ${excerpt.slice(0, 180)}${excerpt.length > 180 ? '…' : ''}`;
+          }),
           ragApplied,
           resolutionActions: result.resolution.actions.map(({ actionType, approvalStatus, amount, reason }) => ({
             actionType,
