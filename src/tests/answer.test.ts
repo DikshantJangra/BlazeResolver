@@ -24,7 +24,7 @@ Plans are billed monthly. Change your plan under Settings > Billing.
 
 const question = (message: string): Report => ({ message }) as Report;
 const verdict = (kind: Triage['kind'], injection = false): Triage => ({
-  kind, severity: 'low', summary: 's', steps: [], source: 'rules', injection, enterFixLoop: kind === 'bug'
+  type: kind === 'how_to' ? 'question' : 'report', kind, severity: 'low', summary: 's', steps: [], source: 'rules', injection, enterFixLoop: kind === 'bug'
 });
 
 /** A fake GitHub that serves README for any repo and counts the requests. */
@@ -169,6 +169,20 @@ describe('handler: questions get answers, everything else an acknowledgement', (
     const res = await post('How do I export my notes?');
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { received: true, answer: 'Open Settings, then Export.' });
+  });
+
+  it('answers a billing question from the docs even when triage falls back to rules', async () => {
+    const prompts: string[] = [];
+    const complete: Complete = async (system, user) => {
+      if (system.includes('You triage')) return 'model overloaded';
+      prompts.push(user);
+      return '{"answer": "Plans are billed monthly."}';
+    };
+    const handler = createHandler({ repo: 'acme/notes-10', githubToken: 'tok', embed: false, complete, fetch: readmeServer().f });
+    const res = await handler(new Request('http://x/api/report', { method: 'POST', headers: { 'x-forwarded-for': '203.0.113.3' }, body: JSON.stringify({ message: 'How are the billing plans charged?' }) }));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { received: true, answer: 'Plans are billed monthly.' });
+    assert.match(prompts[0], /billed monthly/);
   });
 });
 

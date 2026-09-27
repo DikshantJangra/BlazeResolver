@@ -185,7 +185,7 @@ app.post('/api/report', async (req, res) => {
   const { incident, isNew } = store.addReport(project.id, parsed.data, result);
   if (incident && isNew && fixEnabled) enqueueFix(project, incident);
   broadcastLiveEvent('report_triaged', { projectId: project.id, triage: result }, 'admins');
-  // A how-to question gets an answer from the project's README and help docs. Everything else gets a short reply to
+  // A question gets an answer from the project's README and help docs. Everything else gets a short reply to
   // what they said, never the triage verdict; a model that just failed triage isn't waited on again.
   const answer = await answerQuestion(parsed.data, result, {
     complete: answerComplete,

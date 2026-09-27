@@ -161,7 +161,7 @@ describe('hybrid search', () => {
 });
 
 describe('RAG answers', () => {
-  const verdict: Triage = { kind: 'how_to', severity: 'low', summary: 's', steps: [], source: 'llm', injection: false, enterFixLoop: false };
+  const verdict: Triage = { type: 'question', kind: 'how_to', severity: 'low', summary: 's', steps: [], source: 'llm', injection: false, enterFixLoop: false };
 
   it('the widget endpoint answers from a section found by meaning', async () => {
     const prompts: string[] = [];

@@ -348,7 +348,7 @@ describe('report validator: serverless handler grouping', () => {
   });
 
   it('writes a symptom marker that reads back and cannot break out of its HTML comment', () => {
-    const verdict = { kind: 'bug' as const, severity: 'high' as const, summary: 'x --> <img>', steps: [], source: 'llm' as const, injection: false, enterFixLoop: true, feature: 'a -- b' };
+    const verdict = { type: 'report' as const, kind: 'bug' as const, severity: 'high' as const, summary: 'x --> <img>', steps: [], source: 'llm' as const, injection: false, enterFixLoop: true, feature: 'a -- b' };
     const body = renderIssueBody({ message: 'm', consoleErrors: ['Error: a --> b'] }, verdict, 'k');
     const marker = body.match(/<!-- blaze:symptom=([^\s>]+) -->/)![1];
     assert.ok(!marker.includes('--'));

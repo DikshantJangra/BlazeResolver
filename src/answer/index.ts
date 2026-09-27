@@ -50,13 +50,13 @@ export async function loadDocs(options: Pick<AnswerOptions, 'helpDocs' | 'readme
 const fence = (text: string, tag: string) => text.replace(new RegExp(`</\\s*${tag}\\s*>`, 'gi'), '');
 
 /**
- * An answer to a customer's how-to question, from the sections of the project's README (and any extra help docs)
+ * An answer to a customer's question, from the sections of the project's README (and any extra help docs)
  * that match it (RAG: keyword search, plus semantic search when an embedder is given).
  * Undefined when the report isn't a question, nothing is configured, no section matches, the model finds no answer
  * in them, or the model fails; the customer then gets the usual acknowledgement and the question stays with a human.
  */
 export async function answerQuestion(report: Report, verdict: Triage, options: AnswerOptions): Promise<string | undefined> {
-  if (verdict.kind !== 'how_to' || verdict.injection || !options.complete) return undefined;
+  if (verdict.type !== 'question' || verdict.injection || !options.complete) return undefined;
   const docs = await loadDocs(options);
   if (!docs) return undefined;
 

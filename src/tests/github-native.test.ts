@@ -147,7 +147,7 @@ describe('fix command (the GitHub Action)', () => {
     execFileSync('git', ['clone', '--quiet', '--bare', repo, remote]);
     const eventPath = join(root, 'event.json');
     writeFileSync(eventPath, JSON.stringify({ issue: { number: 5 } }));
-    const body = renderIssueBody({ message: CHECKOUT_INCIDENT.description }, { kind: 'bug', severity: 'high', summary: CHECKOUT_INCIDENT.title, steps: [], source: 'rules', injection: false, enterFixLoop: true }, 'checkout');
+    const body = renderIssueBody({ message: CHECKOUT_INCIDENT.description }, { type: 'report', kind: 'bug', severity: 'high', summary: CHECKOUT_INCIDENT.title, steps: [], source: 'rules', injection: false, enterFixLoop: true }, 'checkout');
     const gh = fakeGithub([{ number: 5, title: `[bug] ${CHECKOUT_INCIDENT.title}`, body, labels: issue.labels ?? ['blazeresolver'], assoc: issue.assoc }]);
     const config = { repo: 'acme/shop', defaultBranch: 'main', testCommand: CHECKOUT_TEST_COMMAND, buildCommand: CHECKOUT_BUILD_COMMAND };
     return { gh, remote, config, env: { GITHUB_TOKEN: 'tok', GITHUB_EVENT_PATH: eventPath } };
@@ -221,7 +221,7 @@ describe('fix command fails closed on the sandbox', () => {
     const root = tmp();
     const eventPath = join(root, 'event.json');
     writeFileSync(eventPath, JSON.stringify({ issue: { number: 5 } }));
-    const body = renderIssueBody({ message: 'checkout is wrong' }, { kind: 'bug', severity: 'high', summary: 'Checkout wrong', steps: [], source: 'rules', injection: false, enterFixLoop: true }, 'checkout');
+    const body = renderIssueBody({ message: 'checkout is wrong' }, { type: 'report', kind: 'bug', severity: 'high', summary: 'Checkout wrong', steps: [], source: 'rules', injection: false, enterFixLoop: true }, 'checkout');
     const gh = fakeGithub([{ number: 5, title: '[bug] Checkout wrong', body, labels: ['blazeresolver'] }]);
     const config = { repo: 'acme/shop', defaultBranch: 'main', installCommand: 'npm ci', testCommand: 'npm test', buildCommand: 'true', sandbox: 'docker' as const };
 
