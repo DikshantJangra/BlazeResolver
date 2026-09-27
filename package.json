@@ -1,6 +1,6 @@
 {
   "name": "blazeresolver",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "description": "Open-source AI harness that turns customer bug reports into reviewed GitHub pull requests",
   "main": "dist/server/src/index.js",
   "type": "module",
