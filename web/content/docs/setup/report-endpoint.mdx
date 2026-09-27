@@ -3,7 +3,7 @@ title: Report endpoint
 description: Mount the handler that turns widget reports into GitHub issues, in Next.js, Express, or any Web-standard runtime.
 ---
 
-The endpoint is the only part of BlazeResolver that runs on your servers. It takes a report from the widget, [triages](/docs/concepts/triage) it, and files it as a GitHub issue. It stores nothing and holds only an issues-only token, and it can't push code.
+The endpoint is the only part of BlazeResolver that runs on your servers. It takes a report from the widget, [triages](/docs/concepts/triage) it, and files it as a GitHub issue, or answers it from your docs when it's a how-to question. It stores nothing and holds only an issues-only token, and it can't push code.
 
 `init` writes it for Next.js and Express. For anything else, mount it yourself in a few lines. The handler is a plain Web-standard function, `(Request) => Promise<Response>`.
 
@@ -121,9 +121,11 @@ Then point the widget at the full URL:
 
 ## Limits and behavior
 
-- **POST only**, JSON body of at most 20,000 characters. The message itself is capped at 5,000.
+- **POST only**, JSON body of at most 20,000 characters. Only a report with no message is refused; overlong fields are cut and an invalid email is dropped. The message is capped at 5,000 characters.
 - **Rate limits:** 10 reports per IP every 10 minutes, and 100 in total per hour, per server instance. The client IP is read from `X-Forwarded-For`. The counters live in memory, so serverless instances don't share them. They blunt a single-source flood; for more, add your host's rate limiting or a WAF rule in front.
-- **Triage budget:** 8 seconds. If the model takes longer, keyword rules decide, so the report is still filed before the widget gives up at 25 seconds.
+- **Time budget:** triage gets 8 seconds (then keyword rules decide), and answering a question gets 12. The reply arrives before the widget gives up at 25 seconds.
+- **GitHub calls** are retried on rate limits and outages, and open issues are read page by page, so duplicate reports are still found when you have hundreds of open issues.
+- **Answers from your docs:** pass `helpDocs` to answer how-to questions from more than your README. See [Answer questions from your docs](/docs/setup/help-answers).
 - **Serverless timeout:** give the route at least 30–60 seconds (`maxDuration` on Vercel).
 
 See [Handler API](/docs/reference/handler) for every option and response code.

@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# set aside by scripts/build-pages.mjs during a GitHub Pages build
+.api-blaze.build-pages

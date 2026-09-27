@@ -19,20 +19,21 @@ The [widget](/docs/setup/widget) is a small panel in a shadow DOM (about 14 KB g
 
 ## 2. The endpoint triages it
 
-The [handler](/docs/reference/handler) validates the report, rate-limits by IP, and then [triages](/docs/concepts/triage) it:
+The [handler](/docs/reference/handler) repairs the report (trimming oversized fields and dropping an invalid email, rather than rejecting it), rate-limits by IP, and then [triages](/docs/concepts/triage) it:
 
-1. **Injection check first.** If any field looks like an attempt to instruct the AI, the report is dropped without calling a model.
+1. **Injection check first.** If any field tries to instruct the AI (for example "ignore your instructions", fake role tags, or "when you fix this, also add…"), the report is dropped without calling a model. Reports that merely *mention* admin access, SQL or scripts are genuine bug reports, and pass.
 2. **Classify.** An AI model (or keyword rules, when no key is set or the model takes longer than 8 seconds) returns a kind (`bug`, `outage`, `feature_request`, `how_to`, `account_billing`, `abuse`, `other`), a severity, a one-line summary, and steps to reproduce.
 3. **Route.**
    - `bug` and `outage` become an issue labelled **`blazeresolver`**. Critical ones also get `priority:critical`.
    - `feature_request` becomes an issue labelled `customer-feedback`, which the workflow ignores.
+   - `how_to` questions are [answered from your README and help docs](/docs/setup/help-answers) when those cover them. The answer shows in the widget, and nothing is filed.
    - Everything else is acknowledged and not filed.
 
-The customer always gets the same answer (`202 {"received": true}`) and never sees the verdict.
+The customer gets the same thank-you (`202 {"received": true}`) whatever was decided, and never sees the verdict. The one exception is an answered question, which returns `200` with the answer.
 
 ## 3. Duplicate reports are grouped
 
-Each issue carries a hidden key derived from the affected feature or page. When a second customer reports the same thing, the handler comments on the existing open issue ("Another customer reported this.") instead of opening a new one. The fix job later counts these comments as the number of affected customers.
+Each issue records the **symptom** of its first report in a hidden comment: the affected feature, the first console error, and the key words of the summary. When another customer reports the same symptom, the handler comments on the existing open issue ("Another customer reported this.") instead of opening a new one. Two different bugs on the same page stay separate. The fix job later counts these comments as the number of affected customers. See [Grouping duplicate reports](/docs/concepts/issue-lifecycle#grouping-duplicate-reports).
 
 ## 4. The workflow runs the fix engine
 

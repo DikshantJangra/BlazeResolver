@@ -25,7 +25,8 @@ const handler = createHandler({
   type={{
     repo: { type: 'string', description: 'owner/name of the repo that gets the issues.', required: true },
     githubToken: { type: 'string', description: 'Token with Issues: write on that one repo.', default: 'process.env.BLAZE_GITHUB_TOKEN' },
-    complete: { type: '(system: string, user: string) => Promise<string>', description: 'Your own model call for triage. It must return the JSON triage expects. Default: whichever provider has a key in the environment; without one, keyword rules.' },
+    complete: { type: '(system: string, user: string) => Promise<string>', description: 'Your own model call, used for triage and for answering questions. Default: whichever provider has a key in the environment; without one, keyword rules decide and questions get no answer.' },
+    helpDocs: { type: 'string', description: "Extra help docs (Markdown or plain text), searched with the repo's README to answer how-to questions. Up to 90,000 characters in total. See Answer questions from your docs." },
     storeEmails: { type: 'boolean', description: "Keep the reporter's email in the issue, for fix notifications. Private repos only.", default: "process.env.BLAZE_NOTIFY_CUSTOMERS === 'true'" },
     rateLimit: { type: '{ perIp?: number; perHour?: number }', description: 'Reports accepted per IP every 10 minutes, and in total per hour, per instance.', default: '{ perIp: 10, perHour: 100 }' },
     allowOrigin: { type: 'string', description: 'Sends CORS headers and answers preflights for this origin (or "*"). Set it when the widget runs on another origin.' },
@@ -43,16 +44,16 @@ app.all('/api/blaze', nodeHandler(createHandler({ repo: 'acme/shop', allowOrigin
 
 ## Request body
 
-`POST` with a JSON body, at most 20,000 characters in total:
+`POST` with a JSON body, at most 20,000 characters in total. Only `message` is required. Everything else is **repaired rather than rejected**: fields are trimmed, stripped of control characters and cut to their limit, so a customer never loses a report to an overlong field or a mistyped email.
 
 <TypeTable
   type={{
-    message: { type: 'string', description: 'What went wrong, in the reporter\'s words. 1 to 5,000 characters after trimming.', required: true },
-    pageUrl: { type: 'string', description: 'Page the report came from. Up to 2,000 characters. Its path groups reports when the model names no feature.' },
-    appVersion: { type: 'string', description: 'Your release. Up to 100 characters.' },
-    userId: { type: 'string', description: 'Reporter id. Up to 200 characters. Checked by the injection screen; never written to the issue.' },
-    email: { type: 'string', description: 'Valid email, up to 200 characters. Only kept when storeEmails is on.' },
-    consoleErrors: { type: 'string[]', description: 'Up to 20 entries of up to 1,000 characters each.' },
+    message: { type: 'string', description: "What went wrong, in the reporter's words. Cut to 5,000 characters. The only field that can make the request fail: a missing or blank message is a 400.", required: true },
+    pageUrl: { type: 'string', description: 'Page the report came from. Cut to 2,000 characters. Its path is the feature when the model names none.' },
+    appVersion: { type: 'string', description: 'Your release. Cut to 100 characters.' },
+    userId: { type: 'string', description: 'Reporter id. Cut to 200 characters. Checked by the injection screen; never written to the issue.' },
+    email: { type: 'string', description: 'An invalid address, or one over 200 characters, is dropped (the report is kept). Only stored when storeEmails is on.' },
+    consoleErrors: { type: 'string[]', description: 'Non-text entries are dropped, each entry is cut to 1,000 characters, and the latest 20 are kept.' },
   }}
 />
 
@@ -60,9 +61,10 @@ app.all('/api/blaze', nodeHandler(createHandler({ repo: 'acme/shop', allowOrigin
 
 | Status | Body | When |
 | :--- | :--- | :--- |
-| `202` | `{"received": true}` | Accepted, whatever triage decided, including dropped injection attempts and questions that aren't filed |
+| `200` | `{"received": true, "answer": "…"}` | A how-to question, answered from your README and help docs. Nothing is filed. See [Answer questions from your docs](/docs/setup/help-answers). |
+| `202` | `{"received": true}` | Accepted, whatever triage decided: filed bugs and feature requests, grouped duplicates, unanswered questions, and dropped injection attempts |
 | `204` | none | `OPTIONS` preflight |
-| `400` | `{"error": "invalid json"}` / `{"error": "invalid report"}` | Body isn't JSON, or doesn't match the schema |
+| `400` | `{"error": "invalid json"}` / `{"error": "invalid report"}` | Body isn't JSON, or has no message |
 | `405` | `{"error": "POST only"}` | Any other method |
 | `413` | `{"error": "too large"}` | Body over 20,000 characters |
 | `429` | `{"error": "rate limit"}` | Per-IP or hourly limit hit |
@@ -70,6 +72,8 @@ app.all('/api/blaze', nodeHandler(createHandler({ repo: 'acme/shop', allowOrigin
 | `502` | `{"error": "could not file the report"}` | GitHub refused (expired token, missing permission, GitHub's own limits). Also logged loudly to stderr as `[blazeresolver] could not file a report in <repo>: …`. |
 
 The client IP for rate limiting comes from the first entry of `X-Forwarded-For`.
+
+**Time budget.** Triage gets 8 seconds (then keyword rules decide) and answering a question gets 12, so the handler replies before the widget stops waiting at 25 seconds. Calls to GitHub are retried on rate limits and outages, for at most a few seconds.
 
 ## Wrapping the handler
 

@@ -4,8 +4,10 @@ description: What npx blazeresolver init detects, what it writes, and how to ste
 ---
 
 ```bash
-npx blazeresolver init
+npx blazeresolver@latest init
 ```
+
+`@latest` makes sure npx runs the newest release rather than an older copy in its cache. With pnpm, `pnpm dlx blazeresolver@latest init` works the same way. Bun projects aren't supported yet: `init` installs with npm, pnpm or yarn.
 
 Run it from anywhere inside your repo. It moves to the repository root, because GitHub only reads workflows from there.
 

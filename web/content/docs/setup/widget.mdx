@@ -22,7 +22,7 @@ The widget is a small, light panel: a text box and a Send button. It's about 14 
 | `userId`, `email` | `data-user-id` / `data-user-email`, `BlazeResolver.identify()`, or the optional email box |
 | `consoleErrors` | Up to 20 recent uncaught errors and unhandled promise rejections from the page. The reporter can untick these before sending. |
 
-The customer sees a thank-you whatever triage decides. The triage verdict is never shown to them.
+The customer sees a thank-you whatever triage decides, and never the triage verdict. The one exception: when the report is a how-to question that your docs answer, the widget shows the answer under **Here's what we found**. See [Answer questions from your docs](/docs/setup/help-answers).
 
 ## Customize
 
@@ -103,6 +103,7 @@ await fetch('/api/blaze', {
   }),
 });
 // → 202 {"received": true}
+// → or 200 {"received": true, "answer": "…"} for a question your docs answer
 ```
 
 The request schema is in the [Handler API](/docs/reference/handler#request-body).

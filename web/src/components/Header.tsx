@@ -1,5 +1,6 @@
 "use client";
 
+import { asset } from "@/lib/site";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { FaGithub } from "react-icons/fa6";
@@ -34,7 +35,7 @@ export default function Header() {
           <Link className="flex items-center gap-[10px] min-w-0" href="/">
             <span className="shrink-0 inline-flex items-center gap-2.5">
               <img
-                src="/blazyy.png"
+                src={asset("/blazyy.png")}
                 alt="BlazeResolver"
                 className="w-8 h-8 rounded-lg object-contain shadow-md"
               />
@@ -140,7 +141,7 @@ export default function Header() {
             onClick={() => setMobileMenuOpen(false)}
           >
             <img
-              src="/blazyy.png"
+              src={asset("/blazyy.png")}
               alt="BlazeResolver"
               className="w-8 h-8 rounded-lg object-contain"
             />

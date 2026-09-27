@@ -1,0 +1,48 @@
+---
+title: Answer questions from your docs
+description: Customers who ask how to do something get an answer from your README and help docs, right in the widget.
+---
+
+Not every message is a bug. When [triage](/docs/concepts/triage) decides a report is a **how-to question** ("how do I export my data?"), the endpoint tries to answer it from your documentation before it replies. The answer appears in the widget under **Here's what we found**. Nothing is filed on GitHub.
+
+It works out of the box: the repo's README is the source. You can add more docs.
+
+## How it works
+
+1. **Only questions.** Answering runs only for the `how_to` kind, only when an AI key is configured, and never for a report the injection screen flagged.
+2. **Collect the docs.** The endpoint fetches the README of the repo you passed to `createHandler`, with your token first (private repos), then without it (a public repo needs none). READMEs are cached for 10 minutes; a failed fetch is retried after a minute. Any extra `helpDocs` you pass are added.
+3. **Find the relevant sections.** The docs are split at their headings into sections of about 1,200 characters, and ranked against the question by keyword relevance (BM25). The top 4 sections go to the model. There is no embeddings API or vector store to set up, and the same question always finds the same sections.
+4. **Answer only from them.** The model is told to answer only from those excerpts, and to reply with no answer when they don't clearly cover the question. It never guesses. The question is wrapped as data that must not be followed, like every report.
+5. **Show it, or fall back.** A usable answer (up to 1,500 characters, plain text) comes back as `200 {"received": true, "answer": "…"}`, and the widget shows it as text, never as HTML. Otherwise the customer gets the usual thank-you.
+
+Answering has its own 12-second budget, after triage's 8, so the reply still arrives before the widget stops waiting at 25 seconds.
+
+## Add help docs
+
+Pass any Markdown or plain text as `helpDocs`. It's searched together with the README, up to 90,000 characters in total:
+
+```ts title="app/api/blaze/route.ts"
+import { readFileSync } from 'node:fs';
+import { createHandler } from 'blazeresolver/handler';
+
+const handler = createHandler({
+  repo: 'acme/shop',
+  helpDocs: readFileSync('docs/help.md', 'utf8'),
+});
+
+export const maxDuration = 60;
+export const POST = handler;
+export const OPTIONS = handler;
+```
+
+**Write docs that match how customers ask.** Ranking is by keywords, so a customer asking to "delete my account" won't find a section that only says "close your account". Use the words your customers use in headings and first sentences, and give each task its own heading.
+
+## What it doesn't do
+
+- **No bug is answered.** Bugs and outages always go to the fix workflow.
+- **Nothing is filed for questions**, answered or not. If you want unanswered questions in your support tool, wrap the handler. See [Library API](/docs/reference/library).
+- **No links or Markdown are invented.** Answers are plain text, and only contain links that appear in your docs.
+
+## Privacy
+
+The matching sections of your README and help docs, and the customer's question, go to your AI provider. Only include docs you're happy to send there.

@@ -58,5 +58,6 @@ Clicking any element with `data-blazeresolver-open` opens the panel. The attribu
 - **Drafts.** Unsent text is kept in `localStorage` under `blazeresolver:draft`.
 - **Errors.** It listens for `error` and `unhandledrejection` from page load onward, keeping the last 20 distinct messages (up to 1,000 characters each). The reporter can opt out per report.
 - **Mobile.** It becomes a bottom sheet on narrow screens, and respects safe-area insets.
+- **Answers.** When the endpoint replies with an `answer` (a how-to question your docs cover), the panel shows it under **Here's what we found**, as plain text, never as HTML.
 - **Timeout.** It waits up to 25 seconds for the endpoint.
 - **Keyboard.** <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> sends, and <kbd>Esc</kbd> closes.

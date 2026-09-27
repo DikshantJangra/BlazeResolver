@@ -16,13 +16,16 @@ A human always merges. BlazeResolver opens pull requests, never merges them, and
 
 <Cards>
   <Card title="One command to set up" href="/docs/quickstart">
-    `npx blazeresolver init` finds your frontend and backend and wires in the widget, the endpoint, the workflow and `.env`.
+    `npx blazeresolver@latest init` finds your frontend and backend and wires in the widget, the endpoint, the workflow and `.env`.
   </Card>
   <Card title="Any AI provider" href="/docs/setup/ai-providers">
     Paste any key. 26 providers are supported, most are recognized from the key itself, and several keys fail over automatically.
   </Card>
   <Card title="Safe by construction" href="/docs/concepts/security">
     The model only returns JSON. The harness applies edits, runs your tests offline in a container, and refuses risky changes.
+  </Card>
+  <Card title="Answers questions too" href="/docs/setup/help-answers">
+    When a customer asks how to do something, the widget answers from your README and help docs. Nothing is filed.
   </Card>
   <Card title="Nothing to host" href="/docs/how-it-works">
     The endpoint runs in your app. The fix runs on GitHub's throwaway runners, with your repo's own secrets.
@@ -35,6 +38,7 @@ A human always merges. BlazeResolver opens pull requests, never merges them, and
 - **Want the full picture first?** Read [How it works](/docs/how-it-works).
 - **Evaluating risk?** Read the [Security model](/docs/concepts/security).
 - **Looking something up?** The [CLI](/docs/reference/cli), [environment variables](/docs/reference/environment) and [handler API](/docs/reference/handler) references have every option.
+- **Using an AI agent?** Point it at [`/llms.txt`](/llms.txt), or see [For AI agents](/docs/reference/ai-agents).
 
 ## Requirements
 

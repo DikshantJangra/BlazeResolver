@@ -1,0 +1,57 @@
+name: Deploy site to GitHub Pages
+# The marketing site and docs in web/, built as static files (npm run build:pages) and published to GitHub Pages.
+# One-time setup: Settings → Pages → Build and deployment → Source: GitHub Actions.
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - id: pages
+        uses: actions/configure-pages@v5
+      - run: npm ci
+      - run: npm run build:pages
+        env:
+          # /<repo> on github.io, or empty with a custom domain.
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          # Absolute links in llms.txt and the Markdown pages.
+          NEXT_PUBLIC_SITE_URL: ${{ steps.pages.outputs.base_url }}
+          # Optional: an endpoint hosted elsewhere, so the site's own widget works (Pages has no server).
+          NEXT_PUBLIC_BLAZE_ENDPOINT: ${{ vars.BLAZE_SITE_ENDPOINT }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

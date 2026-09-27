@@ -11,8 +11,11 @@ import { runInit } from './init.js';
 import { runNotifyCommand } from './notify.js';
 import { runRemove } from './remove.js';
 import { describeProviders } from '../triage/providers.js';
+import { engineVersion } from '../version.js';
 
 const HELP = `blazeresolver: turn customer bug reports into reviewed GitHub pull requests
+
+Usage: npx blazeresolver@latest <command> [options]
 
   npx blazeresolver init      set up this repo (finds your frontend and backend, adds the workflow, endpoint, widget and .env)
   npx blazeresolver remove    undo init: delete what it created, clean the lines it added, uninstall the package
@@ -27,7 +30,85 @@ init options:   --repo owner/name  --branch main  --backend <folder>  --frontend
                 --no-sandbox (run tests with network instead of offline in a container)  --sandbox-image <image>
                 --pin <version> (lock the workflow and widget instead of @latest)  --app (use a GitHub App token)
 harden options: --owner @you  --strict (no admin bypass)  --dry-run  --yes
-remove options: --yes (no confirmation)  --no-uninstall`;
+remove options: --yes (no confirmation)  --no-uninstall
+
+Help for one command: blazeresolver <command> --help     Version: blazeresolver --version
+Docs: https://github.com/DikshantJangra/BlazeResolver#readme`;
+
+/** `blazeresolver <command> --help`. Checked before a command runs, so asking for help never changes anything. */
+const COMMAND_HELP: Record<string, string> = {
+  init: `blazeresolver init: set up BlazeResolver in this repo
+
+Usage: npx blazeresolver@latest init [options]
+
+Finds your frontend and backend by their dependencies, then adds the fix workflow, the report endpoint (/api/blaze),
+the widget tag, blazeresolver.config.json and .env, and installs the package (npm, pnpm or yarn). Records every change,
+so \`remove\` can undo exactly that. Run it from anywhere inside the repo.
+
+Options:
+  --backend <folder>       the package that serves the endpoint (skips detection)
+  --frontend <folder>      the package whose page gets the widget
+  --yes, -y                accept what was detected, no questions
+  --repo owner/name        the GitHub repo (default: the origin remote)
+  --branch <name>          branch fixes start from (default: the current branch)
+  --install "<cmd>"        install command, run with network before offline tests
+  --test "<cmd>"           test command a fix must pass
+  --build "<cmd>"          build command run after the tests
+  --no-sandbox             run tests with network instead of offline in a container
+  --sandbox-image <image>  container image for offline tests (default: node:<major>-bookworm-slim)
+  --pin <version>          lock the workflow and widget to one release instead of @latest
+  --app                    write the workflow for a GitHub App token (then run \`blazeresolver app\`)
+  --no-install             don't install the package
+  --force                  overwrite files that already exist, or re-run over an existing install`,
+  remove: `blazeresolver remove: undo init
+
+Usage: npx blazeresolver remove [options]
+
+Deletes the files init created (a file you have rewritten since is kept), removes the lines it added, uninstalls
+the package and deletes the config. Values you typed into .env are never deleted.
+
+Options:
+  --yes, -y        don't ask for confirmation
+  --no-uninstall   leave the package installed`,
+  app: `blazeresolver app: create a GitHub App for the fix job
+
+Usage: npx blazeresolver app
+
+Creates and installs a GitHub App on this repo in your browser, then stores its id and private key as repo secrets
+(needs the GitHub CLI, gh, logged in). The fix job then writes with short-lived, one-repo tokens, and the pull
+requests it opens trigger your CI. Takes no options.`,
+  harden: `blazeresolver harden: protect the repo on GitHub
+
+Usage: npx blazeresolver harden [options]
+
+Adds a branch ruleset (pull request plus one approval, no force pushes or deletion), a CODEOWNERS block for sensitive
+paths, read-only Actions defaults and secret scanning. Asks before each change unless --yes.
+
+Options:
+  --owner @you   code owner for the sensitive paths (default: you)
+  --strict       no admin bypass of the ruleset
+  --dry-run      show what would change, change nothing
+  --yes, -y      don't ask for confirmation`,
+  providers: `blazeresolver providers: show the AI keys that were recognized
+
+Usage: npx blazeresolver providers
+
+Reads .env and the environment, and lists each recognized provider in failover order, keys masked. Takes no options.`,
+  fix: `blazeresolver fix: run by the workflow, not by hand
+
+Usage: blazeresolver fix
+
+Fixes the issue that triggered the workflow and opens a pull request. Needs GITHUB_TOKEN and GITHUB_EVENT_PATH,
+which GitHub Actions provides, and blazeresolver.config.json at the repo root. Takes no options.`,
+  notify: `blazeresolver notify: run by the workflow, not by hand
+
+Usage: blazeresolver notify
+
+When a BlazeResolver pull request merges, emails the customers who asked to be told (needs RESEND_API_KEY and
+BLAZE_FROM_EMAIL). Takes no options.`
+};
+
+const wantsHelp = (args: string[]) => args.includes('--help') || args.includes('-h');
 
 const [command, ...rest] = process.argv.slice(2);
 const interactive = !!process.stdin.isTTY && !!process.stdout.isTTY;
@@ -44,7 +125,14 @@ async function prompt(question: string, fallback?: string): Promise<string> {
 const config = (): ProjectConfig => JSON.parse(readFileSync(`${repoRoot(process.cwd())}/blazeresolver.config.json`, 'utf8'));
 
 try {
-  if (command === 'init') {
+  if (command === '--version' || command === '-v' || command === 'version') {
+    console.log(engineVersion());
+  } else if (command === undefined || command === 'help' || command === '--help' || command === '-h') {
+    // `blazeresolver help init` works like `blazeresolver init --help`.
+    console.log((command === 'help' && rest[0] && COMMAND_HELP[rest[0]]) || HELP);
+  } else if (COMMAND_HELP[command] && wantsHelp(rest)) {
+    console.log(COMMAND_HELP[command]);
+  } else if (command === 'init') {
     const { values } = parseArgs({
       args: rest,
       options: {
@@ -95,8 +183,9 @@ try {
   } else if (command === 'notify') {
     console.log(await runNotifyCommand({ env: process.env, repo: config().repo }));
   } else {
+    console.error(`Unknown command: ${command}\n`);
     console.log(HELP);
-    process.exitCode = command && command !== 'help' && command !== '--help' ? 1 : 0;
+    process.exitCode = 1;
   }
 } catch (err) {
   console.error(err instanceof Error ? err.message : String(err));

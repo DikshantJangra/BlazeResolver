@@ -1,5 +1,6 @@
 "use client";
 
+import { asset } from "@/lib/site";
 import React from "react";
 import { FaGithub, FaComments, FaBook } from "react-icons/fa6";
 import Link from "next/link";
@@ -13,7 +14,7 @@ export default function Footer() {
         <div className="flex flex-wrap items-center gap-ds-5">
           <div className="flex items-center gap-2">
             <img
-              src="/blazyy.png"
+              src={asset("/blazyy.png")}
               alt="BlazeResolver"
               className="w-5 h-5 rounded object-contain"
             />

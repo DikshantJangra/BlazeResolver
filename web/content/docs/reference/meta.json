@@ -1,4 +1,1 @@
-{
-  "title": "Reference",
-  "pages": ["cli", "configuration", "environment", "handler", "widget-api", "workflow", "library"]
-}
+{"title": "Reference", "pages": ["cli", "configuration", "environment", "handler", "widget-api", "workflow", "library", "ai-agents"]}

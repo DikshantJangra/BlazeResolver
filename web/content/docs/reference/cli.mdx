@@ -4,10 +4,20 @@ description: Every blazeresolver command and flag.
 ---
 
 ```bash
-npx blazeresolver <command> [options]
+npx blazeresolver@latest <command> [options]
 ```
 
-Run any command from anywhere inside your repo; it finds the repository root itself. `npx blazeresolver` with no command (or `help`) prints the usage.
+Run any command from anywhere inside your repo; it finds the repository root itself.
+
+## Help and version
+
+```bash
+npx blazeresolver --help           # every command, with the options of each
+npx blazeresolver init --help      # one command in detail (also: help init, init -h)
+npx blazeresolver --version        # the installed version
+```
+
+`--help` (or `-h`) after any command prints that command's options and does nothing else, so asking for help never changes your repo, even for `app` or `fix`. With no command, `npx blazeresolver` prints the usage. An unknown command prints the usage to stdout, the error to stderr, and exits `1`.
 
 ## `init`
 
@@ -79,4 +89,4 @@ Run by the workflow, not by you. When a `blazeresolver/fix-*` PR merges, it emai
 
 ## Exit codes
 
-`0` on success. `1` on any error (the message goes to stderr), on an unknown command, or when `harden` had a failed step.
+`0` on success, including `--help` and `--version`. `1` on any error (the message goes to stderr), on an unknown command, or when `harden` had a failed step.

@@ -9,14 +9,14 @@
   font-style: normal;
   font-weight: 300 800;
   font-display: swap;
-  src: url(/fonts/host-grotesk-latin.woff2) format("woff2");
+  src: url("../../../public/fonts/host-grotesk-latin.woff2") format("woff2");
 }
 @font-face {
   font-family: "Fragment Mono";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(/fonts/fragment-mono-latin.woff2) format("woff2");
+  src: url("../../../public/fonts/fragment-mono-latin.woff2") format("woff2");
 }
 
 @theme {

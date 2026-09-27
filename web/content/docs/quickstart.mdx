@@ -13,13 +13,13 @@ This guide sets up BlazeResolver in an existing repo. You need the [GitHub CLI](
 From anywhere inside the repository:
 
 ```bash
-npx blazeresolver init
+npx blazeresolver@latest init
 ```
 
 `init` looks at what each package depends on (not at folder names) to find your frontend and backend, then asks you to confirm. Press Enter to accept, or type another folder. In scripts and CI, pass the answers instead:
 
 ```bash
-npx blazeresolver init --frontend web --backend api --yes
+npx blazeresolver@latest init --frontend web --backend api --yes
 ```
 
 It adds four things and records each change so `remove` can undo exactly that:
@@ -82,7 +82,7 @@ To avoid this setting, and to have your CI run on BlazeResolver's pull requests,
 Every fix must pass a human review. Let GitHub enforce that:
 
 ```bash
-npx blazeresolver harden
+npx blazeresolver@latest harden
 ```
 
 This adds a branch ruleset (pull request plus one approval, no force pushes), a CODEOWNERS block for sensitive paths, read-only Actions defaults, and secret scanning. See [Harden your repo](/docs/setup/harden).

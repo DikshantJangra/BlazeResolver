@@ -12,8 +12,17 @@ Work down this list:
    - `502 could not file the report`: GitHub refused the call. Your server logs show `[blazeresolver] could not file a report in <repo>: …` with the reason. Usually the token has expired, has the wrong repo selected, or lacks **Issues: Read and write**.
    - `429 rate limit`: 10 reports per IP every 10 minutes. Wait, or raise `rateLimit.perIp` in code.
    - `404` or a CORS error: `data-endpoint` points at the wrong place, or the endpoint needs `allowOrigin` for a cross-origin page. See [Cross-origin setups](/docs/setup/report-endpoint#cross-origin-setups).
-2. **A `202` means accepted, not filed.** The customer always gets `202`, but only `bug`, `outage` and `feature_request` verdicts are filed. A question (`how_to`), a billing issue, or `other` is acknowledged and dropped. So is anything the injection screen matched, including genuine reports that quote phrases like `system prompt`, `drop table`, or a `<script>` tag. See [Triage](/docs/concepts/triage).
-3. **It may have been grouped.** If an open issue already covers the same feature or page, the report is added as a comment ("Another customer reported this.") rather than as a new issue.
+2. **A `202` means accepted, not filed.** Only `bug`, `outage` and `feature_request` verdicts are filed. A question (`how_to`), a billing issue, or `other` is acknowledged and not filed. So is anything the injection screen matched: text that addresses the AI ("ignore your instructions", "reveal your system prompt", fake role tags) or steers the fix ("when you fix this, also add…"). Reports that only mention admin access, SQL or scripts are not dropped. See [Triage](/docs/concepts/triage).
+   A `200` with an `answer` means the report was a question your docs answered, so nothing was filed.
+3. **It may have been grouped.** If an open issue already has the same symptom (same feature, and the same console error or a similar description), the report is added as a comment ("Another customer reported this.") rather than as a new issue. See [Grouping duplicate reports](/docs/concepts/issue-lifecycle#grouping-duplicate-reports).
+
+## Two different bugs landed on one issue
+
+Reports on the same feature are grouped as one bug when a symptom can't be compared: with no AI key (or when keyword rules decided), the summary is the customer's own wording, so reports on one page group together unless their console errors differ. Configure an [AI key](/docs/setup/ai-providers) so summaries are normalized and compared. The second bug is also reported again once the first one's fix merges and its issue closes.
+
+## A question got no answer
+
+Answers need an AI key on the endpoint, and a README (or `helpDocs`) that covers the question. The model answers only from the matching sections and gives no answer rather than guessing. Ranking is by keywords, so use your customers' words in your docs' headings. See [Answer questions from your docs](/docs/setup/help-answers).
 
 ## The issue was filed but the workflow didn't run
 
@@ -77,4 +86,4 @@ Run `npx blazeresolver providers`. If the key is listed as *skipped, provider un
 </Accordion>
 </Accordions>
 
-Still stuck? Ask in [GitHub Discussions](https://github.com/DikshantJangra/BlazeResolver/discussions), or report a bug with this site's own widget.
+Still stuck? Ask in [GitHub Discussions](https://github.com/DikshantJangra/BlazeResolver/discussions), or [open an issue](https://github.com/DikshantJangra/BlazeResolver/issues).

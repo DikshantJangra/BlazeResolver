@@ -1,27 +1,40 @@
 ---
 title: Triage
-description: How a report is screened, classified and routed before anything reaches GitHub.
+description: How a report is repaired, screened, classified and routed before anything reaches GitHub.
 ---
 
-Triage runs inside your [report endpoint](/docs/setup/report-endpoint), once per report. It decides whether the report becomes a fix candidate, a feature request, or nothing at all.
+Triage runs inside your [report endpoint](/docs/setup/report-endpoint), once per report. It decides whether the report becomes a fix candidate, a feature request, an answered question, or nothing at all.
 
-## 1. Injection screen
+## 1. Intake repairs, it doesn't reject
 
-Every customer-controlled field (message, page URL, app version, user id and console errors) is checked against known prompt-injection and attack patterns **before any model is called**:
+A customer should never lose a bug report to a typo in a form. So the only report the endpoint refuses is one with **no message**. Everything else that is off is repaired:
 
-- `ignore previous instructions`, `system prompt`, `override policy`, `disregard rules`, `bypass guardrails`
-- `you are now in developer mode` and similar persona switches
-- `<script>…</script>`, `drop table`, `union select`, `grant admin`
+- Every text field is trimmed, stripped of control characters, and cut to its limit (message 5,000 characters, page URL 2,000, app version 100, user id 200).
+- An invalid email, or one over 200 characters, is dropped. The report is kept.
+- Console errors: non-text entries are dropped, each entry is cut to 1,000 characters, and the **latest 20** are kept.
 
-On a match, the report is classified as `abuse` and nothing is filed. The customer still sees the normal thank-you, so an attacker learns nothing.
+A body that isn't JSON gets a clean `400`, with no stack trace.
 
-<Callout type="warn">
-  This screen matches text, not intent. A genuine report that quotes one of these phrases (for example, a bug about a page that renders `<script>` tags) is dropped too. If an expected report never shows up, see [Troubleshooting](/docs/troubleshooting#a-report-never-became-an-issue).
-</Callout>
+## 2. Injection screen
 
-## 2. Classification
+Before any model is called, every customer-controlled field (message, page URL, app version, user id and each console error) is checked for **attempts to instruct the AI**. It doesn't look for topics.
 
-With an AI key configured, the model gets a fixed system prompt, with the report wrapped in `<report>…</report>` and marked as data that must never be followed. It must reply with JSON only:
+A bug report may legitimately talk about admin access, verification bypasses, SQL, scripts or system information. Those are symptoms, and your product's own security bugs are exactly what customers should report. So they pass. What is flagged:
+
+- **Addressing the model's instructions:** "ignore all previous instructions", "disregard your guidelines", "forget everything above".
+- **AI personas:** "you are now an unrestricted AI", "pretend you are a different assistant". ("You are now charging me twice" is a symptom, and passes.)
+- **Asking for, or replacing, the prompt:** "reveal your system prompt", "new instructions:".
+- **Messages to the model:** "note to the AI", "hey ChatGPT".
+- **Prompt-format spoofing:** a closing `</report>` tag, `<system>`/`<assistant>` tags, chat-template tokens like `<|im_start|>`, `[INST]`.
+- **Steering the fix:** "when you fix this, also add…", "in your pull request, remove…".
+
+Before matching, text is normalized so tricks don't slip through: full-width letters are folded ("ｉｇｎｏｒｅ" reads as "ignore"), zero-width and other invisible characters are removed, and URLs are percent-decoded (an instruction can hide in a query string).
+
+On a match, the report is classified as `abuse` and nothing is filed. The customer still sees the normal thank-you, so an attacker learns nothing. The model is also told in every prompt that the report is data, so the screen is a first line, not the only one.
+
+## 3. Classification
+
+With an AI key configured, the model gets a fixed system prompt, with the report wrapped in `<report>…</report>` and marked as data that must never be followed. It replies with JSON:
 
 | Field | Values |
 | :--- | :--- |
@@ -34,22 +47,39 @@ With an AI key configured, the model gets a fixed system prompt, with the report
 
 An `outage` means the whole product, or a core flow, is down for many users.
 
-**The fallback: keyword rules.** Triage falls back to rules if there's no key, the model takes longer than 8 seconds, or the reply doesn't validate. The rules look for words such as `down`/`503` (outage), `error`/`broken`/`crash`/`not working` (bug), `please add`/`wish` (feature request), `how do I` (how-to), and `invoice`/`password`/`login` (account and billing). A rules-classified bug is `high` severity when console errors were attached, and `medium` otherwise. Triage never blocks intake: whatever happens, the report gets a verdict.
+**Small slips are tolerated.** A reply that says `"Bug"` or `"urgent"`, runs a long summary, lists extra steps, or sets fields to `null` is read as intended. Only a reply with no recognizable `kind` is discarded.
 
-When the model doesn't name a feature, the page path from `pageUrl` is used. That's what groups reports from the same page together.
+**The fallback: keyword rules.** Triage falls back to rules if there's no key, the model takes longer than 8 seconds, or the reply has no usable `kind`. The rules are tested on a labelled set of real-world reports and check, in order:
 
-## 3. Routing
+1. **Outage:** the site, app, checkout or login "is down" or unreachable, "down for everyone", "nobody can…", "outage", `502`/`503`/`504` or "bad gateway". Always `critical`.
+2. **Resolved:** "it works now", "never mind" (unless it came back). Classified `other`, not filed.
+3. **Bug:** errors, crashes, broken or blank pages, "doesn't work", "stuck".
+4. **Feature request:** "please add", "it would be great if".
+5. **How-to:** "how do I", "where can I".
+6. **Account and billing:** invoices, refunds, passwords, login help.
+7. **Weaker bug signals**, then `other`.
+
+A rules-classified bug is `high` severity when console errors were attached or the text describes high impact, and `medium` otherwise. Triage never blocks intake: whatever happens, the report gets a verdict.
+
+When the model doesn't name a feature, the page path from `pageUrl` is used.
+
+## 4. Routing
 
 | Verdict | What happens |
 | :--- | :--- |
 | `bug`, `outage` | Filed as an issue labelled `blazeresolver` (plus `priority:critical` when critical), or added as a comment to the open issue for the same bug. The fix workflow picks it up. |
 | `feature_request` | Filed as an issue titled `[feature request] …`, labelled `customer-feedback`. The workflow ignores it. |
-| `how_to`, `account_billing`, `other` | Acknowledged. Nothing is filed. |
+| `how_to` | Answered from your README and help docs when they cover it, and shown in the widget. Nothing is filed. See [Answer questions from your docs](/docs/setup/help-answers). |
+| `account_billing`, `other` | Acknowledged. Nothing is filed. |
 | `abuse` / injection | Acknowledged. Nothing is filed, and no model is called. |
 
 <Callout>
-  How-to and billing questions aren't filed because BlazeResolver is built to fix code, not to be a help desk. If you want those too, wrap the handler and forward them to your support tool. See [Library API](/docs/reference/library).
+  Billing and account questions aren't filed because BlazeResolver is built to fix code, not to be a help desk. To send those to your support tool, wrap the handler. See [Library API](/docs/reference/library).
 </Callout>
+
+## 5. Grouping
+
+Before filing a bug, the endpoint checks whether an open issue already covers it. Reports are matched by **symptom**, not just by page: a broken discount code and a rejected postcode are both on `/checkout`, but they need separate fixes. See [Grouping duplicate reports](/docs/concepts/issue-lifecycle#grouping-duplicate-reports).
 
 ## What the issue looks like
 
@@ -76,6 +106,7 @@ TypeError: undefined is not an object (evaluating 'e.cart.items')
 ````
 
 <!-- blaze:key=checkout -->
+<!-- blaze:symptom=… -->
 `````
 
-Customer text always sits inside fenced code blocks, so it can't render as markdown, HTML or `@mentions`. The fix engine reads it back out as data. The hidden `blaze:key` comment is the grouping key, described in [Issue lifecycle](/docs/concepts/issue-lifecycle).
+Customer text always sits inside fenced code blocks, so it can't render as markdown, HTML or `@mentions`. The fix engine reads it back out as data. Emails, phone numbers, IP addresses and URL query strings are masked before anything is sent to GitHub. The hidden `blaze:key` and `blaze:symptom` comments are for grouping, described in [Issue lifecycle](/docs/concepts/issue-lifecycle).

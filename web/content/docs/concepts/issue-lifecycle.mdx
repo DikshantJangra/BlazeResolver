@@ -23,20 +23,32 @@ description: How a BlazeResolver issue moves from filed to fixed, and how duplic
 
 ## Grouping duplicate reports
 
-When one bug hits many customers, you want one issue and one fix, not twenty. Each issue carries a hidden grouping key, built from the triaged `feature` (or the summary, when there isn't one) as a lowercase slug:
+When one bug hits many customers, you want one issue and one fix, not twenty. But grouping by page alone is too coarse: a broken discount code and a rejected postcode are both on `/checkout`, and they need separate fixes. Exact wording is too fine: "Pay button does nothing" and "clicking pay does nothing" are one bug. So BlazeResolver groups by **symptom**.
+
+Each issue records the symptom of its first report in a hidden comment:
 
 ```html
 <!-- blaze:key=checkout -->
+<!-- blaze:symptom=… -->
 ```
 
-When a new `bug` or `outage` report arrives, the endpoint looks through open issues labelled `blazeresolver` for the same key:
+A symptom is the affected **feature** (or page), the first **console error** with its volatile parts removed (URLs, file names and line numbers, ids, numbers), and the distinctive **words** of the summary. When a new `bug` or `outage` report arrives, the endpoint compares it with every open issue labelled `blazeresolver`:
 
-- **Found:** it adds a comment, `Another customer reported this.`, followed by that customer's report.
-- **Not found:** it opens a new issue.
+1. **Different feature:** a different bug.
+2. **Both have a console error:** the same bug exactly when the errors match. `TypeError: x is undefined at https://a.example/app.js:10:4` from one build and the same error from another build match.
+3. **Same feature, and either summary is the customer's own wording** (no model, or the rules decided): the same bug. Raw wording varies too much to compare, and splitting one bug into several issues would mean duplicate fixes.
+4. **Both summaries were written by the model:** the same bug when they share at least a third of their distinctive words.
+
+Then:
+
+- **Match:** the endpoint adds a comment, `Another customer reported this.`, followed by that customer's report.
+- **No match:** it opens a new issue.
+
+Issues filed before symptom markers existed carry only the `blaze:key` marker, and are still matched by it.
 
 The fix job counts those comments. The PR and its audit comment say how many customers reported the bug. Customers are only ever counted on GitHub, never identified.
 
-Once the issue is closed, the next report with the same key opens a fresh issue. That's deliberate: a bug that comes back after a fix is a new incident.
+Once the issue is closed, the next report of the same symptom opens a fresh issue. That's deliberate: a bug that comes back after a fix is a new incident. A second, different bug on the same page is reported again after the first one's fix merges.
 
 ## Labels
 

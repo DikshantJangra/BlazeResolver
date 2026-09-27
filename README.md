@@ -15,6 +15,12 @@
   <a href="https://github.com/DikshantJangra/BlazeResolver/actions/workflows/ci.yml"><img src="https://github.com/DikshantJangra/BlazeResolver/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 </p>
 
+<p align="center">
+  <a href="https://dikshantjangra.github.io/BlazeResolver/docs/"><strong>Documentation</strong></a> ·
+  <a href="https://dikshantjangra.github.io/BlazeResolver/llms.txt">llms.txt for AI agents</a> ·
+  <code>npx blazeresolver --help</code>
+</p>
+
 ---
 
 ## How it works
@@ -33,7 +39,7 @@
 ```
 
 1. **Report.** A small widget in your app. The customer says what broke; the page address and recent JavaScript errors come along.
-2. **Triage.** One route in your own backend screens for prompt injection, has AI triage the report, and files real bugs as GitHub issues. The same bug reported again becomes a comment on the existing issue, not a new one.
+2. **Triage.** One route in your own backend screens for attempts to instruct the AI, has AI triage the report, and files real bugs as GitHub issues. Reports of the same symptom become comments on the existing issue, not new ones. How-to questions are answered from your README and help docs, right in the widget.
 3. **Fix.** The issue starts a workflow in your repo. On GitHub's runner the fix engine maps your codebase, finds the root cause, patches it, and runs your tests and build, up to three attempts.
 4. **Review.** A pull request with the root cause, the evidence and the test output, closing the issue. Nothing merges without a human. When no fix passes, the findings go on the issue for a person instead.
 
@@ -115,7 +121,10 @@ npm install
 npm test            # unit and end-to-end tests
 npm run typecheck
 npm run demo:fix    # the fix engine on a sample repo, end to end
+npm run dev         # the support desk preview: API on :3001, dashboard on http://127.0.0.1:5173
 ```
+
+The support desk is an early local preview, separate from the GitHub-native flow: no authentication, in-memory demo data. Don't deploy it. See the [docs](https://github.com/DikshantJangra/BlazeResolver/tree/main/web/content/docs/support-desk.mdx).
 
 ## License
 

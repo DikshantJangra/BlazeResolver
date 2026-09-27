@@ -1,0 +1,41 @@
+---
+title: For AI agents
+description: The docs as plain Markdown (llms.txt, one file with everything, or one page at a time), and the CLI's built-in help.
+---
+
+Coding agents and LLM tools read Markdown more reliably than a rendered website. Every page of these docs is also published as plain Markdown, generated from the same source at build time.
+
+| URL | What it is |
+| :--- | :--- |
+| [`/llms.txt`](/llms.txt) | The index, following the [llms.txt](https://llmstxt.org) convention: what BlazeResolver is, then every page with its description and a link to its Markdown, in sidebar order |
+| [`/llms-full.txt`](/llms-full.txt) | All the docs in one Markdown file, for loading into a context window |
+| `/md/<page>.md` | One page, for example [`/md/quickstart.md`](/md/quickstart.md) or [`/md/setup/init.md`](/md/setup/init.md). The introduction is `/md/index.md`. |
+
+In the Markdown, links between pages point at the other pages' Markdown, so an agent can follow them. The site's components are rewritten as plain Markdown: callouts as quotes, tabs as bold labels, cards as a list.
+
+Every docs page also has a **View as Markdown** link at the bottom, and declares its Markdown version in the page head, so a tool that starts from the HTML finds it too:
+
+```html
+<link rel="alternate" type="text/markdown" href="/md/quickstart.md" />
+```
+
+## Give it to your agent
+
+Point the agent at the index and let it pick pages:
+
+```text
+Read https://dikshantjangra.github.io/BlazeResolver/llms.txt, then set up BlazeResolver in this repo.
+```
+
+Or load everything at once from `/llms-full.txt` (about 125 KB).
+
+## The CLI explains itself
+
+Agents running the CLI don't need the docs for the options:
+
+```bash
+npx blazeresolver --help            # every command and its options
+npx blazeresolver <command> --help  # one command in detail, and it changes nothing
+```
+
+In scripts and agent runs, skip the questions with `init --backend <folder> --frontend <folder> --yes`. See the [CLI reference](/docs/reference/cli).

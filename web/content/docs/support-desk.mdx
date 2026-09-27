@@ -1,0 +1,44 @@
+---
+title: Support desk (preview)
+description: An agent desk and customer portal you can run locally from the BlazeResolver repo. Early preview, not for production.
+---
+
+<Callout type="warn" title="Preview: run it locally only">
+  The support desk is early work. It has **no authentication**, keeps everything **in memory**, and starts with **demo data**. Its API server listens on every network interface, so on a shared network other people can read and change its tickets. Don't deploy it, and don't put real customer data in it.
+</Callout>
+
+The support desk is separate from the GitHub-native flow. `npx blazeresolver init` doesn't install it, and the widget, endpoint and fix workflow don't need it. It lives in the BlazeResolver repository as a local app: an Express server (`src/server.ts`) and a React dashboard (`client/`).
+
+## Run it
+
+```bash
+git clone https://github.com/DikshantJangra/BlazeResolver.git
+cd BlazeResolver
+npm install
+npm run dev
+```
+
+This starts the API server on port 3001 and the dashboard on [http://127.0.0.1:5173](http://127.0.0.1:5173), which proxies `/api` to the server. Choose **Support Desk & Portal** at the top of the dashboard. New tickets are classified by the example pipeline's keyword rules, so no AI key is needed.
+
+## What's in it
+
+**Agent desk**
+
+- **Ticket feed:** filter by status, priority and category, and search.
+- **Conversation thread:** the customer's messages and your replies, updated live over a WebSocket.
+- **Customer context:** the customer's details, and the order the ticket is about.
+- **Draft reply:** fills in a suggested reply for the ticket's situation (delay, credit, summary or general). These are templates for now, not model-written.
+- **Take over, escalate, close:** mark a ticket as handled by a person, escalate it with a reason, or close it with a resolution.
+- **Canned responses:** saved replies you can create, edit, delete, and set as an automatic reply.
+- **Ratings and attachments** on each ticket.
+
+**Customer portal**
+
+Switch to the customer view from the desk's header to see the other side: a customer opens a ticket, follows the conversation, and rates the help they got.
+
+## Limits
+
+- **In memory.** Restarting the server discards every ticket, message and rating.
+- **Demo data.** It starts with sample tickets from a food-delivery example (outlets, orders, amounts in rupees). The data model follows that example.
+- **No authentication** on the support routes (`/api/support/…`). Anyone who can reach port 3001 can list, change and close tickets, including customers' names, emails and phone numbers.
+- **Not connected to GitHub.** Tickets here don't become issues. For bug reports that turn into pull requests, use the [widget and endpoint](/docs/quickstart).

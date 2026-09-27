@@ -14,7 +14,7 @@ We assume a customer report can be **fully adversarial**: a crafted message that
 | Layer | What it does |
 | :--- | :--- |
 | **Split privileges** | The internet-facing endpoint holds an Issues-only token for one repo. It can't read code or push. The code-writing credentials exist only on the GitHub runner. |
-| **Injection screen** | Known injection and attack patterns are dropped at the endpoint before any model sees them. |
+| **Injection screen** | Reports that try to instruct the AI (addressing its instructions, fake role tags, steering the fix) are dropped at the endpoint before any model sees them. Text is normalized first: full-width letters folded, invisible characters removed, URLs decoded. |
 | **Data, not instructions** | Customer text is wrapped as data in every prompt, fenced in the issue so it can't render as markdown or `@mention` anyone, and stripped of markers before the fix engine reads it. |
 | **Trusted trigger** | The fix job only runs for issues labelled `blazeresolver` **and** opened by an owner, member or collaborator. The labels that mean "already handled" stop re-runs. |
 | **No tools for the model** | The model never gets a shell, a token, a clone or network access. It returns JSON, and the harness applies the edits. |
@@ -33,7 +33,8 @@ We assume a customer report can be **fully adversarial**: a crafted message that
 - **Customer identity.** Reports can carry a `userId` and `email`. User ids aren't written to the issue. Emails are only stored when you set `BLAZE_NOTIFY_CUSTOMERS=true`, and then only base64-encoded in a hidden HTML comment, so use a **private** repo for that. On GitHub, customers are counted, never named.
 - **Where text goes.** The report text (and console errors) goes to your AI provider for triage, and the issue body goes to your provider during the fix. Choose providers whose data terms fit your users.
 - **Console errors** can contain URLs or ids from your app. The reporter can untick them before sending.
-- **Commit messages** are scrubbed of anything that looks like personal data before commit.
+- **Personal data on GitHub.** Before an issue, comment, pull request or commit message is written, emails, phone and card numbers, IP addresses and URL query strings are masked. Names or street addresses written in free text are not caught, so keep the repo private if your customers write those.
+- **Answers from your docs.** For how-to questions, the question and the matching sections of your README and help docs go to your AI provider.
 
 ## What stays your responsibility
 
