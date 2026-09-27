@@ -87,7 +87,10 @@ interface Index {
 }
 
 function buildIndex(docs: string): Index {
-  const chunks = chunkDocs(docs);
+  return indexChunks(chunkDocs(docs));
+}
+
+function indexChunks(chunks: Chunk[]): Index {
   const terms = chunks.map((c) => {
     const counts = new Map<string, number>();
     // Headings count twice: they say what a section is about.
@@ -151,11 +154,50 @@ export function retrieve(docs: string, question: string, k = 4): Chunk[] {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// Sources: the docs, by where they came from
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Docs from one place: `readme`, `help-docs`, `saved-replies`, `file:docs/guide.md`. */
+export interface DocSource {
+  name: string;
+  text: string;
+}
+
+/** A section, with the source it came from. */
+export interface SourcedChunk extends Chunk {
+  source: string;
+}
+
+/**
+ * Each source is split on its own, so a README's headings never nest under the help docs' last one, and every section
+ * knows where it came from.
+ */
+function sourceChunks(sources: DocSource[]): SourcedChunk[] {
+  return sources.flatMap((s) => chunkDocs(s.text).map((c) => ({ ...c, source: s.name })));
+}
+
+const sourceIndexes = new Map<string, { index: Index; chunks: SourcedChunk[] }>();
+function indexForSources(sources: DocSource[]): { index: Index; chunks: SourcedChunk[] } {
+  const key = sources.map((s) => `${s.name}\u0000${s.text}`).join('\u0001');
+  let hit = sourceIndexes.get(key);
+  if (!hit) {
+    if (sourceIndexes.size >= 20) sourceIndexes.delete(sourceIndexes.keys().next().value!);
+    const chunks = sourceChunks(sources);
+    hit = { index: indexChunks(chunks), chunks };
+    sourceIndexes.set(key, hit);
+  }
+  return hit;
+}
+
+// An empty source is kept: syncing it clears that source from the vector database (every saved reply was deleted).
+const asSources = (docs: string | DocSource[]): DocSource[] => (typeof docs === 'string' ? [{ name: 'docs', text: docs }] : docs);
+
+// ---------------------------------------------------------------------------------------------------------------
 // Semantic ranking
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
- * Section vectors, by embedder and section text, so editing one section of the docs only embeds that section again.
+ * Section vectors kept in memory when there's no vector database (no writable disk): by embedder and section text.
  * Unit length, so cosine similarity is a dot product. A failed embedding is dropped, to be tried again.
  */
 const vectors = new Map<string, Promise<number[]>>();
@@ -184,96 +226,27 @@ function markDown(embedder: Embedder, err: unknown) {
   downUntil.set(embedder.id, Date.now() + DOWN_MS);
 }
 
-/** Forgets the vectors kept in memory, as a restart would; a vector store still has them. */
+/** Forgets what's kept in memory (vectors, and which sources are in sync), as a restart would. The database keeps its own. */
 export function clearVectorCache(): void {
   vectors.clear();
   downUntil.clear();
+  synced = new WeakMap();
 }
 
-export interface IndexResult {
-  /** Sections the docs split into. */
-  sections: number;
-  /** Sections embedded now: new, or changed since they were last embedded. */
-  embedded: number;
-  /** Sections whose vectors were already in the store. */
-  reused: number;
-}
-
-/**
- * Builds the vector database for `docs` now, rather than on the first question: every section's vector is read from the
- * store or embedded, and written to the store before this returns. Throws when the embedder or the store fails, so a
- * caller (the `index` command) can say so.
- */
-export async function indexDocs(docs: string, options: { embedder: Embedder; store?: VectorStore }): Promise<IndexResult> {
-  const { embedder, store } = options;
-  const chunks = indexFor(docs).chunks;
-  const keys = [...new Set(chunks.map((c) => `${embedder.id}\u0000${chunkText(c)}`))];
-  const texts = keys.map((key) => key.slice(key.indexOf('\u0000') + 1));
-  const ids = await Promise.all(keys.map(vectorId));
-  const stored = store ? await store.get(ids) : new Map<string, number[]>();
-  const todo = keys.map((_, n) => n).filter((n) => !stored.has(ids[n]));
-  const embedded = todo.length ? await embedder.embed(todo.map((n) => texts[n]), 'document') : [];
-  const fresh = todo.map((n, j) => ({ id: ids[n], embedder: embedder.id, text: texts[n], vector: unit(embedded[j]) }));
-  if (store && fresh.length) await store.set(fresh);
-  // Searches in this process use them straight away.
-  keys.forEach((key, n) => {
-    const vector = stored.get(ids[n]) ?? fresh.find((f) => f.id === ids[n])!.vector;
-    vectors.set(key, Promise.resolve(unit(vector)));
-  });
-  return { sections: keys.length, embedded: fresh.length, reused: keys.length - fresh.length };
-}
-
-/** A stable id for a section's vector: a hash of the embedder and the text, so any change gets a new one. */
-async function vectorId(key: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+/** A stable id for a section: a hash of the embeddings model and the section, so any change gets a new one. */
+async function sectionId(embedder: Embedder, c: Chunk): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${embedder.id}\u0000${chunkText(c)}`));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Stores that just failed, so each failure is logged once rather than on every question. */
-const failingStores = new WeakSet<VectorStore>();
-function storeFailed(store: VectorStore, action: string, err: unknown) {
-  if (failingStores.has(store)) return;
-  failingStores.add(store);
-  console.warn(`[blazeresolver] vector store could not ${action}, embedding in memory instead: ${err instanceof Error ? err.message : err}`);
-}
-
-/**
- * Vectors for every chunk. Those not in memory are read from the store, and only the rest are embedded, in one call,
- * then written back to it. The store is never required: when it fails, vectors are embedded and kept in memory.
- */
-function chunkVectors(chunks: Chunk[], embedder: Embedder, store?: VectorStore): Promise<number[][]> {
+/** In memory, without a vector database: every section's vector, embedding those not yet embedded in one call. */
+function memoryVectors(chunks: Chunk[], embedder: Embedder): Promise<number[][]> {
   const keys = chunks.map((c) => `${embedder.id}\u0000${chunkText(c)}`);
   const missing = [...new Set(keys.filter((key) => !vectors.has(key)))];
   if (missing.length) {
-    const fetched = (async () => {
-      const texts = missing.map((key) => key.slice(key.indexOf('\u0000') + 1));
-      const ids = store ? await Promise.all(missing.map(vectorId)) : [];
-      let stored = new Map<string, number[]>();
-      if (store) {
-        try {
-          stored = await store.get(ids);
-          failingStores.delete(store);
-        } catch (err) {
-          storeFailed(store, 'be read', err);
-        }
-      }
-      const todo = missing.map((_, n) => n).filter((n) => !stored.has(ids[n]));
-      const embedded = todo.length ? await embedder.embed(todo.map((n) => texts[n]), 'document') : [];
-      const out = new Map<string, number[]>();
-      missing.forEach((key, n) => {
-        const vector = stored.get(ids[n]);
-        if (vector) out.set(key, vector);
-      });
-      todo.forEach((n, j) => out.set(missing[n], unit(embedded[j])));
-      if (store && todo.length) {
-        store
-          .set(todo.map((n) => ({ id: ids[n], embedder: embedder.id, text: texts[n], vector: out.get(missing[n])! })))
-          .catch((err) => storeFailed(store, 'be written', err));
-      }
-      return out;
-    })();
-    missing.forEach((key) => {
-      const vector = fetched.then((all) => unit(all.get(key)!));
+    const batch = embedder.embed(missing.map((key) => key.slice(key.indexOf('\u0000') + 1)), 'document');
+    missing.forEach((key, n) => {
+      const vector = batch.then((all) => unit(all[n]));
       vector.catch(() => {
         if (vectors.get(key) === vector) vectors.delete(key);
       });
@@ -284,23 +257,85 @@ function chunkVectors(chunks: Chunk[], embedder: Embedder, store?: VectorStore):
   return Promise.all(keys.map((key) => vectors.get(key)!));
 }
 
-/** Sections at least `minSimilarity` like the question, most alike first. */
-async function rankSemantic(index: Index, question: string, embedder: Embedder, minSimilarity: number, store?: VectorStore): Promise<Ranked[]> {
-  const [docVectors, [query]] = await Promise.all([chunkVectors(index.chunks, embedder, store), embedder.embed([question], 'query')]);
-  const q = unit(query);
-  return docVectors
-    .map((v, i) => ({ i, score: dot(q, v) }))
-    .filter((r) => r.score >= minSimilarity)
-    .sort((a, b) => b.score - a.score);
+// ---------------------------------------------------------------------------------------------------------------
+// The vector database
+// ---------------------------------------------------------------------------------------------------------------
+
+export interface SyncResult {
+  /** Sections the sources hold. */
+  sections: number;
+  /** Sections embedded now: new, or changed since they were last embedded. */
+  embedded: number;
+  /** Sections whose vectors the database already had. */
+  reused: number;
+  /** Sections the database dropped because the docs no longer have them. */
+  removed: number;
+}
+
+/** Which version of each source every store is in sync with, and syncs in progress, so each happens once. */
+let synced = new WeakMap<VectorStore, Map<string, { signature: string; done: Promise<SyncResult> }>>();
+
+/**
+ * Puts the sources into the vector database: every section is stored under its source, with a vector reused from the
+ * database or embedded now, and sections a source no longer has are deleted. A source already in sync is skipped, so
+ * this is cheap to call before every query. Throws when the embedder or the store fails.
+ */
+export async function syncSources(sources: DocSource[], options: { embedder: Embedder; store: VectorStore }): Promise<SyncResult> {
+  const { embedder, store } = options;
+  let perStore = synced.get(store);
+  if (!perStore) synced.set(store, (perStore = new Map()));
+  const results = await Promise.all(
+    sources.map(async (source) => {
+      const chunks = chunkDocs(source.text);
+      const ids = await Promise.all(chunks.map((c) => sectionId(embedder, c)));
+      const signature = `${embedder.id}\u0000${ids.join(',')}`;
+      const current = perStore!.get(source.name);
+      if (current?.signature === signature) {
+        await current.done;
+        return { sections: chunks.length, embedded: 0, reused: chunks.length, removed: 0 };
+      }
+      const done = syncSource(source.name, chunks, ids, embedder, store);
+      perStore!.set(source.name, { signature, done });
+      done.catch(() => {
+        if (perStore!.get(source.name)?.done === done) perStore!.delete(source.name);
+      });
+      return done;
+    })
+  );
+  return results.reduce((a, r) => ({ sections: a.sections + r.sections, embedded: a.embedded + r.embedded, reused: a.reused + r.reused, removed: a.removed + r.removed }), {
+    sections: 0,
+    embedded: 0,
+    reused: 0,
+    removed: 0
+  });
+}
+
+async function syncSource(source: string, chunks: Chunk[], ids: string[], embedder: Embedder, store: VectorStore): Promise<SyncResult> {
+  const unique = [...new Map(ids.map((id, n) => [id, chunks[n]])).entries()];
+  const stored = await store.get(unique.map(([id]) => id));
+  const todo = unique.filter(([id]) => !stored.has(id));
+  const embedded = todo.length ? await embedder.embed(todo.map(([, c]) => chunkText(c)), 'document') : [];
+  const fresh = new Map(todo.map(([id], j) => [id, unit(embedded[j])]));
+  await store.upsert(
+    unique.map(([id, c]) => ({ id, source, embedder: embedder.id, headings: c.headings, text: c.text, vector: stored.get(id) ?? fresh.get(id)! }))
+  );
+  const removed = await store.prune(source, unique.map(([id]) => id));
+  return { sections: unique.length, embedded: todo.length, reused: unique.length - todo.length, removed };
 }
 
 export interface SearchOptions {
   /** How many sections to return. Default 4. */
   k?: number;
-  /** Adds semantic ranking. Without one, `search` is `retrieve`. */
+  /** Adds semantic ranking. Without one, `search` is keyword ranking alone. */
   embedder?: Embedder;
-  /** Keeps section vectors across restarts and instances. Without one, they're kept in memory only. */
+  /**
+   * The vector database: sections are kept in it and retrieved from it by similarity, including sections of sources
+   * this call wasn't given (docs indexed with `blazeresolver index --docs`). Without one, sections are embedded and
+   * ranked in memory.
+   */
   store?: VectorStore;
+  /** Sources in the database to leave out of this search. */
+  exclude?: string[];
   /**
    * How long to wait for embeddings before answering from keywords alone. Default 4s. The docs keep being embedded
    * in the background, so the next question gets the semantic ranking.
@@ -313,41 +348,69 @@ export interface SearchOptions {
 /** Reciprocal rank fusion's constant: how much the top few places count over the rest. */
 const RRF_K = 60;
 
+/** A section's identity across rankings: its headings and text. */
+const keyOf = (c: Chunk) => chunkText(c);
+
+/** Semantic matches, best first: from the vector database when there is one, else ranked in memory. */
+async function semanticMatches(chunks: SourcedChunk[], sources: DocSource[], question: string, embedder: Embedder, options: SearchOptions, k: number, minSimilarity: number): Promise<SourcedChunk[]> {
+  const queryVector = embedder.embed([question], 'query').then(([v]) => unit(v));
+  const store = options.store;
+  if (store) {
+    // RAG over the vector database: the sources are brought in sync, then the database finds the nearest sections.
+    const [q] = await Promise.all([queryVector, syncSources(sources, { embedder, store })]);
+    const matches = await store.query(q, { embedder: embedder.id, k: k * 3, minScore: minSimilarity, exclude: options.exclude });
+    return matches.map((m) => ({ headings: m.headings, text: m.text, source: m.source }));
+  }
+  const [q, docVectors] = await Promise.all([queryVector, memoryVectors(chunks, embedder)]);
+  return docVectors
+    .map((v, i) => ({ i, score: dot(q, v) }))
+    .filter((r) => r.score >= minSimilarity)
+    .sort((a, b) => b.score - a.score)
+    .map((r) => chunks[r.i]);
+}
+
 /**
- * The `k` sections that best match the question, best first: keyword and semantic rankings fused, or keywords alone
- * without an embedder or when it fails. Empty when nothing matches either way.
+ * The `k` sections that best match the question, best first: keyword and semantic rankings fused (reciprocal rank
+ * fusion), or keywords alone without an embedder or when it fails. With a vector database, the semantic ranking is the
+ * database's nearest neighbours. Empty when nothing matches either way.
  */
-export async function search(docs: string, question: string, options: SearchOptions = {}): Promise<Chunk[]> {
+export async function search(docs: string | DocSource[], question: string, options: SearchOptions = {}): Promise<Chunk[]> {
   const k = options.k ?? 4;
-  const index = indexFor(docs);
-  const lexical = rankLexical(index, question);
+  const sources = asSources(docs);
+  const { index, chunks } = indexForSources(sources);
+  const lexical = rankLexical(index, question).map((r) => chunks[r.i]);
   const embedder = options.embedder;
-  if (!embedder || !index.chunks.length || (downUntil.get(embedder.id) ?? 0) > Date.now()) {
-    return lexical.slice(0, k).map((r) => index.chunks[r.i]);
+  const plain = (c: SourcedChunk): Chunk => ({ headings: c.headings, text: c.text });
+  if (!embedder || (!chunks.length && !options.store) || (downUntil.get(embedder.id) ?? 0) > Date.now()) {
+    return lexical.slice(0, k).map(plain);
   }
 
   const envMin = Number((globalThis as any).process?.env?.BLAZE_EMBED_MIN_SIMILARITY);
   const minSimilarity = options.minSimilarity ?? (Number.isFinite(envMin) && envMin > 0 ? envMin : 0.25);
-  let semantic: Ranked[] = [];
+  let semantic: SourcedChunk[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error('embeddings timed out')), options.timeoutMs ?? 4_000);
     });
-    semantic = await Promise.race([rankSemantic(index, question, embedder, minSimilarity, options.store), timeout]);
+    semantic = await Promise.race([semanticMatches(chunks, sources, question, embedder, options, k, minSimilarity), timeout]);
   } catch (err) {
-    // A timeout only means the docs are still being embedded; anything else is the provider failing.
+    // A timeout only means the docs are still being embedded; anything else is the provider (or database) failing.
     if (!(err instanceof Error && err.message === 'embeddings timed out')) markDown(embedder, err);
   } finally {
     clearTimeout(timer);
   }
 
-  const fused = new Map<number, number>();
+  const fused = new Map<string, { chunk: SourcedChunk; score: number }>();
   for (const ranking of [lexical, semantic]) {
-    ranking.slice(0, k * 3).forEach((r, rank) => fused.set(r.i, (fused.get(r.i) ?? 0) + 1 / (RRF_K + rank + 1)));
+    ranking.slice(0, k * 3).forEach((c, rank) => {
+      const key = keyOf(c);
+      const hit = fused.get(key);
+      fused.set(key, { chunk: hit?.chunk ?? c, score: (hit?.score ?? 0) + 1 / (RRF_K + rank + 1) });
+    });
   }
-  return [...fused]
-    .sort((a, b) => b[1] - a[1])
+  return [...fused.values()]
+    .sort((a, b) => b.score - a.score)
     .slice(0, k)
-    .map(([i]) => index.chunks[i]);
+    .map((f) => plain(f.chunk));
 }

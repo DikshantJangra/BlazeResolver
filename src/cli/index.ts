@@ -49,11 +49,13 @@ Docs: https://github.com/DikshantJangra/BlazeResolver#readme`;
 const COMMAND_HELP: Record<string, string> = {
   index: `blazeresolver index: build the vector database Blazzy answers from
 
-Usage: npx blazeresolver index [--docs <file>]...
+Usage: npx blazeresolver index [--docs <file>]... [--prune]
 
 Embeds your README (the one at the root of this repo, else your repo's on GitHub) and any --docs files, and stores the
 vectors in .blazeresolver/vectors.db (git-ignored; BLAZE_VECTOR_DB moves it). Only new or changed sections are
 embedded, so re-run it whenever your docs change, or in your build. The handlers also build it on their first request.
+Each --docs file is its own source that Blazzy retrieves from, even when no handler is given it; --prune deletes
+files indexed before that this run wasn't given.
 Needs a key for a provider with embeddings (OpenAI, Gemini, Voyage, Mistral, Cohere, NVIDIA).`,
   doctor: `blazeresolver doctor: check this installation
 
@@ -225,14 +227,14 @@ try {
     const dotenv = await import('dotenv');
     // Next.js apps keep keys in .env.local; neither file overrides what's already set.
     for (const path of ['.env.local', '.env']) dotenv.config({ path, quiet: true });
-    const { values } = parseArgs({ args: rest, options: { docs: { type: 'string', multiple: true } } });
+    const { values } = parseArgs({ args: rest, options: { docs: { type: 'string', multiple: true }, prune: { type: 'boolean' } } });
     let repo: string | undefined;
     try {
       repo = config().repo;
     } catch {
       repo = detectRepo(repoRoot(process.cwd()));
     }
-    console.log(await runIndexCommand({ repo, docs: values.docs }));
+    console.log(await runIndexCommand({ repo, docs: values.docs, prune: values.prune }));
   } else if (command === 'doctor') {
     const checks = await runDoctor({ cwd: process.cwd() });
     for (const check of checks) console.log(`${check.status === 'ok' ? 'OK' : check.status.toUpperCase()} ${check.name}: ${check.detail}`);

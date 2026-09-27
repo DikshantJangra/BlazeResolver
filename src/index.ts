@@ -14,10 +14,10 @@ export { resolveComplete, describeProviders, identifyKey, listProviders, Provide
 export type { Complete } from './triage/providers.js';
 export { resolveEmbedder, listEmbedProviders } from './answer/embed.js';
 export type { Embedder, EmbedKind, EmbedOptions } from './answer/embed.js';
-export { retrieve, search } from './answer/retrieve.js';
+export { retrieve, search, syncSources } from './answer/retrieve.js';
 export { defaultVectorStore, localVectorStore, sqliteVectorStore, postgresVectorStore } from './answer/vector-store.js';
-export type { VectorStore, StoredVector, SqliteDatabase } from './answer/vector-store.js';
-export type { Chunk, SearchOptions } from './answer/retrieve.js';
+export type { VectorStore, StoredSection, SectionMatch, QueryOptions, SqliteDatabase } from './answer/vector-store.js';
+export type { Chunk, SearchOptions, DocSource, SyncResult } from './answer/retrieve.js';
 
 // The fix engine: investigate an incident, patch it in an isolated workspace, run the tests and build, open a PR.
 export { runFix } from './jobs/fix.js';

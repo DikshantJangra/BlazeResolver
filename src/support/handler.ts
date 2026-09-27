@@ -1,10 +1,10 @@
 import { SupportStore, type SupportTicket, type SupportMessage } from './index.js';
-import { retrieve, search, type Chunk } from '../answer/retrieve.js';
-import { identity, loadDocs, productName, vectorWarmer } from '../answer/index.js';
+import { retrieve, search, type Chunk, type DocSource } from '../answer/retrieve.js';
+import { identity, loadSources, productName, vectorWarmer } from '../answer/index.js';
 import { resolveEmbedder, type Embedder } from '../answer/embed.js';
 export { resolveEmbedder, type Embedder, type EmbedKind } from '../answer/embed.js';
 import { defaultVectorStore, type VectorStore } from '../answer/vector-store.js';
-export { defaultVectorStore, localVectorStore, sqliteVectorStore, postgresVectorStore, type VectorStore, type StoredVector } from '../answer/vector-store.js';
+export { defaultVectorStore, localVectorStore, sqliteVectorStore, postgresVectorStore, type VectorStore, type StoredSection, type SectionMatch } from '../answer/vector-store.js';
 import { resolveComplete, type Complete } from '../triage/index.js';
 
 export interface SupportHandlerOptions {
@@ -153,10 +153,15 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
     ? { repo: options.repo, token: options.githubToken ?? env.BLAZE_GITHUB_TOKEN, fetch: options.fetch }
     : undefined;
 
-  /** Everything Blazzy answers from: the help docs, the README and the saved replies. */
-  const knowledge = async () =>
-    [await loadDocs({ helpDocs: options.helpDocs, readme, readmePath: options.readmePath }), savedRepliesDoc(store)].filter(Boolean).join('\n\n');
-  /** The sections of the knowledge that best match `text`. */
+  /**
+   * Everything Blazzy answers from, by source: the desk's help docs (under their own name, so the widget endpoint's
+   * help docs are never overwritten by these), the README, and the saved replies, which agents can edit at any time.
+   */
+  const knowledge = async (): Promise<DocSource[]> => [
+    ...(await loadSources({ helpDocs: options.helpDocs, readme, readmePath: options.readmePath, helpDocsSource: 'help-docs:support' })),
+    { name: 'saved-replies', text: savedRepliesDoc(store) }
+  ];
+  /** The sections that best match `text`: retrieved from the vector database, with keyword matches. */
   const searchKnowledge = async (text: string, k = 4): Promise<Chunk[]> => search(await knowledge(), text, { k, embedder, store: vectorStore });
   const warm = vectorWarmer(knowledge, embedder, vectorStore, options.embed !== false);
 

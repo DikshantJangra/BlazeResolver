@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadDocs, vectorWarmer } from '../answer/index.js';
-import { clearVectorCache, search } from '../answer/retrieve.js';
+import { clearVectorCache, search, syncSources } from '../answer/retrieve.js';
 import { localVectorStore, postgresVectorStore, sqliteVectorStore, type SqliteDatabase, type VectorStore } from '../answer/vector-store.js';
 import type { Embedder } from '../answer/embed.js';
 import { createSupportHandler, SupportStore } from '../support/index.js';
@@ -98,13 +98,30 @@ function countingEmbedder(id: string) {
 const DOCS = '# Shop\n\n## Returns\n\nReturns and refunds within 30 days.\n\n## Shipping\n\nWe deliver in 2 days.\n\n## Account\n\nReset your password from the login page.';
 
 describe('vector stores', () => {
-  it('SQLite keeps vectors as float32 and gives them back by id', async () => {
-    const store = sqliteVectorStore(new DatabaseSync(':memory:'));
-    await store.set([{ id: 'a', embedder: 'e', text: 't', vector: [0.5, -0.25, 1] }]);
-    await store.set([{ id: 'a', embedder: 'e', text: 't', vector: [1, 0, 0] }]);
-    const found = await store.get(['a', 'missing']);
-    assert.deepEqual([...found.keys()], ['a']);
-    assert.deepEqual(found.get('a'), [1, 0, 0]);
+  const section = (id: string, source: string, vector: number[], text = `text ${id}`) => ({ id, source, embedder: 'e', headings: ['Doc', id], text, vector });
+
+  it('SQLite is a vector database: it keeps sections by source and ranks them by similarity itself', async () => {
+    const db = new DatabaseSync(':memory:');
+    const store = sqliteVectorStore(db);
+    await store.upsert([section('a', 'readme', [1, 0, 0]), section('b', 'readme', [0.6, 0.8, 0]), section('c', 'saved-replies', [0, 0, 1])]);
+    await store.upsert([section('a', 'readme', [0.8, 0.6, 0])]);
+
+    // The similarity function is registered in the database, so SQL does the ranking.
+    const inSql = db.prepare("SELECT id, blazeresolver_dot(vector, ?) AS score FROM blazeresolver_sections ORDER BY score DESC").all(new Uint8Array(new Float32Array([0, 1, 0]).buffer)) as { id: string; score: number }[];
+    assert.deepEqual(inSql.map((r) => r.id), ['b', 'a', 'c']);
+
+    const found = await store.query([0, 1, 0], { embedder: 'e', k: 2 });
+    assert.deepEqual(found.map((m) => [m.id, m.source]), [['b', 'readme'], ['a', 'readme']]);
+    assert.deepEqual(found[0].headings, ['Doc', 'b']);
+    assert.ok(Math.abs(found[0].score - 0.8) < 1e-6);
+    assert.deepEqual((await store.query([0, 0, 1], { embedder: 'e', k: 3, minScore: 0.5 })).map((m) => m.id), ['c']);
+    assert.deepEqual((await store.query([0, 0, 1], { embedder: 'e', k: 3, minScore: 0.5, exclude: ['saved-replies'] })).map((m) => m.id), []);
+    assert.deepEqual(await store.query([1, 0, 0], { embedder: 'other-model', k: 3 }), [], "another model's vectors are never compared");
+
+    assert.deepEqual([...(await store.get(['a', 'zzz'])).keys()], ['a']);
+    assert.deepEqual(await store.sources(), ['readme', 'saved-replies']);
+    assert.equal(await store.prune('readme', ['b']), 1);
+    assert.deepEqual((await store.query([1, 0, 0], { embedder: 'e', k: 5 })).map((m) => m.id), ['b', 'c']);
   });
 
   it('embeds each section once, ever: after a restart the vectors come from the store', async () => {
@@ -125,26 +142,31 @@ describe('vector stores', () => {
   });
 
   it('still answers when the store fails', async () => {
-    const broken: VectorStore = {
-      get: async () => { throw new Error('disk full'); },
-      set: async () => { throw new Error('disk full'); }
-    };
+    const fail = async (): Promise<never> => { throw new Error('disk full'); };
+    const broken: VectorStore = { get: fail, upsert: fail, prune: fail, sources: fail, query: fail };
     const { embedder } = countingEmbedder('count-2');
     const [best] = await search(DOCS, 'reset my password', { embedder, store: broken, k: 1 });
     assert.match(best.text, /Reset your password/);
   });
 
-  it('Postgres keeps them in a real[] column through any client', async () => {
+  it('Postgres is a vector database too: a real[] column, ranked in SQL, through any client', async () => {
     const calls: { text: string; params: unknown[] }[] = [];
     const store = postgresVectorStore(async (text, params) => {
       calls.push({ text, params });
-      return text.startsWith('SELECT') ? [{ id: 'a', vector: ['1', '0.5'] }] : [];
+      if (text.includes('LATERAL')) return [{ id: 'a', source: 'readme', headings: '["Doc"]', text: 't', score: '0.9' }];
+      if (text.startsWith('SELECT DISTINCT ON')) return [{ id: 'a', vector: ['1', '0.5'] }];
+      return [];
     });
-    await store.set([{ id: 'a', embedder: 'e', text: 't', vector: [1, 0.5] }]);
+    await store.upsert([section('a', 'readme', [1, 0.5])]);
     assert.deepEqual(await store.get(['a']), new Map([['a', [1, 0.5]]]));
-    assert.match(calls[0].text, /CREATE TABLE IF NOT EXISTS blazeresolver_vectors .*vector REAL\[\]/);
-    assert.match(calls[1].text, /ON CONFLICT \(id\) DO UPDATE/);
-    assert.equal(calls.filter((c) => c.text.startsWith('CREATE')).length, 1, 'the table is created once');
+    assert.deepEqual(await store.query([1, 0], { embedder: 'e', k: 1, exclude: ['saved-replies'] }), [{ id: 'a', source: 'readme', headings: ['Doc'], text: 't', score: 0.9 }]);
+    assert.match(calls[0].text, /CREATE TABLE IF NOT EXISTS blazeresolver_sections .*vector REAL\[\].*PRIMARY KEY \(source, id\)/);
+    assert.ok(calls.some((c) => /ON CONFLICT \(source, id\) DO UPDATE/.test(c.text)));
+    const q = calls.find((c) => c.text.includes('LATERAL'))!;
+    assert.match(q.text, /sum\(a \* b\) AS score FROM unnest\(t\.vector, \$1::real\[\]\)/);
+    assert.match(q.text, /ORDER BY s\.score DESC LIMIT \$6/);
+    assert.deepEqual(q.params.slice(1, 4), ['e', 2, ['saved-replies']]);
+    assert.equal(calls.filter((c) => c.text.startsWith('CREATE TABLE')).length, 1, 'the table is created once');
   });
 
   it("the default store is a file in the product, kept out of the product's git", () => {
@@ -181,7 +203,7 @@ describe('installed in a product, Blazzy learns from that product', () => {
     const db = new DatabaseSync(join(root, '.blazeresolver', 'vectors.db'));
     // The vectors are written just after the reply; give that write a moment.
     await new Promise((r) => setTimeout(r, 50));
-    const rows = db.prepare('SELECT embedder, text FROM blazeresolver_vectors').all() as { embedder: string; text: string }[];
+    const rows = db.prepare('SELECT embedder, text FROM blazeresolver_sections').all() as { embedder: string; text: string }[];
     db.close();
     assert.ok(rows.some((r) => r.embedder === 'count-3' && /Returns and refunds are free/.test(r.text)));
   });
@@ -259,7 +281,7 @@ describe('the vector database is created without waiting for a question', () => 
   const settle = () => new Promise((r) => setTimeout(r, 100));
   const rowsIn = (root: string) => {
     const db = new DatabaseSync(join(root, '.blazeresolver', 'vectors.db'));
-    const rows = db.prepare('SELECT text FROM blazeresolver_vectors').all() as { text: string }[];
+    const rows = db.prepare('SELECT text FROM blazeresolver_sections').all() as { text: string }[];
     db.close();
     return rows.map((r) => r.text);
   };
@@ -272,13 +294,14 @@ describe('the vector database is created without waiting for a question', () => 
 
     const first = await runIndexCommand({ repo: 'acme/shop', docs: [join(root, 'faq.md')], embedder, env: {} });
     assert.match(first, new RegExp(`Vector database: .*${join('.blazeresolver', 'vectors.db').replace(/[.]/g, '\\.')}`));
-    assert.match(first, /3 sections of your docs: 3 embedded now, 0 already stored/);
+    assert.match(first, /indexed readme, file:faq\.md: 3 sections, 3 embedded now, 0 already stored/);
+    assert.match(first, /sources Blazzy retrieves from: file:faq\.md, readme/);
     assert.ok(rowsIn(root).some((t) => /Free returns/.test(t)) && rowsIn(root).some((t) => /Gift cards never expire/.test(t)));
     assert.match(readFileSync(join(root, '.gitignore'), 'utf8'), /^\.blazeresolver\/$/m);
 
     clearVectorCache();
     const again = await runIndexCommand({ repo: 'acme/shop', docs: [join(root, 'faq.md')], embedder, env: {} });
-    assert.match(again, /0 embedded now, 3 already stored[\s\S]*Nothing changed/);
+    assert.match(again, /3 sections, 0 embedded now, 3 already stored[\s\S]*Nothing changed/);
     assert.equal(documents.length, 3);
   });
 
@@ -313,14 +336,99 @@ describe('the vector database is created without waiting for a question', () => 
     const warn = console.warn;
     console.warn = (m: string) => warnings.push(m);
     try {
-      const warm = vectorWarmer(async () => '# docs', undefined, undefined);
+      const warm = vectorWarmer(async () => [{ name: 'readme', text: '# docs' }], undefined, undefined);
       warm();
       warm();
-      vectorWarmer(async () => '# docs', undefined, undefined)();
+      vectorWarmer(async () => [{ name: 'readme', text: '# docs' }], undefined, undefined)();
     } finally {
       console.warn = warn;
     }
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /no embeddings provider is configured, so no vector database is built[\s\S]*npx blazeresolver index/);
+  });
+});
+
+describe('RAG over the vector database', () => {
+  const answerOf = async (handler: (r: Request) => Promise<Response>, message: string) =>
+    (await handler(new Request('http://localhost/api/blaze', { method: 'POST', headers: { 'x-forwarded-for': `198.51.100.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify({ message }) }))).json();
+
+  it('answers from docs that live only in the vector database (indexed with --docs, never given to the handler)', async () => {
+    const root = product('# Shop\n\nAn online shop.', 'acme/shop');
+    writeFileSync(join(root, 'refunds.md'), '# Refund policy\n\n## Refunds\n\nRefunds are paid back within 5 days.');
+    process.chdir(root);
+    const { embedder } = countingEmbedder('count-rag-1');
+    await runIndexCommand({ repo: 'acme/shop', docs: [join(root, 'refunds.md')], embedder, env: {} });
+
+    const prompts: string[] = [];
+    const handler = createHandler({
+      repo: 'acme/shop',
+      githubToken: 't',
+      embed: embedder,
+      complete: async (system, user) => {
+        if (system.includes('You triage')) return JSON.stringify({ type: 'question', kind: 'how_to', severity: 'low', summary: 'refund timing' });
+        prompts.push(user);
+        return '{"answer": "Within 5 days."}';
+      }
+    });
+    const res = await answerOf(handler, 'When do I get my refund money back?');
+    assert.equal(res.answer, 'Within 5 days.');
+    assert.match(prompts[0], /<docs>[\s\S]*\[Refund policy > Refunds\]\nRefunds are paid back within 5 days/);
+  });
+
+  it('keeps the database in step with the docs: a removed section is deleted and never retrieved again', async () => {
+    const store = sqliteVectorStore(new DatabaseSync(':memory:'));
+    const { embedder } = countingEmbedder('count-rag-2');
+    const v1 = [{ name: 'readme', text: '# Shop\n\n## Returns\n\nReturns within 30 days, refund guaranteed.' }];
+    assert.deepEqual(await syncSources(v1, { embedder, store }), { sections: 1, embedded: 1, reused: 0, removed: 0 });
+    const v2 = [{ name: 'readme', text: '# Shop\n\n## Delivery\n\nWe deliver in 2 days.' }];
+    assert.deepEqual(await syncSources(v2, { embedder, store }), { sections: 1, embedded: 1, reused: 0, removed: 1 });
+    const found = await search(v2, 'refund', { embedder, store });
+    assert.ok(found.every((c) => !/Returns within 30 days/.test(c.text)));
+    assert.equal(await syncSources(v2, { embedder, store }).then((r) => r.embedded), 0, 'in sync: nothing to do');
+  });
+
+  it("the support desk retrieves its saved replies; the widget endpoint doesn't", async () => {
+    const root = product('# Shop\n\nAn online shop.', 'acme/shop');
+    process.chdir(root);
+    const store = sqliteVectorStore(new DatabaseSync(':memory:'));
+    const { embedder } = countingEmbedder('count-rag-3');
+    const desk = new SupportStore({ savedReplies: [{ id: 'r', title: 'Refund timing', body: 'Refunds reach your card in 5 days.' }] });
+    const deskPrompts: string[] = [];
+    const support = createSupportHandler({ store: desk, repo: 'acme/shop', embed: embedder, vectorStore: store, complete: async (_s, u) => (deskPrompts.push(u), '{"reply":"ok"}') });
+    await support(new Request('http://localhost/api/support/tickets/create', { method: 'POST', body: JSON.stringify({ rawText: 'when does my refund arrive' }) }));
+    assert.match(deskPrompts[0], /Refunds reach your card in 5 days/);
+    assert.deepEqual((await store.sources()).sort(), ['readme', 'saved-replies']);
+
+    const widgetPrompts: string[] = [];
+    const widget = createHandler({
+      repo: 'acme/shop',
+      githubToken: 't',
+      embed: embedder,
+      vectorStore: store,
+      complete: async (system, user) => {
+        if (system.includes('You triage')) return JSON.stringify({ type: 'question', kind: 'how_to', severity: 'low', summary: 's' });
+        widgetPrompts.push(user);
+        return '{"answer": null}';
+      }
+    });
+    await answerOf(widget, 'when does my refund arrive?');
+    assert.ok(widgetPrompts.every((p) => !/Refunds reach your card/.test(p)));
+  });
+});
+
+describe('the vector database forgets what the docs no longer have', () => {
+  it('deleting every saved reply removes them from the database, so they are never retrieved again', async () => {
+    const root = product('# Shop\n\nAn online shop.', 'acme/shop');
+    process.chdir(root);
+    const store = sqliteVectorStore(new DatabaseSync(':memory:'));
+    const desk = new SupportStore({ savedReplies: [{ id: 'r', title: 'Refund timing', body: 'Refunds reach your card in 5 days.' }] });
+    const handler = createSupportHandler({ store: desk, repo: 'acme/shop', embed: countingEmbedder('count-forget').embedder, vectorStore: store, complete: async () => '{"reply":"ok"}' });
+    const ask = (rawText: string) => handler(new Request('http://localhost/api/support/tickets/create', { method: 'POST', body: JSON.stringify({ rawText }) }));
+    await ask('refund timing?');
+    assert.ok((await store.sources()).includes('saved-replies'));
+
+    desk.deleteCannedResponse('r');
+    await ask('refund timing?');
+    assert.ok(!(await store.sources()).includes('saved-replies'));
   });
 });

@@ -86,7 +86,20 @@ const sql = postgres(process.env.DATABASE_URL!);
 createHandler({ repo: 'acme/shop', vectorStore: postgresVectorStore((text, params) => sql.unsafe(text, params)) });
 ```
 
-The store only keeps vectors, in a `blazeresolver_vectors` table keyed by a hash of the embeddings model and the section. Matching is done exactly, in memory, over your product's own sections: help docs are small enough that an approximate index would gain nothing. `vectorStore: false` keeps vectors in memory only. `createSupportHandler` takes the same `vectorStore` and `readmePath` options.
+### How answers are retrieved from it
+
+The database holds every section of your docs in a `blazeresolver_sections` table: its source, headings, text and embedding. Each source is kept in step with your docs: new and changed sections are added, and sections your docs no longer have are deleted, so they're never retrieved again.
+
+| Source | What it is |
+| :--- | :--- |
+| `readme` | Your README |
+| `help-docs` | The `helpDocs` you pass `createHandler` (`help-docs:support` for `createSupportHandler`) |
+| `saved-replies` | The support desk's saved replies. Only the desk retrieves these, never the widget. |
+| `file:<path>` | Files you indexed with `npx blazeresolver index --docs <file>` |
+
+For each question, the question is embedded and the database returns the sections nearest to it. The similarity is computed **inside the database**: SQLite through a SQL function BlazeResolver registers, Postgres in SQL over a `real[]` column (no pgvector needed). Every section is scored, so the nearest ones are exact; help docs are small enough that an approximate index would only lose matches. Those sections are fused with the keyword matches, and the best go to the model.
+
+Sections from every source are retrieved, including `file:` docs no handler was given, so you can add docs with `index --docs` alone. `vectorStore: false` embeds and ranks in memory instead. `createSupportHandler` takes the same `vectorStore` and `readmePath` options. Your own store implements `get`, `upsert`, `prune`, `sources` and `query` (see the `VectorStore` type).
 
 ## Privacy
 

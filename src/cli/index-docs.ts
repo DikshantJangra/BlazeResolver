@@ -1,14 +1,18 @@
-import { readFileSync } from 'node:fs';
-import { loadDocs } from '../answer/index.js';
+import { readFileSync, realpathSync } from 'node:fs';
+import { relative } from 'node:path';
+import { loadSources } from '../answer/index.js';
+import { repoRoot } from './detect.js';
 import { resolveEmbedder, type Embedder } from '../answer/embed.js';
-import { indexDocs } from '../answer/retrieve.js';
+import { syncSources, type DocSource } from '../answer/retrieve.js';
 import { localVectorStore, type VectorStore } from '../answer/vector-store.js';
 
 export interface IndexOptions {
   /** owner/name, from blazeresolver.config.json: the README is fetched from GitHub when none is on disk. */
   repo?: string;
-  /** Extra docs files to index along with the README (the same text you pass the handlers as helpDocs). */
+  /** Extra docs files to put in the vector database, each as its own source (`file:<path>`). */
   docs?: string[];
+  /** Also delete `file:` sources from earlier runs that this run wasn't given. */
+  prune?: boolean;
   env?: Record<string, string | undefined>;
   /** For tests: an embedder and store instead of the ones the environment configures. */
   embedder?: Embedder;
@@ -17,8 +21,9 @@ export interface IndexOptions {
 }
 
 /**
- * `blazeresolver index`: builds the product's vector database now, from its README (on disk, else GitHub) and any docs
- * files, so the first question doesn't wait for embeddings. Safe to re-run: only new or changed sections are embedded.
+ * `blazeresolver index`: puts the product's docs in its vector database now: the README (on disk, else GitHub) and any
+ * docs files, each file its own source. Blazzy retrieves from all of them, including files no handler was given.
+ * Safe to re-run: only new or changed sections are embedded, and sections a source no longer has are deleted.
  */
 export async function runIndexCommand(opts: IndexOptions = {}): Promise<string> {
   const env = opts.env ?? process.env;
@@ -39,12 +44,17 @@ export async function runIndexCommand(opts: IndexOptions = {}): Promise<string> 
     );
   }
 
-  const helpDocs = (opts.docs ?? []).map((file) => readFileSync(file, 'utf8')).join('\n\n') || undefined;
-  const docs = await loadDocs({
-    helpDocs,
-    readme: opts.repo ? { repo: opts.repo, token: env.BLAZE_GITHUB_TOKEN, fetch: opts.fetch } : undefined
-  });
-  if (!docs) {
+  // Named by their path from the repo root (real paths, so symlinks can't make two names for one file), the same
+  // whichever folder this is run from.
+  const root = realpathSync(repoRoot(process.cwd()));
+  const files: DocSource[] = (opts.docs ?? []).map((file) => ({
+    name: `file:${relative(root, realpathSync(file)).split('\\').join('/')}`,
+    text: readFileSync(file, 'utf8')
+  }));
+  // Only the README: the handlers' help docs are theirs to keep in sync.
+  const readme = (await loadSources({ readme: opts.repo ? { repo: opts.repo, token: env.BLAZE_GITHUB_TOKEN, fetch: opts.fetch } : undefined })).filter((s) => s.name === 'readme');
+  const sources = [...readme, ...files].filter((s) => s.text.trim());
+  if (!sources.length) {
     throw new Error(
       'Found nothing to index: no README at the root of this repo' +
         (opts.repo ? `, none readable on GitHub for ${opts.repo}` : '') +
@@ -52,11 +62,21 @@ export async function runIndexCommand(opts: IndexOptions = {}): Promise<string> 
     );
   }
 
-  const r = await indexDocs(docs, { embedder, store });
+  const r = await syncSources(sources, { embedder, store });
+  let dropped: string[] = [];
+  if (opts.prune) {
+    const given = new Set(sources.map((s) => s.name));
+    dropped = (await store.sources()).filter((name) => name.startsWith('file:') && !given.has(name));
+    for (const name of dropped) r.removed += await store.prune(name, []);
+  }
+  const all = await store.sources();
   return [
     `Vector database: ${store.location ?? 'your vector store'}`,
-    `  ${r.sections} sections of your docs: ${r.embedded} embedded now, ${r.reused} already stored`,
+    `  indexed ${sources.map((s) => s.name).join(', ')}: ${r.sections} sections, ${r.embedded} embedded now, ${r.reused} already stored` +
+      (r.removed ? `, ${r.removed} removed` : ''),
+    ...(dropped.length ? [`  dropped ${dropped.join(', ')}`] : []),
+    `  sources Blazzy retrieves from: ${all.join(', ')}`,
     `  embeddings: ${embedder.id}`,
-    r.embedded ? '  Blazzy now finds these by meaning as well as by keywords.' : '  Nothing changed since the last index.'
+    r.embedded || r.removed ? '  Blazzy now retrieves these by meaning as well as by keywords.' : '  Nothing changed since the last index.'
   ].join('\n');
 }

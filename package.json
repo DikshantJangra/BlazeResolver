@@ -17,7 +17,7 @@
     "demo": "tsx src/cli/demo.ts",
     "demo:fix": "tsx src/cli/fix-demo.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.react.json",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "tsx --import ./src/tests/hermetic.ts --test src/**/*.test.ts",
     "prepublishOnly": "npm run build:server && npm run build:cjs && npm run build:react && npm run build:css",
     "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/cjs-marker.mjs"
   },

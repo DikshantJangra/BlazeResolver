@@ -1,6 +1,6 @@
 import type { Complete, Report, Triage } from '../triage/index.js';
 import { getReadme } from '../github/index.js';
-import { indexDocs, search } from './retrieve.js';
+import { search, syncSources, type DocSource } from './retrieve.js';
 import type { Embedder } from './embed.js';
 import type { VectorStore } from './vector-store.js';
 import { builtin } from './runtime.js';
@@ -22,9 +22,17 @@ export interface AnswerOptions {
   embedder?: Embedder;
   /** The product the customer is asking about, so the answer speaks for it. See `productName`. */
   product?: string;
-  /** Keeps the docs' vectors across restarts. Without one, they're kept in memory only. */
+  /**
+   * The vector database the answer is retrieved from: the docs are kept in it and it returns the sections nearest the
+   * question. Without one, sections are embedded and ranked in memory.
+   */
   vectorStore?: VectorStore;
+  /** The source name the help docs are stored under in the vector database. Default `help-docs`. */
+  helpDocsSource?: string;
 }
+
+/** Sources only the support desk answers from: its saved replies are for its own customers' conversations. */
+export const DESK_ONLY_SOURCES = ['saved-replies'];
 
 /**
  * The product Blazzy speaks for: `product`, else BLAZE_PRODUCT_NAME, else the repo's name (`acme/shop` -> `shop`).
@@ -84,11 +92,24 @@ async function cachedReadme({ repo, token, fetch: f }: NonNullable<AnswerOptions
   return text;
 }
 
-/** The docs to answer from: the extra help docs, then the README (on disk, else from GitHub). Empty when there are none. */
-export async function loadDocs(options: Pick<AnswerOptions, 'helpDocs' | 'readme' | 'readmePath'>): Promise<string> {
+/**
+ * The docs to answer from, by source: the extra help docs (`help-docs`, or `helpDocsSource`), then the README
+ * (`readme`: on disk, else from GitHub). Empty when there are none.
+ */
+export async function loadSources(options: Pick<AnswerOptions, 'helpDocs' | 'readme' | 'readmePath' | 'helpDocsSource'>): Promise<DocSource[]> {
   const local = options.readmePath === false ? undefined : await localReadme(options.readmePath, options.readme?.repo);
   const readme = local ?? (options.readme ? await cachedReadme(options.readme) : undefined);
-  return [options.helpDocs, readme].filter(Boolean).join('\n\n').trim();
+  // The help docs are configuration, so they're always a source: when they're removed, syncing empties it in the
+  // database. A README that couldn't be read this time (GitHub down) is left out rather than emptied.
+  return [
+    { name: options.helpDocsSource ?? 'help-docs', text: options.helpDocs?.trim() ?? '' },
+    ...(readme?.trim() ? [{ name: 'readme', text: readme.trim() }] : [])
+  ];
+}
+
+/** The docs to answer from as one text: the extra help docs, then the README. Empty when there are none. */
+export async function loadDocs(options: Pick<AnswerOptions, 'helpDocs' | 'readme' | 'readmePath'>): Promise<string> {
+  return (await loadSources(options)).map((s) => s.text).filter(Boolean).join('\n\n');
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -206,7 +227,7 @@ export function noEmbedderNotice(): void {
  * (a framework building the app imports its routes), and never blocking a request. A failed build is retried after a
  * minute; until then, search embeds on demand or falls back to keywords.
  */
-export function vectorWarmer(load: () => Promise<string>, embedder: Embedder | undefined, store: VectorStore | undefined, explain = true): () => void {
+export function vectorWarmer(load: () => Promise<DocSource[]>, embedder: Embedder | undefined, store: VectorStore | undefined, explain = true): () => void {
   let state: 'idle' | 'running' | 'done' = 'idle';
   let failedAt = 0;
   return () => {
@@ -219,12 +240,14 @@ export function vectorWarmer(load: () => Promise<string>, embedder: Embedder | u
     state = 'running';
     void (async () => {
       try {
-        const docs = await load();
-        if (docs) {
-          const r = await indexDocs(docs, { embedder, store });
+        const sources = await load();
+        // Without a store there's no database to build: sections are embedded in memory on the first question.
+        if (sources.length && store) {
+          const r = await syncSources(sources, { embedder, store });
           console.log(
-            `[blazeresolver] vector database ready${store?.location ? ` at ${store.location}` : ' (in memory)'}: ` +
-              `${r.sections} sections of your docs, ${r.embedded} embedded now, ${r.reused} already stored (${embedder.id}).`
+            `[blazeresolver] vector database ready${store.location ? ` at ${store.location}` : ''}: ${r.sections} sections ` +
+              `from ${sources.filter((s) => s.text.trim()).map((s) => s.name).join(', ') || 'no docs'} (${r.embedded} embedded now, ${r.reused} already stored` +
+              `${r.removed ? `, ${r.removed} removed` : ''}; ${embedder.id}).`
           );
         }
         state = 'done';
@@ -248,10 +271,12 @@ const fence = (text: string, tag: string) => text.replace(new RegExp(`</\\s*${ta
  */
 export async function answerQuestion(report: Report, verdict: Triage, options: AnswerOptions): Promise<string | undefined> {
   if (verdict.type !== 'question' || verdict.injection || !options.complete) return undefined;
-  const docs = await loadDocs(options);
-  if (!docs) return undefined;
+  const sources = await loadSources(options);
+  // With a vector database, sections indexed there (e.g. `blazeresolver index --docs`) can answer even when this handler
+  // was given no docs of its own.
+  if (!sources.some((s) => s.text) && !(options.vectorStore && options.embedder)) return undefined;
 
-  const sections = await search(docs, report.message, { embedder: options.embedder, store: options.vectorStore });
+  const sections = await search(sources, report.message, { embedder: options.embedder, store: options.vectorStore, exclude: DESK_ONLY_SOURCES });
   if (!sections.length) return undefined;
   const excerpts = sections
     .map((s) => `${s.headings.length ? `[${s.headings.join(' > ')}]\n` : ''}${s.text}`)

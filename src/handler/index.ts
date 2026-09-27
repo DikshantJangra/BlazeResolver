@@ -2,11 +2,11 @@ import { commentOnIssue, listOpenIssues, openIssue } from '../github/index.js';
 import { ReportSchema, resolveComplete, triage, type Complete } from '../triage/index.js';
 import { emailMarker, groupKey, keyMarker, renderIssueBody, renderReport, symptomIn } from './issue.js';
 import { sameSymptom, symptomOf } from '../triage/grouping.js';
-import { answerQuestion, loadDocs, productName, replyToCustomer, vectorWarmer } from '../answer/index.js';
+import { answerQuestion, loadSources, productName, replyToCustomer, vectorWarmer } from '../answer/index.js';
 import { resolveEmbedder, type Embedder } from '../answer/embed.js';
 export { resolveEmbedder, type Embedder, type EmbedKind } from '../answer/embed.js';
 import { defaultVectorStore, type VectorStore } from '../answer/vector-store.js';
-export { defaultVectorStore, localVectorStore, sqliteVectorStore, postgresVectorStore, type VectorStore, type StoredVector } from '../answer/vector-store.js';
+export { defaultVectorStore, localVectorStore, sqliteVectorStore, postgresVectorStore, type VectorStore, type StoredSection, type SectionMatch } from '../answer/vector-store.js';
 
 export interface HandlerOptions {
   /** owner/name of the repo that gets the issues. */
@@ -124,7 +124,7 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
   // Only opened when there's something to keep: without embeddings there are no vectors.
   const vectorStore = !embedder || options.vectorStore === false ? undefined : (options.vectorStore ?? defaultVectorStore());
   const warm = vectorWarmer(
-    () => loadDocs({ helpDocs: options.helpDocs, readme: { repo: options.repo, token, fetch: f }, readmePath: options.readmePath }),
+    () => loadSources({ helpDocs: options.helpDocs, readme: { repo: options.repo, token, fetch: f }, readmePath: options.readmePath }),
     embedder,
     vectorStore,
     options.embed !== false
