@@ -110,11 +110,14 @@
 } /*
 ! tailwindcss v3.4.19 | MIT License | https://tailwindcss.com
 */
-*,
-:after,
-:before {
-  box-sizing: border-box;
-  border: 0 solid #e5e7eb;
+/* In the base layer, so border-color utilities (layered, Tailwind v4) can override it. */
+@layer base {
+  *,
+  :after,
+  :before {
+    box-sizing: border-box;
+    border: 0 solid #e5e7eb;
+  }
 }
 :after,
 :before {
@@ -2580,6 +2583,68 @@ html {
 }
 
 body {
-  background-color: #0a0a0a !important;
-  color: #fff !important;
+  background-color: var(--lp-page) !important;
+  color: var(--lp-body) !important;
+}
+
+/* ---- Landing page theme ---------------------------------------------------------------------------------------
+   Every landing color comes from these tokens, so the page follows <html data-theme="light|dark">. Dark is the
+   default (and what renders before the theme script runs); light overrides it. Accents get deeper shades in light
+   so small text on white stays readable. */
+:root,
+[data-theme="dark"] {
+  --lp-page: #0a0b0e;
+  --lp-fg: #ffffff;
+  --lp-body: #e6e8ea;
+  --lp-surface: #0c0d12;
+  --lp-surface-hover: #11131a;
+  --lp-brand: #ff6b00;
+  --lp-brand-soft: #ff8533;
+  --lp-brand-light: #ffa066;
+  --lp-ok: #28c840;
+  --lp-blue: #0055ff;
+  --lp-info: #8da4ff;
+  --lp-bad: #f87171;
+  --lp-violet: #d8b4fe;
+  --lp-cream: #fbf0df;
+}
+[data-theme="light"] {
+  --lp-page: #f7f6f4;
+  --lp-fg: #11131a;
+  --lp-body: #1e232c;
+  --lp-surface: #ffffff;
+  --lp-surface-hover: #f1f0ee;
+  --lp-brand: #e85d00;
+  --lp-brand-soft: #c2410c;
+  --lp-brand-light: #f97316;
+  --lp-ok: #15803d;
+  --lp-blue: #0047d6;
+  --lp-info: #1d4ed8;
+  --lp-bad: #dc2626;
+  --lp-violet: #7e22ce;
+  --lp-cream: #57534e;
+}
+@theme inline {
+  --color-page: var(--lp-page);
+  --color-fg: var(--lp-fg);
+  --color-body: var(--lp-body);
+  --color-surface: var(--lp-surface);
+  --color-surface-hover: var(--lp-surface-hover);
+  --color-brand: var(--lp-brand);
+  --color-brand-soft: var(--lp-brand-soft);
+  --color-brand-light: var(--lp-brand-light);
+  --color-ok: var(--lp-ok);
+  --color-blue: var(--lp-blue);
+  --color-info: var(--lp-info);
+  --color-bad: var(--lp-bad);
+  --color-violet: var(--lp-violet);
+  --color-cream: var(--lp-cream);
+}
+[data-theme="light"] .shadow-2xl,
+[data-theme="light"] .shadow-xl,
+[data-theme="light"] .shadow-lg {
+  --tw-shadow-color: rgb(17 19 26 / 0.08);
+}
+html {
+  transition: background-color 0.25s ease;
 }

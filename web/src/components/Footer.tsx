@@ -17,19 +17,19 @@ export default function Footer() {
               alt="BlazeResolver"
               className="w-5 h-5 rounded object-contain"
             />
-            <span className="font-bold text-sm text-white font-ds-display">
-              Blaze<span className="text-[#FF6B00]">Resolver</span>
+            <span className="font-bold text-sm text-fg font-ds-display">
+              Blaze<span className="text-brand">Resolver</span>
             </span>
           </div>
 
-          <div className="hidden sm:block h-3.5 w-px bg-white/10" />
+          <div className="hidden sm:block h-3.5 w-px bg-fg/10" />
 
-          <div className="flex items-center gap-4 text-xs text-white/60">
+          <div className="flex items-center gap-4 text-xs text-fg/60">
             <a
               href="https://github.com/DikshantJangra/BlazeResolver"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 hover:text-fg transition-colors"
             >
               <FaGithub className="w-3.5 h-3.5" />
               <span>GitHub</span>
@@ -38,14 +38,14 @@ export default function Footer() {
               href="https://github.com/DikshantJangra/BlazeResolver/discussions"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 hover:text-fg transition-colors"
             >
               <FaComments className="w-3.5 h-3.5" />
               <span>Community</span>
             </a>
             <Link
               href="/docs"
-              className="flex items-center gap-1.5 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 hover:text-fg transition-colors"
             >
               <FaBook className="w-3.5 h-3.5" />
               <span>Documentation</span>
@@ -64,16 +64,16 @@ export default function Footer() {
           className="flex items-center gap-3 text-xs"
         >
           <Link
-            className="text-white/60 transition-colors hover:text-white whitespace-nowrap"
+            className="text-fg/60 transition-colors hover:text-fg whitespace-nowrap"
             href="/docs/concepts/security"
           >
             Safe Use Policy
           </Link>
-          <span aria-hidden="true" className="text-white/30">
+          <span aria-hidden="true" className="text-fg/30">
             ·
           </span>
           <Link
-            className="text-white/60 transition-colors hover:text-white whitespace-nowrap"
+            className="text-fg/60 transition-colors hover:text-fg whitespace-nowrap"
             href="/docs/concepts/security#privacy"
           >
             Data Statement

@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { FaGithub } from "react-icons/fa6";
+import ThemeToggle from "./ThemeToggle";
+import { ACCENT, tint } from "./theme";
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -36,8 +38,8 @@ export default function Header() {
                 alt="BlazeResolver"
                 className="w-8 h-8 rounded-lg object-contain shadow-md"
               />
-              <span className="font-bold text-xl tracking-tight text-white font-ds-display">
-                Blaze<span className="text-[#FF6B00]">Resolver</span>
+              <span className="font-bold text-xl tracking-tight text-fg font-ds-display">
+                Blaze<span className="text-brand">Resolver</span>
               </span>
             </span>
 
@@ -48,12 +50,12 @@ export default function Header() {
                   className="inline-flex items-center rounded-[8px] p-[1px] min-w-0 max-w-full"
                   style={{
                     background:
-                      "linear-gradient(135deg, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0.08) 35%, rgba(255,255,255,0.04) 65%, rgba(255,255,255,0.5) 100%)",
+                      `linear-gradient(135deg, ${tint(ACCENT.fg, 75)} 0%, ${tint(ACCENT.fg, 8)} 35%, ${tint(ACCENT.fg, 4)} 65%, ${tint(ACCENT.fg, 50)} 100%)`,
                     boxShadow:
-                      "0 0 16px rgba(255,255,255,0.08), 0 0 32px rgba(255,255,255,0.04)",
+                      `0 0 16px ${tint(ACCENT.fg, 8)}, 0 0 32px ${tint(ACCENT.fg, 4)}`,
                   }}
                 >
-                  <span className="min-w-0 truncate pt-[4px] pb-[3px] rounded-[7px] ds-font-harness text-xs tracking-wider leading-none px-[9px] bg-black/40 text-[#FF6B00]">
+                  <span className="min-w-0 truncate pt-[4px] pb-[3px] rounded-[7px] ds-font-harness text-xs tracking-wider leading-none px-[9px] bg-page/70 text-brand">
                     Harness
                   </span>
                 </span>
@@ -65,25 +67,25 @@ export default function Header() {
           <div className="hidden md:flex items-center gap-ds-5">
             <a
               href="#how-it-works"
-              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+              className="text-sm font-medium text-fg/70 hover:text-fg transition-colors"
             >
               How it works
             </a>
             <a
               href="#safety"
-              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+              className="text-sm font-medium text-fg/70 hover:text-fg transition-colors"
             >
               Safety
             </a>
             <a
               href="#get-started"
-              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+              className="text-sm font-medium text-fg/70 hover:text-fg transition-colors"
             >
               Get started
             </a>
             <Link
               href="/docs"
-              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+              className="text-sm font-medium text-fg/70 hover:text-fg transition-colors"
             >
               Docs
             </Link>
@@ -91,37 +93,41 @@ export default function Header() {
               href="https://github.com/DikshantJangra/BlazeResolver/discussions"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+              className="text-sm font-medium text-fg/70 hover:text-fg transition-colors"
             >
               Community
             </a>
+            <ThemeToggle className="ml-1" />
             <a
               href="https://github.com/DikshantJangra/BlazeResolver"
               target="_blank"
               rel="noopener noreferrer"
-              className="ds-btn-secondary ds-btn-xs ml-2 flex items-center gap-1.5"
+              className="ds-btn-secondary ds-btn-xs flex items-center gap-1.5"
             >
               <FaGithub className="w-3.5 h-3.5" />
               <span>GitHub</span>
             </a>
           </div>
 
-          {/* Mobile hamburger */}
-          <button
-            type="button"
-            aria-label="Open mobile menu"
-            onClick={() => setMobileMenuOpen(true)}
-            className="md:hidden flex items-center justify-center w-10 h-10 text-ds-primary cursor-pointer"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M3 6h18M3 12h18M3 18h18"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
+          {/* Mobile: theme toggle + hamburger */}
+          <div className="md:hidden flex items-center gap-1">
+            <ThemeToggle />
+            <button
+              type="button"
+              aria-label="Open mobile menu"
+              onClick={() => setMobileMenuOpen(true)}
+              className="flex items-center justify-center w-10 h-10 text-ds-primary cursor-pointer"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M3 6h18M3 12h18M3 18h18"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -138,8 +144,8 @@ export default function Header() {
               alt="BlazeResolver"
               className="w-8 h-8 rounded-lg object-contain"
             />
-            <span className="font-bold text-lg text-white font-ds-display">
-              Blaze<span className="text-[#FF6B00]">Resolver</span>
+            <span className="font-bold text-lg text-fg font-ds-display">
+              Blaze<span className="text-brand">Resolver</span>
             </span>
           </Link>
           <button
@@ -198,7 +204,7 @@ export default function Header() {
             href="https://github.com/DikshantJangra/BlazeResolver"
             target="_blank"
             rel="noopener noreferrer"
-            className="ds-mobile-menu-item text-[#FF6B00]"
+            className="ds-mobile-menu-item text-brand"
           >
             View on GitHub
           </a>

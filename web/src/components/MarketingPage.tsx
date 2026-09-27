@@ -11,7 +11,7 @@ import Footer from "./Footer";
 
 export default function MarketingPage() {
   return (
-    <div data-theme="dark" className="relative w-full bg-ds-page">
+    <div className="relative w-full bg-page">
       <Header />
       <main className="relative flex flex-col w-full">
         <HeroSection />

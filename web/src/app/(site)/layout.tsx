@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "../globals.css";
 import Script from 'next/script'; // blazeresolver:managed
+import { THEME_SCRIPT } from "@/components/theme";
 
 export const metadata: Metadata = {
   title: "BlazeResolver: customer bug reports in, reviewed pull requests out",
@@ -24,14 +25,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark" style={{ colorScheme: "dark" }}>
+    // Dark until the head script applies the saved or OS theme; it runs before paint, so nothing flashes.
+    <html lang="en" data-theme="dark" className="dark" style={{ colorScheme: "dark" }} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/blazyy.png" />
       </head>
-      <body className="bg-[#0a0b0e] text-[#e6e8ea] antialiased selection:bg-[#FF6B00] selection:text-white">
+      <body className="bg-page text-body antialiased selection:bg-[#FF6B00] selection:text-white">
         {children}
         <Script src="/widget.js" data-endpoint="/api/blaze" strategy="afterInteractive" /> {/* blazeresolver:managed */}
       </body>

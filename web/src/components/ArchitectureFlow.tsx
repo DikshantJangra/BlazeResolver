@@ -12,6 +12,7 @@ import {
   FaKey,
   FaLock,
 } from "react-icons/fa6";
+import { ACCENT, tint } from "./theme";
 
 export default function ArchitectureFlow() {
   const stages = [
@@ -20,7 +21,7 @@ export default function ArchitectureFlow() {
       description:
         "A small widget in your app. The customer describes what broke; the page address and recent JavaScript errors come along (they can untick that). Unsent drafts are kept.",
       tag: "Widget · ~14 KB",
-      accentColor: "#FF6B00",
+      accentColor: ACCENT.brand,
       icon: <FaComments className="w-4 h-4" />,
     },
     {
@@ -28,7 +29,7 @@ export default function ArchitectureFlow() {
       description:
         "One route in your own backend screens for prompt injection, has AI triage the report, and files real bugs as GitHub issues. The same bug reported again becomes a comment, not a new issue.",
       tag: "Your /api/blaze route",
-      accentColor: "#0055FF",
+      accentColor: ACCENT.blue,
       icon: <FaFilter className="w-4 h-4" />,
     },
     {
@@ -36,7 +37,7 @@ export default function ArchitectureFlow() {
       description:
         "The new issue starts a workflow in your repo. On GitHub's runner it maps your codebase, finds the root cause, patches it, and runs your tests and build, retrying up to three times.",
       tag: "GitHub Actions",
-      accentColor: "#28c840",
+      accentColor: ACCENT.ok,
       icon: <FaGears className="w-4 h-4" />,
     },
     {
@@ -44,7 +45,7 @@ export default function ArchitectureFlow() {
       description:
         "A pull request with the root cause, the evidence and the test output, closing the issue. You review and merge. Customers who left an email hear it's fixed.",
       tag: "Pull request",
-      accentColor: "#FF8533",
+      accentColor: ACCENT.brandSoft,
       icon: <FaCodePullRequest className="w-4 h-4" />,
     },
   ];
@@ -55,7 +56,7 @@ export default function ArchitectureFlow() {
       description:
         "GitHub Actions does the fixing. The only running piece is one route inside the app you already deploy. Nothing to sign up for, nothing hosted by us.",
       tag: "GitHub-native",
-      accentColor: "#FF6B00",
+      accentColor: ACCENT.brand,
       icon: <FaServer className="w-4 h-4" />,
     },
     {
@@ -63,7 +64,7 @@ export default function ArchitectureFlow() {
       description:
         "Paste a key from Anthropic, OpenAI, Gemini, Groq, NVIDIA and more: 26 providers, recognized from the key itself. Add several and they fail over to each other.",
       tag: "API_KEYS=…",
-      accentColor: "#0055FF",
+      accentColor: ACCENT.blue,
       icon: <FaKey className="w-4 h-4" />,
     },
     {
@@ -71,7 +72,7 @@ export default function ArchitectureFlow() {
       description:
         "Keys live in your repo's secrets and code runs on your runner. Reports go to your GitHub and your AI provider, nowhere else.",
       tag: "Self-contained",
-      accentColor: "#28c840",
+      accentColor: ACCENT.ok,
       icon: <FaLock className="w-4 h-4" />,
     },
   ];
@@ -83,24 +84,24 @@ export default function ArchitectureFlow() {
     >
       <div className="max-w-[880px] mx-auto flex flex-col items-center gap-6 text-center">
         {/* Formula Badge */}
-        <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 border border-white/12 bg-white/[0.04] backdrop-blur-xl shadow-sm">
-          <span className="flex items-center gap-1.5 font-mono text-xs font-semibold text-white/90">
-            <FaComments className="text-[#FF6B00] w-3 h-3" />
+        <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 border border-fg/12 bg-fg/[0.04] backdrop-blur-xl shadow-sm">
+          <span className="flex items-center gap-1.5 font-mono text-xs font-semibold text-fg/90">
+            <FaComments className="text-brand w-3 h-3" />
             Bug report
           </span>
-          <span className="text-white/30 font-mono text-xs">+</span>
-          <span className="flex items-center gap-1.5 font-mono text-xs font-semibold text-white/90">
-            <FaGithub className="text-white w-3 h-3" />
+          <span className="text-fg/30 font-mono text-xs">+</span>
+          <span className="flex items-center gap-1.5 font-mono text-xs font-semibold text-fg/90">
+            <FaGithub className="text-fg w-3 h-3" />
             GitHub Actions
           </span>
-          <span className="text-white/30 font-mono text-xs">=</span>
-          <span className="font-mono text-xs font-bold text-[#FF6B00] uppercase tracking-wider">
+          <span className="text-fg/30 font-mono text-xs">=</span>
+          <span className="font-mono text-xs font-bold text-brand uppercase tracking-wider">
             Reviewed PR
           </span>
         </div>
 
         <h2
-          className="text-2xl sm:text-4xl md:text-5xl font-bold font-ds-display text-white tracking-tight max-w-[840px]"
+          className="text-2xl sm:text-4xl md:text-5xl font-bold font-ds-display text-fg tracking-tight max-w-[840px]"
           style={{
             fontSize: "clamp(1.75rem, 3.8vw, 3.25rem)",
             lineHeight: 1.2,
@@ -111,14 +112,14 @@ export default function ArchitectureFlow() {
         </h2>
 
         <div className="max-w-[760px] flex flex-col gap-3 text-ds-description">
-          <p className="text-base sm:text-lg text-white/80 leading-relaxed font-normal">
-            <strong className="text-white font-semibold">
+          <p className="text-base sm:text-lg text-fg/80 leading-relaxed font-normal">
+            <strong className="text-fg font-semibold">
               Bug reports usually die in a support inbox.
             </strong>{" "}
             Someone has to reproduce them, find the code, and write a ticket
             nobody picks up.
           </p>
-          <p className="text-sm sm:text-base text-white/60 leading-relaxed">
+          <p className="text-sm sm:text-base text-fg/60 leading-relaxed">
             BlazeResolver takes a report straight to your repo: an issue with
             the details, then a fix proven by your own tests, waiting for your
             review.
@@ -131,11 +132,11 @@ export default function ArchitectureFlow() {
         <div className="mb-6 flex flex-wrap items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-2.5">
             <span className="w-2 h-2 rounded-full bg-[#FF6B00] animate-pulse" />
-            <span className="font-mono text-xs font-semibold text-white/90 uppercase tracking-widest">
+            <span className="font-mono text-xs font-semibold text-fg/90 uppercase tracking-widest">
               Report to pull request
             </span>
           </div>
-          <span className="font-mono text-xs text-white/40">
+          <span className="font-mono text-xs text-fg/40">
             AI writes the fix • Your tests prove it • You merge it
           </span>
         </div>
@@ -144,38 +145,38 @@ export default function ArchitectureFlow() {
           {stages.map((stage, idx) => (
             <div
               key={stage.title}
-              className="group rounded-2xl border border-white/[0.08] bg-[#0c0d12]/70 backdrop-blur-xl p-6 flex flex-col justify-between transition-all duration-300 hover:border-white/20 hover:bg-[#11131a] hover:-translate-y-1 shadow-lg"
+              className="group rounded-2xl border border-fg/[0.08] bg-surface/70 backdrop-blur-xl p-6 flex flex-col justify-between transition-all duration-300 hover:border-fg/20 hover:bg-surface-hover hover:-translate-y-1 shadow-lg"
             >
               <div>
                 <div className="flex items-center gap-3 mb-3.5">
                   <div
                     className="p-2.5 rounded-xl border flex items-center justify-center shrink-0"
                     style={{
-                      backgroundColor: `${stage.accentColor}15`,
-                      borderColor: `${stage.accentColor}30`,
+                      backgroundColor: tint(stage.accentColor, 8),
+                      borderColor: tint(stage.accentColor, 19),
                       color: stage.accentColor,
                     }}
                   >
                     {stage.icon}
                   </div>
-                  <h3 className="text-base font-bold text-white tracking-tight">
-                    <span className="font-mono text-xs text-white/40 mr-2">0{idx + 1}</span>
+                  <h3 className="text-base font-bold text-fg tracking-tight">
+                    <span className="font-mono text-xs text-fg/40 mr-2">0{idx + 1}</span>
                     {stage.title}
                   </h3>
                 </div>
 
-                <p className="text-xs text-white/65 leading-relaxed">
+                <p className="text-xs text-fg/65 leading-relaxed">
                   {stage.description}
                 </p>
               </div>
 
               <div
-                className="mt-5 pt-3.5 border-t border-white/[0.06] font-mono text-[11px] font-medium flex items-center justify-between"
+                className="mt-5 pt-3.5 border-t border-fg/[0.06] font-mono text-[11px] font-medium flex items-center justify-between"
                 style={{ color: stage.accentColor }}
               >
                 <span>{stage.tag}</span>
                 {idx < stages.length - 1 && (
-                  <FaArrowRight className="hidden lg:block text-white/20 group-hover:text-white/60 transition-colors" />
+                  <FaArrowRight className="hidden lg:block text-fg/20 group-hover:text-fg/60 transition-colors" />
                 )}
               </div>
             </div>
@@ -188,30 +189,30 @@ export default function ArchitectureFlow() {
         {pillars.map((pillar) => (
           <div
             key={pillar.title}
-            className="group rounded-2xl border border-white/[0.08] bg-[#0c0d12]/70 backdrop-blur-xl p-6 flex flex-col justify-between transition-all duration-300 hover:border-white/20 hover:bg-[#11131a] hover:-translate-y-1 shadow-lg"
+            className="group rounded-2xl border border-fg/[0.08] bg-surface/70 backdrop-blur-xl p-6 flex flex-col justify-between transition-all duration-300 hover:border-fg/20 hover:bg-surface-hover hover:-translate-y-1 shadow-lg"
           >
             <div>
               <div className="flex items-center gap-3 mb-3.5">
                 <div
                   className="p-2.5 rounded-xl border"
                   style={{
-                    backgroundColor: `${pillar.accentColor}1a`,
-                    borderColor: `${pillar.accentColor}40`,
+                    backgroundColor: tint(pillar.accentColor, 10),
+                    borderColor: tint(pillar.accentColor, 25),
                     color: pillar.accentColor,
                   }}
                 >
                   {pillar.icon}
                 </div>
-                <h3 className="text-base font-bold text-white tracking-tight">
+                <h3 className="text-base font-bold text-fg tracking-tight">
                   {pillar.title}
                 </h3>
               </div>
-              <p className="text-xs text-white/65 leading-relaxed">
+              <p className="text-xs text-fg/65 leading-relaxed">
                 {pillar.description}
               </p>
             </div>
             <div
-              className="mt-5 pt-3.5 border-t border-white/[0.06] font-mono text-[11px] font-medium"
+              className="mt-5 pt-3.5 border-t border-fg/[0.06] font-mono text-[11px] font-medium"
               style={{ color: pillar.accentColor }}
             >
               {pillar.tag}
