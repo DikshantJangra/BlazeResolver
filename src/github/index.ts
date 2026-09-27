@@ -89,6 +89,29 @@ async function paginate<T = any>(token: string, path: string, f: typeof fetch, m
 }
 const api = (token: string, path: string, body: unknown, f: typeof fetch) => call(token, 'POST', path, body, f);
 
+/**
+ * The repo's README as raw Markdown, or undefined when it has none or GitHub can't be reached. Tried with the token
+ * first (private repos), then without it: an Issues-only token can't read contents, but a public repo needs none.
+ */
+export async function getReadme(repo: string, token: string | undefined, f: typeof fetch = fetch): Promise<string | undefined> {
+  for (const auth of token ? [token, undefined] : [undefined]) {
+    try {
+      const res = await f(`https://api.github.com/repos/${repo}/readme`, {
+        headers: {
+          ...(auth ? { authorization: `Bearer ${auth}` } : {}),
+          accept: 'application/vnd.github.raw+json',
+          'user-agent': 'blazeresolver'
+        },
+        signal: AbortSignal.timeout(3_000)
+      });
+      if (res.ok) return await res.text();
+    } catch {
+      // unreachable or timed out: try the next way, then give up
+    }
+  }
+  return undefined;
+}
+
 export interface Issue {
   number: number;
   title: string;

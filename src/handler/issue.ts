@@ -1,4 +1,5 @@
 import type { Report, Triage } from '../triage/index.js';
+import { decodeSymptom, encodeSymptom, symptomOf, type Symptom } from '../triage/grouping.js';
 
 /** Customer text goes in fenced blocks, so it can't render as markdown, @mentions or HTML in the issue. */
 const fence = (text: string) => '````text\n' + text.replace(/`{4,}/g, '```') + '\n````';
@@ -11,6 +12,14 @@ export function groupKey(triage: Triage): string {
 }
 
 export const keyMarker = (key: string) => `<!-- blaze:key=${key} -->`;
+
+/** Hidden marker with the report's symptom; new reports are matched against it (see triage/grouping.ts). */
+export const symptomMarker = (symptom: Symptom) => `<!-- blaze:symptom=${encodeSymptom(symptom)} -->`;
+
+export function symptomIn(body: string | undefined | null): Symptom | undefined {
+  const m = body?.match(/<!-- blaze:symptom=([^\s>]+) -->/);
+  return m ? decodeSymptom(m[1]) : undefined;
+}
 
 /** Hidden marker holding an address to tell when the fix ships. Only written when the site owner opts in. */
 export const emailMarker = (email: string) => `<!-- blaze:notify=${btoa(email)} -->`;
@@ -44,7 +53,7 @@ export function renderReport(report: Report, triage: Triage): string {
 }
 
 export const renderIssueBody = (report: Report, triage: Triage, key: string, email?: string) =>
-  `${renderReport(report, triage)}\n\n${keyMarker(key)}${email ? `\n${emailMarker(email)}` : ''}\n`;
+  `${renderReport(report, triage)}\n\n${keyMarker(key)}\n${symptomMarker(symptomOf(triage, report.consoleErrors))}${email ? `\n${emailMarker(email)}` : ''}\n`;
 
 /** The incident the fix engine works from, read back out of an issue body. Markers are dropped; the text stays data. */
 export function parseIssueBody(title: string, body: string): { title: string; description: string; stackTrace?: string } {

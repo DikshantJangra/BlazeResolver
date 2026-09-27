@@ -101,6 +101,7 @@
     '.tick svg{width:24px;height:24px}' +
     '.done h3{margin:0;font-size:16px;font-weight:600;outline:0}' +
     '.done p{margin:4px 0 16px;color:var(--muted);font-size:13.5px}' +
+    '.done.answered p{max-height:260px;overflow-y:auto;color:var(--text);text-align:left;white-space:pre-line;line-height:1.5}' +
 
     ':host([data-position=left]) .launcher,:host([data-position=left]) .panel{right:auto;left:20px}' +
     ':host([data-launcher=false]) .panel{bottom:calc(20px + env(safe-area-inset-bottom,0px))}' +
@@ -218,15 +219,24 @@
     fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify(body), signal: controller ? controller.signal : undefined })
       .then(function (res) {
         if (!res.ok) throw res.status;
+        return res.text().then(function (text) {
+          try { return JSON.parse(text).answer; } catch (e) { return undefined; }
+        });
       })
       .then(
-        function () {
+        function (answer) {
           settle();
           field.value = '';
           emailInput.value = '';
           saveDraft();
           autosize();
-          $('.done p').textContent = email && !emailInput.hidden ? "We'll email " + email + " when it's fixed." : "We'll look into it.";
+          // A question can come back answered from the product's docs; shown as text, never as HTML.
+          var answered = typeof answer === 'string' && answer;
+          done.classList.toggle('answered', !!answered);
+          $('.done h3').textContent = answered ? "Here's what we found" : 'Thanks, we got it';
+          $('.done p').textContent = answered
+            ? answer
+            : email && !emailInput.hidden ? "We'll email " + email + " when it's fixed." : "We'll look into it.";
           form.hidden = true;
           done.hidden = false;
           $('.done h3').focus();
