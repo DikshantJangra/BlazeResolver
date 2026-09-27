@@ -8,7 +8,7 @@ import {
   git, isNext, needsJsExtension, pickLayout, repoRoot, usesTypeScript
 } from './detect.js';
 import { MARK, hasManaged, indentOf, insertAfter, insertBefore, insertInline, lastImportLine } from './edit.js';
-import { expressRouterFile, pagesFile, routeFile, widgetTag, workflow, type ModuleStyle } from './templates.js';
+import { expressRouterFile, pagesFile, routeFile, widgetTag, workflow, agentsRequirements, blazeTriageAgent, blazeResolverAgent, dbSchema, drizzleSchema, prismaSchema, type ModuleStyle } from './templates.js';
 
 /** Everything `init` changed, so `remove` can undo exactly that and nothing else. */
 export interface Manifest {
@@ -71,29 +71,25 @@ interface EnvSection { header: string; vars: EnvVar[] }
 const ENV_SECTIONS: EnvSection[] = [
   {
     header:
-      '# --- BlazeResolver: AI (triage & the fix engine) ------------------------------\n' +
-      '# Paste any AI provider key; the provider is recognized from the key itself.\n' +
-      '# Several keys, even from different providers, give automatic failover and rotation:\n' +
-      '#   API_KEYS=sk-ant-...,gsk_...,nvapi-...\n' +
-      '# Recognized: Anthropic, OpenAI, Gemini, Groq, NVIDIA NIM, DeepSeek, xAI, Cerebras, Fireworks,\n' +
-      '# Perplexity, OpenRouter, Hugging Face, Zhipu, GitHub Models. Keys that look like nothing in particular\n' +
-      '# (Mistral, Together, Cohere, ...) go in a named variable instead, e.g. MISTRAL_API_KEY=...\n' +
-      '# Get a key (free tiers marked *):\n' +
-      '#   Groq*        https://console.groq.com/keys\n' +
-      '#   Gemini*      https://aistudio.google.com/apikey\n' +
-      '#   NVIDIA NIM*  https://build.nvidia.com\n' +
-      '#   OpenRouter*  https://openrouter.ai/keys\n' +
-      '#   Anthropic    https://console.anthropic.com/settings/keys\n' +
-      '#   OpenAI       https://platform.openai.com/api-keys\n' +
-      '#   DeepSeek     https://platform.deepseek.com/api_keys\n' +
-      '# Check what was recognized: npx blazeresolver providers\n' +
-      '# Optional: BLAZE_MODEL=<model>, BLAZE_PROVIDER=<name> to pin one, OLLAMA_BASE_URL for a local\n' +
-      '# Ollama, AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_DEPLOYMENT for Azure OpenAI.',
+      '# --- BlazeResolver: Universal AI Keys (auto-picked for all agents & triage) ---\n' +
+      '# Paste ANY key(s). Provider is auto-detected across Gemini, Claude, OpenAI, Groq, NVIDIA, DeepSeek, xAI.\n' +
+      '# Set multiple comma-separated keys or numbered keys (API_KEY_1, API_KEY_2) for instant failover:\n' +
+      '#   API_KEYS=sk-ant-...,AIzaSy...,gsk_...\n' +
+      '# Free tier keys: Gemini (https://aistudio.google.com/apikey) | Groq (https://console.groq.com/keys)\n' +
+      '# Verify recognized keys anytime: npx blazeresolver providers',
     vars: [{ key: 'API_KEYS' }]
   },
   {
-    header: '# --- BlazeResolver: GitHub -----------------------------------------------------',
-    vars: [{ key: 'BLAZE_GITHUB_TOKEN', comment: '# Fine-grained token: Issues read and write on this repo only.' }]
+    header: '# --- BlazeResolver: GitHub Token -----------------------------------------------\n' +
+      '# Fine-grained token: Issues read and write permissions on this repo.',
+    vars: [{ key: 'BLAZE_GITHUB_TOKEN', comment: '# gh auth token or fine-grained PAT' }]
+  },
+  {
+    header: '# --- BlazeResolver: Operational Store / Database (100% Optional) ---------------\n' +
+      '# - Frontend-only / Serverless apps: No database needed! GitHub Issues & Actions act as the store.\n' +
+      '# - Backend / Fullstack apps: Connect your Postgres / Supabase / Neon instance if desired.\n' +
+      '#   Ready-to-use schemas placed in agents/: SQL (schema.sql), Drizzle (schema.drizzle.ts), Prisma (schema.prisma).',
+    vars: [{ key: 'BLAZE_DATABASE_URL', comment: '# postgresql://user:password@localhost:5432/blazeresolver (optional)' }]
   }
 ];
 
@@ -396,14 +392,35 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     for (const m of manual) say(`  ${step++}. ${m}`);
     say(`  ${step++}. Create a fine-grained GitHub token with Issues: read and write on ${repo} only.`);
     say('     Give it to your backend as BLAZE_GITHUB_TOKEN in .env (just created/updated for you).');
-    say(`  ${step++}. Paste any AI key into .env as API_KEYS= (any provider; it's recognized automatically; several = failover).`);
-    say('     Optional: without one, triage uses keyword rules. Check with: npx blazeresolver providers');
-    say(`  ${step++}. Give the fix workflow the same keys:   gh secret set API_KEYS`);
+    say(`  ${step++}. Paste any AI key into .env as API_KEYS= (or API_KEY_1, API_KEY_2).`);
+    say('     Universal auto-detection works with Gemini, Claude, OpenAI, Groq, NVIDIA, DeepSeek, xAI, etc.');
+    say('     Check recognized providers anytime: npx blazeresolver providers');
+    say(`  ${step++}. Operational DB (100% Optional):`);
+    say('     - Frontend-only: No DB needed! GitHub Issues & Actions act as the operational store.');
+    say('     - Existing DB / Backend: Schemas placed in agents/:');
+    say('       • PostgreSQL: agents/blazeresolver-schema.sql');
+    say('       • Drizzle ORM: agents/schema.drizzle.ts');
+    say('       • Prisma ORM: agents/schema.prisma');
+    say(`  ${step++}. Give the GitHub Actions workflow the same keys:   gh secret set API_KEYS`);
     say(`  ${step++}. GitHub, Settings, Actions, General: turn on "Allow GitHub Actions to create and approve pull requests".`);
     say(`  ${step++}. Protect ${branch} (Settings, Branches) so every fix needs a human review.`);
     if (!layout.frontend) say(`  ${step++}. Widget tag for your page: ${widgetTag(endpoint, opts.pin)}`);
     say('\nThen commit the new files (not .env). Undo everything with `npx blazeresolver remove`.');
     say(opts.pin ? `Pinned to blazeresolver@${opts.pin}: nothing changes until you re-run init with a newer --pin.` : 'Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest (use --pin <version> to lock it).');
+  }
+
+  // --- the agents and schema -------------------------------------------------------------------------------
+
+  function placeAgents() {
+    createFile('agents/blaze_triage_agent.py', blazeTriageAgent);
+    createFile('agents/blaze_resolver_agent.py', blazeResolverAgent);
+    createFile('agents/requirements.txt', agentsRequirements);
+  }
+
+  function placeSchema() {
+    createFile('agents/blazeresolver-schema.sql', dbSchema);
+    createFile('agents/schema.drizzle.ts', drizzleSchema);
+    createFile('agents/schema.prisma', prismaSchema);
   }
 
   say(`\nBlazeResolver for ${repo} (default branch ${branch})`);
@@ -416,6 +433,8 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     placeHandler();
     ensureEnv((installTarget ?? layout.handlerPkg)?.dir ?? '');
     const endpoint = placeWidget();
+    placeAgents();
+    placeSchema();
     createFile('.github/workflows/blazeresolver.yml', workflow({ pin: opts.pin ?? existing?.pin, app: opts.app || existing?.app }));
     installDependency();
     if (!cmds.hasTests && !opts.test) {

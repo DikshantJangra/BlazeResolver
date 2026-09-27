@@ -187,7 +187,7 @@ function compat(
 }
 
 /** Names only their own vendors serve bare; open-model hosts never get these as BLAZE_MODEL. */
-const PROPRIETARY = /^(claude|gemini|grok|gpt-|o\d|chatgpt)/i;
+const PROPRIETARY = /^(claude|gemini|grok|gpt-|o\d|chatgpt|deepseek|qwen)/i;
 
 /** In priority order: with several configured, the first answers and the rest are failover. */
 const DEFS: ProviderDef[] = [
@@ -257,15 +257,29 @@ const DEFS: ProviderDef[] = [
   compat({
     name: 'deepseek',
     envPrefix: 'DEEPSEEK',
+    aliases: ['DEEPSEEK_API_KEY'],
     keyFormat: /^sk-[0-9a-f]{32}$/,
     probe: 'sk',
     serves: /^deepseek/i,
     vendorOnly: true,
     modelEnv: 'DEEPSEEK_MODEL',
     defaultModel: 'deepseek-chat',
-    baseUrl: 'https://api.deepseek.com'
+    baseUrl: 'https://api.deepseek.com',
+    baseUrlEnv: 'DEEPSEEK_BASE_URL'
   }),
-  compat({ name: 'groq', envPrefix: 'GROQ', keyFormat: /^gsk_/, modelEnv: 'GROQ_MODEL', defaultModel: 'llama-3.3-70b-versatile', baseUrl: 'https://api.groq.com/openai/v1' }),
+  compat({
+    name: 'qwen',
+    envPrefix: 'QWEN',
+    aliases: ['DASHSCOPE_API_KEY', 'QWEN_API_KEY', 'ALIBABA_API_KEY'],
+    probe: 'sk',
+    serves: /^qwen/i,
+    vendorOnly: true,
+    modelEnv: 'QWEN_MODEL',
+    defaultModel: 'qwen-plus',
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    baseUrlEnv: 'QWEN_BASE_URL'
+  }),
+  compat({ name: 'groq', envPrefix: 'GROQ', keyFormat: /^gsk_/, modelEnv: 'GROQ_MODEL', defaultModel: 'openai/gpt-oss-120b', baseUrl: 'https://api.groq.com/openai/v1' }),
   compat({
     name: 'nvidia',
     envPrefix: 'NVIDIA',
@@ -654,6 +668,7 @@ export const geminiComplete = single('gemini');
 export const xaiComplete = single('xai');
 export const mistralComplete = single('mistral');
 export const deepseekComplete = single('deepseek');
+export const qwenComplete = single('qwen');
 export const groqComplete = single('groq');
 export const nvidiaComplete = single('nvidia');
 export const cerebrasComplete = single('cerebras');

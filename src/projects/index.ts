@@ -58,4 +58,9 @@ export class ProjectRegistry {
     const h = hash(key);
     return this.load().find((p) => p.keyHash === h);
   }
+
+  /** List all registered projects. */
+  list(): Project[] {
+    return this.load();
+  }
 }

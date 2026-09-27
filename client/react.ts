@@ -8,6 +8,7 @@ export { CloseTicketModal } from './components/support/CloseTicketModal.js';
 export { EscalateTicketModal } from './components/support/EscalateTicketModal.js';
 export { SupportHeader } from './components/support/SupportHeader.js';
 export { BlazzyIcon, BlazzyBadge, BlazzyIcon as BlazzyMascot } from './components/support/BlazzyMascot.js';
+export { BlazzySupportWidget, type BlazzySupportWidgetProps } from './components/support/BlazzySupportWidget.js';
 export type {
   SupportTicket,
   SupportMessage,

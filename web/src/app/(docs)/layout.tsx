@@ -31,7 +31,7 @@ export default function DocsRootLayout({ children }: { children: ReactNode }) {
         </RootProvider>
         {/* Dogfooding: readers can report a problem with the docs through BlazeResolver itself. */}
         {widgetEndpoint && (
-          <Script src={asset("/widget.js")} data-endpoint={widgetEndpoint} data-title="Report a problem with the docs" strategy="afterInteractive" />
+          <Script src={asset("/widget.js")} data-endpoint={widgetEndpoint} data-title="Ask Blazzy" strategy="afterInteractive" />
         )}
       </body>
     </html>

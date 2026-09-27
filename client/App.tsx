@@ -33,6 +33,7 @@ import { CannedResponsesDrawer } from './components/support/CannedResponsesDrawe
 import { CloseTicketModal } from './components/support/CloseTicketModal.js';
 import { EscalateTicketModal } from './components/support/EscalateTicketModal.js';
 import { BlazzyIcon, BlazzyBadge } from './components/support/BlazzyMascot.js';
+import { BlazzySupportWidget } from './components/support/BlazzySupportWidget.js';
 import type { SupportTicket, SupportMessage, CustomerContext, SupportCannedResponse, TicketRating } from './components/support/types.js';
 
 export interface PipelineResult {
@@ -1273,6 +1274,9 @@ export default function App() {
         selectedTicket={selectedTicket}
         onConfirmEscalate={handleConfirmEscalate}
       />
+
+      {/* Floating Blazzy AI Support Widget (SVG Mascot) */}
+      <BlazzySupportWidget />
     </div>
   );
 }

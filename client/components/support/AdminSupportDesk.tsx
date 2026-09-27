@@ -437,6 +437,56 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
     }
   };
 
+  const [isExecutingAction, setIsExecutingAction] = useState(false);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+
+  const handleExecuteTicketAction = async (action: string, amount?: number) => {
+    if (!selectedTicket) return;
+    setIsExecutingAction(true);
+    try {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ action, amount, reason: `Admin 1-Click Action: ${action}` })
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSelectedTicket(json.data.ticket);
+        setTickets((prev) => prev.map((t) => (t.id === json.data.ticket.id ? json.data.ticket : t)));
+        // Refresh messages
+        const msgRes = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
+          headers: { ...authHeaders }
+        });
+        const msgJson = await msgRes.json();
+        if (msgJson.success) setMessages(msgJson.data);
+      }
+    } catch (err) {
+      console.error('Failed to execute ticket action:', err);
+    } finally {
+      setIsExecutingAction(false);
+    }
+  };
+
+  const handleDiagnoseTicket = async () => {
+    if (!selectedTicket) return;
+    setIsDiagnosing(true);
+    try {
+      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/diagnose`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders }
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSelectedTicket(json.data.ticket);
+        setTickets((prev) => prev.map((t) => (t.id === json.data.ticket.id ? json.data.ticket : t)));
+      }
+    } catch (err) {
+      console.error('Failed to diagnose ticket:', err);
+    } finally {
+      setIsDiagnosing(false);
+    }
+  };
+
   const handleSendCannedDirectly = async (bodyText: string) => {
     await handleSendMessage({ body: bodyText, file: null, isInternalNote: false });
   };
@@ -501,6 +551,10 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
               selectedTicket={selectedTicket}
               ticketRating={ticketRating}
               internalNotes={messages.filter((m) => m.internalNote)}
+              onExecuteAction={handleExecuteTicketAction}
+              onDiagnoseTicket={handleDiagnoseTicket}
+              isExecutingAction={isExecutingAction}
+              isDiagnosing={isDiagnosing}
             />
           )}
         </div>

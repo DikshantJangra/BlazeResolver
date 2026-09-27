@@ -331,6 +331,21 @@ export class SupportStore {
       newTicket.lastMessageAt = aiReply.createdAt;
     }
 
+    if (aiReport?.policyAllowed && aiReport?.suggestedAction && aiReport.suggestedAction !== 'create_ticket') {
+      const actionMsg: SupportMessage = {
+        id: `msg_${Date.now()}_act`,
+        ticketId: id,
+        role: 'agent',
+        senderType: 'bot',
+        authorName: 'Blazzy AI (Auto-Action)',
+        content: `⚡ Action Completed: Successfully authorized ${aiReport.suggestedAction} of ₹${aiReport.claimedAmount || 150} for order #${newTicket.orderNumber || 'your order'}.`,
+        body: `⚡ Action Completed: Successfully authorized ${aiReport.suggestedAction} of ₹${aiReport.claimedAmount || 150} for order #${newTicket.orderNumber || 'your order'}.`,
+        createdAt: new Date(Date.now() + 1000).toISOString()
+      };
+      messagesList.push(actionMsg);
+      newTicket.lastMessageAt = actionMsg.createdAt;
+    }
+
     this.messages.set(id, messagesList);
     return { ticket: newTicket, initialMessage: userMessage, aiReply };
   }

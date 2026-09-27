@@ -23,13 +23,21 @@ export interface CustomerContextPanelProps {
   selectedTicket?: SupportTicket | null;
   ticketRating?: TicketRating | null;
   internalNotes?: SupportMessage[];
+  onExecuteAction?: (action: string, amount?: number) => Promise<void>;
+  onDiagnoseTicket?: () => Promise<void>;
+  isExecutingAction?: boolean;
+  isDiagnosing?: boolean;
 }
 
 export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
   customerContext,
   selectedTicket,
   ticketRating,
-  internalNotes
+  internalNotes,
+  onExecuteAction,
+  onDiagnoseTicket,
+  isExecutingAction,
+  isDiagnosing
 }) => {
   const aiReport = selectedTicket?.aiReport;
 
@@ -123,6 +131,47 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
                 <strong className="text-orange-900">Recommended Action:</strong> {aiReport.suggestedAction}
               </div>
             )}
+          </div>
+
+          {/* 1-Click HITL Action & AI Harness Controls */}
+          <div className="flex flex-col gap-1.5 pt-1">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+              1-Click HITL Actions
+            </span>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => onExecuteAction?.('credit', aiReport.claimedAmount || 150)}
+                disabled={isExecutingAction}
+                className="p-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-200 font-bold text-[10.5px] transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+              >
+                <span>💳 ₹{aiReport.claimedAmount || 150} Credit</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onExecuteAction?.('replacement')}
+                disabled={isExecutingAction}
+                className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold text-[10.5px] transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+              >
+                <span>📦 Replacement</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onExecuteAction?.('coupon')}
+                disabled={isExecutingAction}
+                className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-bold text-[10.5px] transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+              >
+                <span>🎟️ Coupon</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onDiagnoseTicket?.()}
+                disabled={isDiagnosing}
+                className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-900 border border-gray-300 font-bold text-[10.5px] transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+              >
+                <span>⚡ {isDiagnosing ? 'Running...' : 'Re-Diagnose'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Incident link if systemic */}

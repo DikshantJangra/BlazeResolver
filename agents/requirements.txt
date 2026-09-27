@@ -1,0 +1,3 @@
+# BlazeResolver – Python Antigravity agents
+# Install with: pip install -r agents/requirements.txt
+google-antigravity

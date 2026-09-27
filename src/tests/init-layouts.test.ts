@@ -209,7 +209,16 @@ describe('init finds frontend and backend by what they are, not what they are ca
     const dir = repo({ 'api/package.json': pj({ dependencies: { fastify: '5' } }) });
     const r = await runInit({ cwd: dir, ...quiet });
     assert.ok(r.manual.some((m) => m.includes('does not use Express')));
-    assert.deepEqual(r.manifest.files.sort(), ['.github/workflows/blazeresolver.yml', 'blazeresolver.config.json']);
+    assert.deepEqual(r.manifest.files.sort(), [
+      '.github/workflows/blazeresolver.yml',
+      'agents/blaze_resolver_agent.py',
+      'agents/blaze_triage_agent.py',
+      'agents/blazeresolver-schema.sql',
+      'agents/requirements.txt',
+      'agents/schema.drizzle.ts',
+      'agents/schema.prisma',
+      'blazeresolver.config.json'
+    ]);
   });
 
   it('a repo with no Node app still gets the workflow and clear guidance instead of a crash', async () => {

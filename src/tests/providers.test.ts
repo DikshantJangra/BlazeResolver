@@ -114,7 +114,7 @@ describe('auto-identifying keys', () => {
     const calls = fakeApis({ 'api.groq.com': chatReply('ok'), 'api.anthropic.com': anthropicReply('ok'), 'api.openai.com': chatReply('ok') });
     try {
       await resolveComplete({ env: { API_KEYS: 'gsk_model1', BLAZE_MODEL: 'claude-sonnet-5' } })!('s', 'u');
-      assert.equal(calls[0].body.model, 'llama-3.3-70b-versatile', 'a Claude model name never goes to Groq');
+      assert.equal(calls[0].body.model, 'openai/gpt-oss-120b', 'a Claude model name never goes to Groq');
 
       calls.length = 0;
       await resolveComplete({ env: { API_KEYS: 'gsk_model2', BLAZE_MODEL: 'llama-3.1-8b-instant' } })!('s', 'u');

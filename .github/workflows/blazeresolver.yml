@@ -3,7 +3,7 @@ on:
   issues:
     types: [opened, labeled]
   pull_request:
-    types: [closed]
+    types: [opened, synchronize, closed]
 
 permissions:
   contents: write
@@ -15,10 +15,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ── 1. Fix job (Node resolver + optional AGY sidecar) ─────────────────────
   fix:
-    # Only issues the BlazeResolver handler filed (label) and that someone with write access opened.
-    # Reacts to a new issue or the blazeresolver label only. Labels the job itself adds (fixing, pr-opened, ...)
-    # are skipped here, before a runner starts, so they cost no Actions minutes.
+    # Only issues the BlazeResolver handler filed (blazeresolver label) and opened by
+    # owner/member/collaborator. Labels the job itself adds (fixing, pr-opened, …)
+    # are skipped here so they cost no Actions minutes.
     if: >-
       github.event_name == 'issues' &&
       (github.event.action == 'opened' || github.event.label.name == 'blazeresolver') &&
@@ -28,16 +29,115 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: corepack enable
-      - run: npx --yes blazeresolver@latest fix
+
+      # ── AGY sidecar (Python, optional — enriches the fix with full tool-loop) ──
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Antigravity SDK
+        run: pip install google-antigravity
+
+      - name: Start AGY sidecar (background, only when an AI key is configured)
+        # The sidecar gracefully does nothing if no key is present — the Node fix
+        # engine will then use resolveComplete() with whatever key IS configured.
+        if: >-
+          env.GEMINI_API_KEY != '' ||
+          env.OPENAI_API_KEY != '' ||
+          env.GROQ_API_KEY != '' ||
+          env.ANTHROPIC_API_KEY != ''
         env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Use a personal access token here (secret BLAZE_GITHUB_TOKEN) if you want CI to run on the PRs it opens.
+          GITHUB_TOKEN: ${{ secrets.BLAZE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          AGY_SIDECAR_PORT: "7391"
+        run: |
+          python agents/blaze_resolver_agent.py \
+            --issue ${{ github.event.issue.number }} \
+            --repo-root . \
+            --sidecar &
+          sleep 3
+          echo "Sidecar started (PID=$!)"
+
+      # ── Node fix engine ────────────────────────────────────────────────────
+      # resolveComplete() auto-detects whichever key is present, in priority order.
+      - name: Run BlazeResolver fix engine
+        run: npx --yes blazeresolver@latest fix
+        env:
+          # Pass ALL keys — resolveComplete() picks the best available one.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          API_KEYS: ${{ secrets.API_KEYS }}
+          AGY_SIDECAR_PORT: "7391"
           GITHUB_TOKEN: ${{ secrets.BLAZE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
+  # ── 2. Autonomous triage (Antigravity) ────────────────────────────────────
+  agy-triage:
+    if: >-
+      github.event_name == 'issues' &&
+      github.event.action == 'opened' &&
+      !contains(github.event.issue.labels.*.name, 'blazeresolver')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install google-antigravity
+      - name: Run AGY triage agent
+        run: |
+          python agents/blaze_triage_agent.py \
+            --mode triage \
+            --issue ${{ github.event.issue.number }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          API_KEYS: ${{ secrets.API_KEYS }}
+          GITHUB_TOKEN: ${{ secrets.BLAZE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+  # ── 3. Autonomous PR review (Antigravity) ─────────────────────────────────
+  agy-pr-review:
+    if: >-
+      github.event_name == 'pull_request' &&
+      (github.event.action == 'opened' || github.event.action == 'synchronize') &&
+      !startsWith(github.event.pull_request.head.ref, 'blazeresolver/fix-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install google-antigravity
+      - name: Run AGY PR review agent
+        run: |
+          python agents/blaze_triage_agent.py \
+            --mode pr-review \
+            --pr ${{ github.event.pull_request.number }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          API_KEYS: ${{ secrets.API_KEYS }}
+          GITHUB_TOKEN: ${{ secrets.BLAZE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+  # ── 4. Notify on fix merge (existing) ─────────────────────────────────────
   notify:
     if: >-
       github.event_name == 'pull_request' &&

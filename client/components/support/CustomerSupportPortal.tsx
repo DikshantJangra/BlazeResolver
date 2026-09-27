@@ -377,10 +377,42 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-900 text-xs font-semibold border border-orange-200">
-                <BlazzyIcon className="w-4 h-4 shrink-0" color="#EA580C" />
-                <span>BlazeResolver AI Concierge</span>
-              </span>
+              {selectedTicket.isHumanTakeover ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-900 text-xs font-semibold border border-blue-200">
+                  <RiUserVoiceLine className="w-4 h-4 shrink-0 text-blue-600" />
+                  <span>Human Specialist Connected</span>
+                </span>
+              ) : (
+                <>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-900 text-xs font-semibold border border-orange-200">
+                    <BlazzyIcon className="w-4 h-4 shrink-0" color="#EA580C" />
+                    <span>BlazeResolver AI Concierge</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!selectedTicket || isSending) return;
+                      setInputMessage('');
+                      await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          senderType: 'user',
+                          role: 'user',
+                          authorName: selectedTicket.customerName || 'Customer',
+                          content: 'I would like to speak to a human support specialist please.'
+                        })
+                      });
+                      loadTicketMessages(selectedTicket.id);
+                    }}
+                    className="px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium border border-gray-300 transition-colors flex items-center gap-1"
+                    title="Request human support specialist takeover"
+                  >
+                    <RiUserVoiceLine className="w-3.5 h-3.5 text-gray-600" />
+                    <span>Talk to Human</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
 

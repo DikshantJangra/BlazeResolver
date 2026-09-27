@@ -20,6 +20,7 @@ import { ClaudeProvider } from './resolver/claude-provider.js';
 import { lockDownServerFiles, resolveFixSandbox, runFix } from './jobs/fix.js';
 import { REPO_PATTERN } from './github/index.js';
 import { MAX_HELP_DOCS, answerQuestion } from './answer/index.js';
+import { retrieve, type Chunk } from './answer/retrieve.js';
 import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -368,6 +369,40 @@ app.post('/api/hitl/action', async (req, res) => {
       return res.status(404).json({ error: 'Action not found or already processed' });
     }
 
+    // Link HITL decision back into customer ticket chat threads subsequently
+    const matchingTickets = supportStore.getTickets().filter(t =>
+      (updatedAction.orderId && t.orderId === updatedAction.orderId) ||
+      (updatedAction.customerId && t.customerId === updatedAction.customerId)
+    );
+
+    for (const t of matchingTickets) {
+      const isApproved = decision === 'approve';
+      const supervisorNote = isApproved
+        ? `✅ Supervisor Authorization: ${reviewerName} approved action [${updatedAction.actionType.toUpperCase()}] for ₹${updatedAction.amount || 0}. Your credit/refund has been executed.`
+        : `❌ Supervisor Decision: ${reviewerName} reviewed action [${updatedAction.actionType.toUpperCase()}]. Status: Declined. Note: ${reason || 'Does not meet policy criteria'}.`;
+
+      const followUpMsg = supportStore.addMessage(t.id, {
+        ticketId: t.id,
+        role: 'agent',
+        senderType: 'bot',
+        authorName: 'Blazzy AI (Supervisor Linked)',
+        senderName: 'Blazzy AI',
+        body: supervisorNote,
+        content: supervisorNote
+      });
+
+      supportStore.updateTicket(t.id, {
+        status: isApproved ? 'closed' : t.status,
+        aiReport: {
+          ...t.aiReport,
+          suggestedAction: `Supervisor ${decision}: ${updatedAction.actionType}`
+        }
+      });
+
+      broadcastLiveEvent('support_message_created', { ticketId: t.id, message: followUpMsg }, 'everyone');
+      broadcastLiveEvent('support_ticket_updated', supportStore.getTicket(t.id), 'everyone');
+    }
+
     broadcastLiveEvent('hitl_updated', updatedAction, 'everyone');
     return res.json({ success: true, action: updatedAction });
   } catch (err: unknown) {
@@ -483,6 +518,19 @@ app.get('/api/support/tickets/:id/messages', (req, res) => {
   }
 });
 
+function isCustomerRequestingHuman(text: string): boolean {
+  const lower = text.toLowerCase();
+  const humanPhrases = [
+    'talk to a human', 'talk to human', 'speak to a human', 'speak to human',
+    'connect to human', 'connect with human', 'speak to an agent', 'talk to an agent',
+    'speak to agent', 'talk to agent', 'real person', 'live person', 'human agent',
+    'human representative', 'speak to someone', 'talk to someone', 'customer care executive',
+    'human please', 'agent please', 'representative please', 'escalate to supervisor',
+    'talk to manager', 'speak to manager', 'human support', 'connect human'
+  ];
+  return humanPhrases.some(phrase => lower.includes(phrase));
+}
+
 // Send Message in Ticket
 app.post('/api/support/tickets/:id/messages', async (req, res) => {
   try {
@@ -510,50 +558,141 @@ app.post('/api/support/tickets/:id/messages', async (req, res) => {
 
     broadcastLiveEvent('support_message_created', { ticketId, message: newMessage }, 'everyone');
 
-    // If customer sent message and AI Auto-Pilot is active (not human takeover) and ticket is open, generate AI response
-    if (senderType === 'user' && !ticket.isHumanTakeover && ticket.status !== 'closed' && !internalNote) {
-      setTimeout(async () => {
-        try {
-          const input: CustomerInput = {
-            id: `msg_pipe_${Date.now()}`,
-            channel: 'text',
-            rawText: text,
-            orderId: ticket.orderId,
-            customerId: ticket.customerId,
-            timestamp: new Date()
-          };
+    // If customer sent message:
+    if (senderType === 'user' && ticket.status !== 'closed' && !internalNote) {
+      // 1. Check for explicit human agent request
+      if (isCustomerRequestingHuman(text)) {
+        const updated = supportStore.updateTicket(ticketId, {
+          isHumanTakeover: true,
+          humanTakeoverReason: 'Customer explicitly requested a human specialist.'
+        });
 
-          const aiResult = await pipeline.processComplaint(input);
-          const aiReply = supportStore.addMessage(ticketId, {
-            ticketId,
-            role: 'agent',
-            senderType: 'bot',
-            authorName: 'Blazzy AI',
-            senderName: 'Blazzy AI',
-            body: aiResult.response.text,
-            content: aiResult.response.text
-          });
+        supportStore.addMessage(ticketId, {
+          ticketId,
+          role: 'system',
+          senderType: 'system',
+          content: '👤 Customer requested a human agent. Escalating to Support Specialist & pausing autonomous AI.',
+          body: '👤 Customer requested a human agent. Escalating to Support Specialist & pausing autonomous AI.'
+        });
 
-          // Update ticket AI report
-          supportStore.updateTicket(ticketId, {
-            aiReport: {
-              ...ticket.aiReport,
-              intent: aiResult.triage.intent,
-              sentiment: aiResult.triage.sentiment,
-              urgencyScore: aiResult.triage.urgencyScore,
-              policyAllowed: aiResult.resolution.policyDecision.allowed,
-              policyRationale: aiResult.resolution.policyDecision.rationale,
-              suggestedAction: aiResult.resolution.policyDecision.recommendedAction,
-              executionDurationMs: aiResult.executionDurationMs,
-              processedAt: aiResult.timestamp instanceof Date ? aiResult.timestamp.toISOString() : String(aiResult.timestamp)
+        const humanReply = supportStore.addMessage(ticketId, {
+          ticketId,
+          role: 'agent',
+          senderType: 'bot',
+          authorName: 'Blazzy Concierge',
+          senderName: 'Blazzy Concierge',
+          body: 'I have connected you with our human support team. A specialist has been notified with your case details and will take over this chat momentarily.',
+          content: 'I have connected you with our human support team. A specialist has been notified with your case details and will take over this chat momentarily.'
+        });
+
+        broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
+        broadcastLiveEvent('support_human_requested', { ticketId, reason: 'Customer requested human agent' }, 'admins');
+        broadcastLiveEvent('support_message_created', { ticketId, message: humanReply }, 'everyone');
+      } else if (!ticket.isHumanTakeover) {
+        // 2. AI Auto-Pilot with RAG grounding
+        setTimeout(async () => {
+          try {
+            const input: CustomerInput = {
+              id: `msg_pipe_${Date.now()}`,
+              channel: 'text',
+              rawText: text,
+              orderId: ticket.orderId,
+              customerId: ticket.customerId,
+              timestamp: new Date()
+            };
+
+            const aiResult = await pipeline.processComplaint(input);
+
+            // Ground with RAG over canned knowledge and domain policies
+            const canned = supportStore.getCannedResponses();
+            const docsContext = canned.map(c => `## ${c.title}\n${c.body}`).join('\n\n');
+            const relevantChunks = retrieve(docsContext, text, 2);
+            let responseText = aiResult.response.text;
+
+            if (relevantChunks.length > 0 && aiResult.triage.sentiment === 'frustrated') {
+              const matchedCanned = canned.find(c => c.title.toLowerCase().includes('refund') || c.title.toLowerCase().includes('apology'));
+              if (matchedCanned && !responseText.includes(matchedCanned.body.slice(0, 20))) {
+                responseText = `${responseText}\n\n${matchedCanned.body}`;
+              }
             }
-          });
 
-          broadcastLiveEvent('support_message_created', { ticketId, message: aiReply }, 'everyone');
-        } catch (e) {
-          console.error('Error generating AI auto reply:', e);
-        }
-      }, 600);
+            const aiReply = supportStore.addMessage(ticketId, {
+              ticketId,
+              role: 'agent',
+              senderType: 'bot',
+              authorName: 'Blazzy AI',
+              senderName: 'Blazzy AI',
+              body: responseText,
+              content: responseText
+            });
+
+            // Update ticket AI report
+            supportStore.updateTicket(ticketId, {
+              aiReport: {
+                ...ticket.aiReport,
+                intent: aiResult.triage.intent,
+                sentiment: aiResult.triage.sentiment,
+                urgencyScore: aiResult.triage.urgencyScore,
+                policyAllowed: aiResult.resolution.policyDecision.allowed,
+                policyRationale: aiResult.resolution.policyDecision.rationale,
+                suggestedAction: aiResult.resolution.policyDecision.recommendedAction,
+                executionDurationMs: aiResult.executionDurationMs,
+                processedAt: aiResult.timestamp instanceof Date ? aiResult.timestamp.toISOString() : String(aiResult.timestamp)
+              }
+            });
+
+            broadcastLiveEvent('support_message_created', { ticketId, message: aiReply }, 'everyone');
+
+            // Multi-step autonomous action follow-up
+            const executedActions = aiResult.resolution.actions.filter(a => a.approvalStatus === 'executed' && a.actionType !== 'reject_adversarial');
+            const pendingHitlActions = aiResult.resolution.actions.filter(a => a.approvalStatus === 'pending_human');
+
+            if (executedActions.length > 0) {
+              setTimeout(() => {
+                const act = executedActions[0];
+                let followUpText = '';
+                if (act.actionType === 'refund' || act.actionType === 'credit') {
+                  followUpText = `⚡ Automatic Action Executed: We have processed a wallet credit / refund of ₹${act.amount || 150} for order #${ticket.orderNumber || 'N/A'}. This has been confirmed on your account.`;
+                } else if (act.actionType === 're_deliver') {
+                  followUpText = `📦 Automatic Action Executed: A complimentary replacement delivery has been confirmed with our fulfillment team.`;
+                } else if (act.actionType === 'disable_item') {
+                  followUpText = `🛡️ Safety Action Executed: The reported item has been paused from our active catalog to prevent further defects.`;
+                }
+
+                if (followUpText) {
+                  const actionMsg = supportStore.addMessage(ticketId, {
+                    ticketId,
+                    role: 'agent',
+                    senderType: 'bot',
+                    authorName: 'Blazzy AI (Auto-Action)',
+                    senderName: 'Blazzy AI',
+                    body: followUpText,
+                    content: followUpText
+                  });
+                  broadcastLiveEvent('support_message_created', { ticketId, message: actionMsg }, 'everyone');
+                }
+              }, 1200);
+            } else if (pendingHitlActions.length > 0) {
+              setTimeout(() => {
+                const act = pendingHitlActions[0];
+                const hitlText = `⏳ Supervisor Queue Update: Your claim of ₹${act.amount || 0} exceeds the instant threshold and has been placed in the Supervisor HITL priority queue for 1-click authorization.`;
+                const actionMsg = supportStore.addMessage(ticketId, {
+                  ticketId,
+                  role: 'agent',
+                  senderType: 'bot',
+                  authorName: 'Blazzy AI (Supervisor Linked)',
+                  senderName: 'Blazzy AI',
+                  body: hitlText,
+                  content: hitlText
+                });
+                broadcastLiveEvent('support_message_created', { ticketId, message: actionMsg }, 'everyone');
+              }, 1200);
+            }
+          } catch (e) {
+            console.error('Error generating AI auto reply:', e);
+          }
+        }, 500);
+      }
     }
 
     return res.json({ success: true, data: newMessage });
@@ -594,7 +733,7 @@ app.post('/api/support/tickets/:id/takeover', (req, res) => {
   }
 });
 
-// Generate AI Copilot Draft
+// Generate AI Copilot Draft with RAG Context
 app.post('/api/support/tickets/:id/blazzy-draft', async (req, res) => {
   try {
     const ticketId = req.params.id;
@@ -605,15 +744,57 @@ app.post('/api/support/tickets/:id/blazzy-draft', async (req, res) => {
     const messages = supportStore.getMessages(ticketId);
     const lastUserMsg = [...messages].reverse().find((m) => m.senderType === 'user')?.body || ticket.subject;
 
+    // RAG: retrieve matching knowledge from canned responses & domain policies
+    const canned = supportStore.getCannedResponses();
+    const docs = canned.map(c => `[${c.title}]\n${c.body}`).join('\n\n');
+    const relevantKnowledge = retrieve(docs, prompt || lastUserMsg, 2);
+    const contextSnippet = relevantKnowledge.map((k: Chunk) => k.text).join('\n');
+
     let draft = '';
-    if (prompt?.includes('Apology') || prompt?.includes('Delay')) {
-      draft = `Dear ${ticket.customerName || 'Customer'}, we sincerely apologize for the delay. We are actively expediting order #${ticket.orderNumber || 'your order'} with high priority. Thank you for your patience!`;
-    } else if (prompt?.includes('Refund') || prompt?.includes('Credit')) {
-      draft = `Hi ${ticket.customerName || 'Customer'}, we have authorized an instant credit of ₹${ticket.aiReport?.claimedAmount || '150'} directly to your account. You should see the updated balance immediately.`;
-    } else if (prompt?.includes('Summarize')) {
-      draft = `Summary: Customer reported '${ticket.subject}'. AI Triage intent: ${ticket.aiReport?.intent || ticket.category} with sentiment '${ticket.aiReport?.sentiment || 'frustrated'}'. Resolution decision: ${ticket.aiReport?.suggestedAction || 'Agent review required'}.`;
-    } else {
-      draft = `Hello ${ticket.customerName || 'Customer'}, thank you for contacting support regarding ${ticket.subject}. Our team has reviewed your request and we are ensuring this is resolved immediately. Please let us know if you need any additional assistance!`;
+
+    // If AI completion is available, attempt to generate draft via model
+    if (answerComplete) {
+      try {
+        const systemPrompt = `You are Blazzy Copilot, an expert customer support AI assistant for ${profile.labels.business}.
+Write ONLY the final draft message for the customer in a warm, professional, concise tone. Do not wrap in JSON.`;
+        const userPrompt = `Ticket Context:
+- Subject: ${ticket.subject}
+- Customer: ${ticket.customerName || 'Customer'}
+- Order: #${ticket.orderNumber || 'N/A'} (Outlet: ${ticket.outletName || 'Hub'})
+- AI Triage Intent: ${ticket.aiReport?.intent || ticket.category} (Urgency: ${ticket.aiReport?.urgencyScore ?? 50}/100)
+- Policy Rationale: ${ticket.aiReport?.policyRationale || 'Standard resolution'}
+- Suggested Action: ${ticket.aiReport?.suggestedAction || 'Review and assist'}
+
+Relevant Policy / Knowledge Excerpts:
+${contextSnippet || 'Standard customer service guidelines.'}
+
+Admin Instruction / Goal:
+${prompt || 'Draft a helpful, polite, and reassuring response addressing the customer\'s latest message.'}
+
+Customer's Latest Message:
+"${lastUserMsg}"`;
+
+        const response = await answerComplete(systemPrompt, userPrompt);
+        if (response && response.trim().length > 10) {
+          draft = response.trim().replace(/^["']|["']$/g, '');
+        }
+      } catch (err) {
+        // Fallback to grounded template logic below
+      }
+    }
+
+    if (!draft) {
+      if (prompt?.includes('Apology') || prompt?.includes('Delay')) {
+        draft = `Dear ${ticket.customerName || 'Customer'}, we sincerely apologize for the delay. We are actively expediting order #${ticket.orderNumber || 'your order'} with high priority at ${ticket.outletName || 'our hub'}. Thank you for your patience!`;
+      } else if (prompt?.includes('Refund') || prompt?.includes('Credit')) {
+        draft = `Hi ${ticket.customerName || 'Customer'}, we have authorized an instant credit of ₹${ticket.aiReport?.claimedAmount || '150'} directly to your account. You should see the updated balance immediately.`;
+      } else if (prompt?.includes('Summarize')) {
+        draft = `Summary: Customer reported '${ticket.subject}'. AI Triage intent: ${ticket.aiReport?.intent || ticket.category} with sentiment '${ticket.aiReport?.sentiment || 'frustrated'}'. Resolution decision: ${ticket.aiReport?.suggestedAction || 'Agent review required'}.`;
+      } else if (relevantKnowledge.length > 0) {
+        draft = `Hello ${ticket.customerName || 'Customer'}, thank you for contacting support regarding ${ticket.subject}. ${relevantKnowledge[0].text} Please let us know if we can assist you with anything else!`;
+      } else {
+        draft = `Hello ${ticket.customerName || 'Customer'}, thank you for contacting support regarding ${ticket.subject}. Our team has reviewed your request and we are ensuring this is resolved immediately. Please let us know if you need any additional assistance!`;
+      }
     }
 
     return res.json({ success: true, data: { draft } });
@@ -622,26 +803,155 @@ app.post('/api/support/tickets/:id/blazzy-draft', async (req, res) => {
   }
 });
 
+// Re-run AI Diagnosis On Demand
+app.post('/api/support/tickets/:id/diagnose', async (req, res) => {
+  try {
+    const ticketId = req.params.id;
+    const ticket = supportStore.getTicket(ticketId);
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+
+    const messages = supportStore.getMessages(ticketId);
+    const userTexts = messages.filter(m => m.senderType === 'user').map(m => m.body || m.content).join(' ');
+    const diagnosisText = userTexts || ticket.subject;
+
+    const input: CustomerInput = {
+      id: `diag_${Date.now()}`,
+      channel: 'text',
+      rawText: diagnosisText,
+      orderId: ticket.orderId,
+      customerId: ticket.customerId,
+      timestamp: new Date()
+    };
+
+    const aiResult = await pipeline.processComplaint(input);
+
+    const updated = supportStore.updateTicket(ticketId, {
+      aiReport: {
+        triageId: aiResult.triage.id,
+        intent: aiResult.triage.intent,
+        sentiment: aiResult.triage.sentiment,
+        urgencyScore: aiResult.triage.urgencyScore,
+        guardrailPassed: aiResult.triage.guardrailPassed,
+        isPromptInjection: aiResult.triage.isPromptInjection,
+        policyAllowed: aiResult.resolution.policyDecision.allowed,
+        policyRationale: aiResult.resolution.policyDecision.rationale,
+        suggestedAction: aiResult.resolution.policyDecision.recommendedAction,
+        requiresHitl: aiResult.resolution.hitlRequired,
+        claimedAmount: aiResult.triage.claimedAmount,
+        incidentId: aiResult.correlation.incident?.incidentId,
+        incidentTitle: aiResult.correlation.incident?.title,
+        clusterKey: aiResult.correlation.cluster?.clusterKey,
+        isSystemic: aiResult.correlation.isSystemic,
+        executionDurationMs: aiResult.executionDurationMs,
+        processedAt: aiResult.timestamp instanceof Date ? aiResult.timestamp.toISOString() : String(aiResult.timestamp)
+      }
+    });
+
+    broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
+    return res.json({ success: true, data: { ticket: updated, triage: aiResult } });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// 1-Click HITL Action Execution on Ticket
+app.post('/api/support/tickets/:id/action', async (req, res) => {
+  try {
+    const ticketId = req.params.id;
+    const { action, amount, reason = 'Admin resolution' } = req.body;
+    const ticket = supportStore.getTicket(ticketId);
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+
+    let actionNote = `⚡ Admin executed resolution action: ${action}`;
+
+    if (action === 'refund' || action === 'credit') {
+      const refundGateway = adapters.refundGateway as any;
+      if (refundGateway && refundGateway.issueRefund) {
+        await refundGateway.issueRefund({
+          orderId: ticket.orderId || 'ORD-UNKNOWN',
+          amountPaise: (amount || ticket.aiReport?.claimedAmount || 150) * 100,
+          reason,
+          destination: action === 'credit' ? 'wallet' : 'source_payment'
+        });
+      }
+      actionNote = `💰 Processed ${action === 'credit' ? 'Wallet Credit' : 'Payment Refund'} of ₹${amount || ticket.aiReport?.claimedAmount || 150} for order #${ticket.orderNumber || 'N/A'}. Reason: ${reason}`;
+    } else if (action === 'replacement') {
+      actionNote = `📦 Authorized complimentary replacement dispatch for order #${ticket.orderNumber || 'N/A'}. Reason: ${reason}`;
+    } else if (action === 'coupon') {
+      actionNote = `🎟️ Issued goodwill discount coupon CODE: BLAZE${Math.floor(Math.random() * 900 + 100)} to customer.`;
+    }
+
+    supportStore.addMessage(ticketId, {
+      ticketId,
+      role: 'system',
+      senderType: 'system',
+      content: actionNote,
+      body: actionNote
+    });
+
+    const updated = supportStore.updateTicket(ticketId, {
+      status: action === 'resolve' ? 'closed' : ticket.status,
+      aiReport: {
+        ...ticket.aiReport,
+        suggestedAction: `Executed: ${action}`
+      }
+    });
+
+    broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
+    return res.json({ success: true, data: { ticket: updated, note: actionNote } });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // Escalate Ticket to Pulse / Dev Pipeline
-app.post('/api/support/tickets/:id/escalate', (req, res) => {
+app.post('/api/support/tickets/:id/escalate', async (req, res) => {
   try {
     const ticketId = req.params.id;
     const { title, type = 'bug', priority = 'high', note } = req.body;
     const ticket = supportStore.getTicket(ticketId);
     if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
 
+    // 1. Create or match incident in the IncidentStore
+    const triageVerdict: any = {
+      kind: 'bug',
+      confidence: 'high',
+      title: title || ticket.subject,
+      description: note || ticket.subject,
+      severity: priority === 'urgent' ? 'critical' : priority === 'high' ? 'major' : 'minor',
+      injection: false
+    };
+
+    const { incident, isNew } = store.addReport(
+      'default',
+      {
+        message: `${ticket.subject}\n\n${note || ''}`,
+        pageUrl: ticket.outletName || 'app',
+        email: ticket.customerEmail
+      },
+      triageVerdict
+    );
+
+    const branchName = `blazeresolver/fix-${incident?.id || ticketId}`;
+
     const updated = supportStore.updateTicket(ticketId, {
       isEscalated: true,
-      pulseStatus: 'backlog',
-      priority: priority as any
+      pulseStatus: 'investigating',
+      priority: priority as any,
+      aiReport: {
+        ...ticket.aiReport,
+        incidentId: incident?.id,
+        incidentTitle: title || ticket.subject,
+        isSystemic: true
+      }
     });
 
     supportStore.addMessage(ticketId, {
       ticketId,
       role: 'system',
       senderType: 'system',
-      content: `⚡ Escalated to Pulse Dev Pipeline [${type.toUpperCase()}]: ${title}`,
-      body: `⚡ Escalated to Pulse Dev Pipeline [${type.toUpperCase()}]: ${title}`
+      content: `⚡ Escalated to Pulse Dev Pipeline [${type.toUpperCase()}]: ${title}. Target branch: ${branchName}`,
+      body: `⚡ Escalated to Pulse Dev Pipeline [${type.toUpperCase()}]: ${title}. Target branch: ${branchName}`
     });
 
     if (note) {
@@ -656,8 +966,15 @@ app.post('/api/support/tickets/:id/escalate', (req, res) => {
       });
     }
 
+    // 2. If a project is configured, trigger the autonomous fix loop
+    const firstProject = registry.list()[0];
+    if (firstProject && incident && isNew && fixEnabled) {
+      enqueueFix(firstProject, incident);
+      supportStore.updateTicket(ticketId, { pulseStatus: 'fixing' });
+    }
+
     broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
-    return res.json({ success: true, data: updated });
+    return res.json({ success: true, data: updated, branch: branchName, incidentId: incident?.id });
   } catch (err: unknown) {
     return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
   }
