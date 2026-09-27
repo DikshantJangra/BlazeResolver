@@ -21,6 +21,7 @@ import {
 import { RiCustomerService2Fill, RiRobot2Line } from 'react-icons/ri';
 import type { ProfileInfo } from '../App.js';
 import { TbWaveSine } from 'react-icons/tb';
+import { BlazzyIcon } from './support/BlazzyMascot.js';
 
 interface VoiceMessage {
   id: string;
@@ -64,19 +65,19 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
     setActiveUserId((current) => current || profile.demo.defaultCustomerId);
     setActiveOrderId((current) => current || (profile.demo.sampleOrders[0]?.id ?? ''));
   }, [profile]);
+
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [messages, setMessages] = useState<VoiceMessage[]>([
     {
       id: 'welcome',
       role: 'system',
-      text: '🎙️ Welcome to Blazzy Live Voice Assistant. Click "Start Live Call" or press any test scenario below to speak directly with Gemini Multimodal Live API.',
+      text: '🎙️ Welcome to Blazzy Live Voice Assistant. Click "Start Live Call" or choose any scenario below to speak directly with the AI Voice engine.',
       timestamp: new Date()
     }
   ]);
   const [activeTools, setActiveTools] = useState<ToolCallEvent[]>([]);
   const [textInput, setTextInput] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
-  const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -117,7 +118,7 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
           ? Math.sin(phase + i * 0.3) * 0.5 + 0.5
           : isSpeaking
           ? Math.cos(phase + i * 0.4) * 0.6 + 0.5
-          : 0.1;
+          : 0.12;
 
         const effectiveHeight = Math.max(4, factor * height * 0.85);
         const x = i * (barWidth + 2);
@@ -125,14 +126,14 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
 
         const gradient = ctx.createLinearGradient(0, y, 0, y + effectiveHeight);
         if (isSpeaking) {
-          gradient.addColorStop(0, '#f97316'); // Orange
+          gradient.addColorStop(0, '#f97316');
           gradient.addColorStop(1, '#ea580c');
         } else if (isRecording) {
-          gradient.addColorStop(0, '#10b981'); // Emerald
+          gradient.addColorStop(0, '#10b981');
           gradient.addColorStop(1, '#059669');
         } else {
-          gradient.addColorStop(0, '#475569'); // Slate
-          gradient.addColorStop(1, '#334155');
+          gradient.addColorStop(0, '#cbd5e1');
+          gradient.addColorStop(1, '#94a3b8');
         }
 
         ctx.fillStyle = gradient;
@@ -262,7 +263,6 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
         }
 
         const inputData = e.inputBuffer.getChannelData(0);
-        // Convert Float32 to 16-bit PCM
         const pcm16 = new Int16Array(inputData.length);
         let sum = 0;
         for (let i = 0; i < inputData.length; i++) {
@@ -274,7 +274,6 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
         const avg = sum / inputData.length;
         setAudioLevel(Math.min(1, avg * 5));
 
-        // Stream raw binary 16-bit PCM chunk over WebSocket
         wsRef.current.send(pcm16.buffer);
       };
 
@@ -395,7 +394,6 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
     if (!query.trim()) return;
 
     if (!isConnected || !wsRef.current) {
-      // Auto-connect first if not connected
       startSession().then(() => {
         setTimeout(() => {
           wsRef.current?.send(JSON.stringify({ type: 'text_input', text: query }));
@@ -410,44 +408,46 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+    <div className="flex flex-col h-full bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
       {/* Header Bar */}
-      <div className="flex items-center justify-between px-6 py-4 bg-slate-950/80 border-b border-slate-800 backdrop-blur-md">
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <div className={`w-3.5 h-3.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
-            {isSpeaking && (
-              <span className="absolute -top-1 -left-1 w-5.5 h-5.5 rounded-full bg-orange-500/40 animate-ping" />
-            )}
+      <div className="flex flex-wrap items-center justify-between px-5 py-3.5 bg-slate-50/90 border-b border-slate-200 gap-3">
+        <div className="flex items-center gap-3">
+          <div className="relative flex items-center justify-center">
+            <BlazzyIcon className="w-8 h-8 rounded-lg" />
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+              }`}
+            />
           </div>
           <div>
-            <div className="flex items-center space-x-2">
-              <span className="font-bold text-slate-100 text-base">Blazzy Voice Agent</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/30 font-mono font-medium">
-                Gemini Multimodal Live (PCM 16k/24k)
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-900 text-sm">Blazzy Voice Assistant</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 font-mono font-bold">
+                Gemini Live Voice • PCM 16k/24k
               </span>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-[11px] text-slate-500">
               {isConnected
                 ? isSpeaking
                   ? 'Blazzy is speaking...'
                   : isRecording
                   ? 'Listening to microphone stream...'
-                  : 'Ready'
-                : 'Offline - Click Start Live Call to initiate bidirectional session'}
+                  : 'Ready for input'
+                : 'Offline • Connect to start bidirectional speech session'}
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs">
-            <span className="text-slate-400">Voice:</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs shadow-2xs">
+            <span className="text-slate-500 text-[11px]">Voice:</span>
             <select
               value={activeVoice}
               onChange={(e) => setActiveVoice(e.target.value)}
               disabled={isConnected}
-              className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer"
+              className="bg-transparent text-slate-800 font-semibold focus:outline-none cursor-pointer text-xs"
             >
               <option value="Kore">Kore (Empathetic)</option>
               <option value="Puck">Puck (Fast/Upbeat)</option>
@@ -457,12 +457,12 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
             </select>
           </div>
 
-          <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs">
-            <span className="text-slate-400">Order:</span>
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs shadow-2xs">
+            <span className="text-slate-500 text-[11px]">Order:</span>
             <select
               value={activeOrderId}
               onChange={(e) => setActiveOrderId(e.target.value)}
-              className="bg-transparent text-orange-400 font-mono font-bold focus:outline-none cursor-pointer"
+              className="bg-transparent text-orange-600 font-mono font-bold focus:outline-none cursor-pointer text-xs"
             >
               {profile?.demo.sampleOrders.map((order) => (
                 <option key={order.id} value={order.id}>
@@ -475,17 +475,17 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
           {isConnected ? (
             <button
               onClick={endSession}
-              className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-lg transition-all"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all shadow-xs"
             >
-              <FiPhoneOff className="text-sm" />
+              <FiPhoneOff className="text-xs" />
               <span>End Call</span>
             </button>
           ) : (
             <button
               onClick={startSession}
-              className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg transition-all"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-all shadow-xs"
             >
-              <FiPhoneCall className="text-sm" />
+              <FiPhoneCall className="text-xs" />
               <span>Start Live Call</span>
             </button>
           )}
@@ -493,20 +493,20 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
       </div>
 
       {/* Main Grid: Waveform + Tools HUD + Live Transcript */}
-      <div className="flex-1 grid grid-cols-12 gap-4 p-6 overflow-hidden min-h-0 bg-slate-950/40">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 p-4 overflow-y-auto md:overflow-hidden min-h-0 bg-slate-50/50">
         {/* Left Side: Real-Time Audio Visualizer & Dispatched Tools HUD (5 cols) */}
-        <div className="col-span-5 flex flex-col space-y-4 overflow-hidden">
+        <div className="col-span-1 md:col-span-5 flex flex-col gap-3 min-h-[300px] overflow-hidden">
           {/* Audio Visualizer Card */}
-          <div className="p-5 bg-slate-900/90 border border-slate-800 rounded-xl relative flex flex-col items-center justify-center min-h-[160px]">
-            <canvas ref={canvasRef} width={340} height={70} className="w-full h-16" />
+          <div className="p-4 bg-white border border-slate-200 rounded-xl relative flex flex-col items-center justify-center min-h-[140px] shadow-2xs">
+            <canvas ref={canvasRef} width={340} height={70} className="w-full h-14" />
 
-            <div className="mt-3 flex items-center justify-between w-full text-xs text-slate-400">
-              <div className="flex items-center space-x-2">
-                <span className={`w-2 h-2 rounded-full ${isRecording ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+            <div className="mt-2.5 flex items-center justify-between w-full text-[11px] text-slate-500 font-medium">
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${isRecording ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
                 <span>Microphone (PCM 16k)</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <span className={`w-2 h-2 rounded-full ${isSpeaking ? 'bg-orange-400 animate-pulse' : 'bg-slate-600'}`} />
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${isSpeaking ? 'bg-orange-500 animate-pulse' : 'bg-slate-300'}`} />
                 <span>Model Output (PCM 24k)</span>
               </div>
             </div>
@@ -515,7 +515,7 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
             {isSpeaking && (
               <button
                 onClick={stopAllPlayback}
-                className="mt-3 px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-medium transition-all"
+                className="mt-2.5 px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-medium transition-all shadow-2xs"
               >
                 Interrupt (Barge-In)
               </button>
@@ -523,62 +523,62 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
           </div>
 
           {/* Real-Time Tool Calls Stream HUD */}
-          <div className="flex-1 flex flex-col bg-slate-900/90 border border-slate-800 rounded-xl p-4 overflow-hidden">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center space-x-2">
-                <FiZap className="text-orange-400" />
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                  Live Tool Dispatch Stream
+          <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-xl p-3.5 overflow-hidden shadow-2xs min-h-[180px]">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <FiZap className="text-orange-500" />
+                <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                  Live Tool Execution Stream
                 </span>
               </div>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono font-bold">
                 {activeTools.length} Dispatched
               </span>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2.5 mt-3 pr-1">
+            <div className="flex-1 overflow-y-auto space-y-2 mt-2.5 pr-1">
               {activeTools.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 text-xs py-8">
-                  <FiLayers className="text-2xl mb-2 opacity-40" />
-                  <span>No mid-conversation tools triggered yet.</span>
-                  <span className="text-[11px] text-slate-600 mt-1">
-                    Ask Blazzy to check an order or refund to see live execution!
+                <div className="flex flex-col items-center justify-center h-full text-center text-slate-400 text-xs py-6">
+                  <FiLayers className="text-xl mb-1.5 text-slate-300" />
+                  <span className="font-medium text-slate-600">No tools triggered yet</span>
+                  <span className="text-[11px] text-slate-400 mt-0.5">
+                    Ask Blazzy to look up your order or calculate refund!
                   </span>
                 </div>
               ) : (
                 activeTools.map((tool) => (
                   <div
                     key={tool.id}
-                    className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono transition-all hover:border-slate-700"
+                    className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono transition-all hover:border-slate-300"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-1.5">
                         <span
                           className={`w-2 h-2 rounded-full ${
                             tool.status === 'completed'
-                              ? 'bg-emerald-400'
+                              ? 'bg-emerald-500'
                               : tool.status === 'running'
-                              ? 'bg-amber-400 animate-ping'
-                              : 'bg-red-400'
+                              ? 'bg-amber-500 animate-ping'
+                              : 'bg-red-500'
                           }`}
                         />
-                        <span className="font-bold text-orange-400">{tool.toolName}</span>
+                        <span className="font-bold text-orange-700">{tool.toolName}</span>
                       </div>
-                      <span className="text-[10px] text-slate-500">
+                      <span className="text-[10px] text-slate-400">
                         {tool.timestamp.toLocaleTimeString()}
                       </span>
                     </div>
 
                     {tool.args && (
-                      <div className="mt-1.5 text-[11px] text-slate-400 bg-slate-900/80 p-1.5 rounded border border-slate-800/60 overflow-x-auto">
-                        <span className="text-slate-500 font-sans text-[10px]">ARGS: </span>
+                      <div className="mt-1 text-[10px] text-slate-600 bg-white p-1.5 rounded border border-slate-200 overflow-x-auto">
+                        <span className="text-slate-400 font-sans text-[10px] font-semibold">ARGS: </span>
                         {JSON.stringify(tool.args)}
                       </div>
                     )}
 
                     {tool.result != null && (
-                      <div className="mt-1.5 text-[11px] text-emerald-300 bg-emerald-950/20 p-1.5 rounded border border-emerald-900/40 overflow-x-auto max-h-24">
-                        <span className="text-emerald-500 font-sans text-[10px]">RESULT: </span>
+                      <div className="mt-1 text-[10px] text-emerald-800 bg-emerald-50 p-1.5 rounded border border-emerald-200 overflow-x-auto max-h-20">
+                        <span className="text-emerald-600 font-sans text-[10px] font-semibold">RESULT: </span>
                         {typeof tool.result === 'object'
                           ? JSON.stringify(tool.result, null, 2)
                           : String(tool.result)}
@@ -592,20 +592,20 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
         </div>
 
         {/* Right Side: Conversation Transcript & Interactive Simulation Bar (7 cols) */}
-        <div className="col-span-7 flex flex-col bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="col-span-1 md:col-span-7 flex flex-col bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs min-h-[360px]">
           {/* Quick Scenario Buttons */}
-          <div className="p-3 bg-slate-950/60 border-b border-slate-800 flex items-center space-x-2 overflow-x-auto text-xs">
-            <span className="text-[11px] text-slate-500 whitespace-nowrap font-medium">Quick Scenarios:</span>
+          <div className="p-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2 overflow-x-auto text-xs">
+            <span className="text-[11px] text-slate-500 whitespace-nowrap font-semibold">Scenarios:</span>
             {profile?.demo.samplePrompts.map((prompt) => (
               <button
                 key={prompt.label}
                 onClick={() => handleSendText(prompt.text)}
-                className={`px-2.5 py-1 rounded-md whitespace-nowrap transition-all border ${
+                className={`px-2.5 py-1 rounded-md whitespace-nowrap text-[11px] font-medium transition-all border ${
                   prompt.tone === 'warning'
-                    ? 'bg-amber-950/30 hover:bg-amber-900/40 text-amber-300 border-amber-800/40'
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
                     : prompt.tone === 'danger'
-                    ? 'bg-red-950/30 hover:bg-red-900/40 text-red-300 border-red-800/40'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                    ? 'bg-red-50 hover:bg-red-100 text-red-900 border-red-200'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
                 }`}
               >
                 {prompt.label}
@@ -614,7 +614,7 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
           </div>
 
           {/* Transcript Feed */}
-          <div ref={chatScrollRef} className="flex-1 p-4 overflow-y-auto space-y-3.5 bg-slate-950/20">
+          <div ref={chatScrollRef} className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/40">
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -627,27 +627,27 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
                 }`}
               >
                 {msg.role === 'system' ? (
-                  <div className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-slate-400 text-xs text-center max-w-lg">
+                  <div className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-[11px] text-center max-w-lg font-medium">
                     {msg.text}
                   </div>
                 ) : (
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-md ${
+                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-xs ${
                       msg.role === 'user'
                         ? 'bg-emerald-600 text-white rounded-br-none'
-                        : 'bg-slate-800 text-slate-100 border border-slate-700 rounded-bl-none'
+                        : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'
                     }`}
                   >
-                    <div className="flex items-center space-x-1.5 mb-1 opacity-70 text-[10px] font-semibold">
+                    <div className="flex items-center gap-1.5 mb-1 opacity-80 text-[10px] font-semibold">
                       {msg.role === 'user' ? (
                         <>
                           <FiUser />
-                          <span>Customer (Voice)</span>
+                          <span>Customer Voice Input</span>
                         </>
                       ) : (
                         <>
-                          <RiRobot2Line className="text-orange-400" />
-                          <span className="text-orange-300">Blazzy Voice AI</span>
+                          <BlazzyIcon className="w-3.5 h-3.5" />
+                          <span className="text-orange-700 font-bold">Blazzy Voice AI</span>
                         </>
                       )}
                       <span>• {msg.timestamp.toLocaleTimeString()}</span>
@@ -660,20 +660,21 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
           </div>
 
           {/* Live Audio / Text Input Bar */}
-          <div className="p-3 bg-slate-950/90 border-t border-slate-800 flex items-center space-x-2">
+          <div className="p-2.5 bg-white border-t border-slate-200 flex items-center gap-2">
             <input
               type="text"
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
-              placeholder="Speak to your mic or type customer voice query..."
-              className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-orange-500 placeholder-slate-500"
+              placeholder="Type message or speak through microphone..."
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-orange-500 focus:bg-white placeholder-slate-400 font-medium"
             />
             <button
               onClick={() => handleSendText()}
-              className="p-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md"
+              className="p-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs"
+              title="Send speech text"
             >
-              <FiSend />
+              <FiSend className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -681,3 +682,4 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
     </div>
   );
 };
+
