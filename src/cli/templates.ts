@@ -18,8 +18,11 @@ concurrency:
 jobs:
   fix:
     # Only issues the BlazeResolver handler filed (label) and that someone with write access opened.
+    # Reacts to a new issue or the blazeresolver label only. Labels the job itself adds (fixing, pr-opened, ...)
+    # are skipped here, before a runner starts, so they cost no Actions minutes.
     if: >-
       github.event_name == 'issues' &&
+      (github.event.action == 'opened' || github.event.label.name == 'blazeresolver') &&
       contains(github.event.issue.labels.*.name, 'blazeresolver') &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
     runs-on: ubuntu-latest
@@ -64,6 +67,9 @@ export const routeFile = (repo: string) => `import { createHandler } from 'blaze
 
 // Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only).
 const handler = createHandler({ repo: '${repo}' });
+
+// Triage and filing take a few seconds; room for a slow AI provider on serverless hosts (Vercel reads this).
+export const maxDuration = 60;
 
 export const POST = handler;
 export const OPTIONS = handler;

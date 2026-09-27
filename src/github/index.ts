@@ -30,6 +30,40 @@ export function redactPersonalData(text: string): string {
     });
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** How long to wait before retrying, or undefined when the error won't go away by waiting. */
+function retryDelay(res: Response, attempt: number): number | undefined {
+  const after = Number(res.headers.get('retry-after'));
+  const secondaryLimit = res.status === 403 && (res.headers.has('retry-after') || res.headers.get('x-ratelimit-remaining') === '0');
+  if (res.status !== 429 && res.status < 500 && !secondaryLimit) return undefined;
+  return Math.min(after > 0 ? after * 1000 : 500 * 2 ** attempt, 10_000);
+}
+
+async function request(token: string, method: 'GET' | 'POST', url: string, body: unknown, f: typeof fetch): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await f(url, {
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'application/vnd.github+json',
+        'content-type': 'application/json',
+        'user-agent': 'blazeresolver'
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(20_000)
+    });
+    if (res.ok) return res;
+    const wait = attempt < 2 ? retryDelay(res, attempt) : undefined;
+    if (wait === undefined) {
+      const path = new URL(url).pathname;
+      const hint = res.status === 401 ? ' (token expired or revoked: create a new one and update BLAZE_GITHUB_TOKEN)' : '';
+      throw new Error(`github ${path} ${res.status}${hint}: ${(await res.text()).slice(0, 300)}`);
+    }
+    await sleep(wait);
+  }
+}
+
 async function call<T = { html_url: string; number: number }>(
   token: string,
   method: 'GET' | 'POST',
@@ -37,19 +71,21 @@ async function call<T = { html_url: string; number: number }>(
   body: unknown,
   f: typeof fetch
 ): Promise<T> {
-  const res = await f(`https://api.github.com${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: 'application/vnd.github+json',
-      'content-type': 'application/json',
-      'user-agent': 'blazeresolver'
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(20_000)
-  });
-  if (!res.ok) throw new Error(`github ${path} ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  return (await res.json()) as T;
+  return (await (await request(token, method, `https://api.github.com${path}`, body, f)).json()) as T;
+}
+
+/** Follows GitHub's Link headers, up to `maxPages` pages of 100. */
+async function paginate<T = any>(token: string, path: string, f: typeof fetch, maxPages = 20): Promise<T[]> {
+  const all: T[] = [];
+  let url: string | undefined = `https://api.github.com${path}${path.includes('?') ? '&' : '?'}per_page=100`;
+  for (let page = 0; url && page < maxPages; page++) {
+    const res = await request(token, 'GET', url, undefined, f);
+    all.push(...((await res.json()) as T[]));
+    const next = res.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
+    // The token goes along, so only ever follow links back to the API.
+    url = next?.startsWith('https://api.github.com/') ? next : undefined;
+  }
+  return all;
 }
 const api = (token: string, path: string, body: unknown, f: typeof fetch) => call(token, 'POST', path, body, f);
 
@@ -77,14 +113,14 @@ export async function getIssue(token: string, repo: string, number: number, f: t
   return toIssue(await call(token, 'GET', `/repos/${repo}/issues/${number}`, undefined, f));
 }
 
-/** Open issues with a label (pull requests excluded), newest first. */
+/** Open issues with a label (pull requests excluded), newest first. All pages, so duplicates are found past the first 100. */
 export async function listOpenIssues(token: string, repo: string, label: string, f: typeof fetch = fetch): Promise<Issue[]> {
-  const raw = await call<any[]>(token, 'GET', `/repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=100`, undefined, f);
+  const raw = await paginate(token, `/repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}`, f);
   return raw.filter((i) => !i.pull_request).map(toIssue);
 }
 
 export async function listComments(token: string, repo: string, number: number, f: typeof fetch = fetch): Promise<string[]> {
-  const raw = await call<any[]>(token, 'GET', `/repos/${repo}/issues/${number}/comments?per_page=100`, undefined, f);
+  const raw = await paginate(token, `/repos/${repo}/issues/${number}/comments`, f);
   return raw.map((c) => c.body ?? '');
 }
 

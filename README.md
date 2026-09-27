@@ -155,6 +155,10 @@ npx blazeresolver init
 
 Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo), paste any AI key into `.env` as `API_KEYS`, run `gh secret set API_KEYS`, allow Actions to create pull requests, protect your default branch, and paste the widget tag `init` prints. A human always reviews and merges the PR.
 
+### The widget
+
+A small light panel (about 14 KB gzipped) in a shadow DOM, so it never clashes with your styles: a text box and a Send button, a bottom sheet on phones, and unsent drafts kept. It attaches the page address and recent JavaScript errors (the reporter can untick that). Script-tag attributes: `data-accent="#6d28d9"`, `data-position="left"`, `data-title`, `data-user-id`, `data-user-email`, `data-ask-email="true"` (with `BLAZE_NOTIFY_CUSTOMERS=true`), and `data-launcher="false"` to hide the floating button. Open it from your own UI with `<a href="#" data-blazeresolver-open>Report a bug</a>` or `BlazeResolver.open('optional text')`.
+
 ### AI providers
 
 Paste keys; most need no naming. Each key's provider is recognized from the key itself, so one line works across providers, several at once:

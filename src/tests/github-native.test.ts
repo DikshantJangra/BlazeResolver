@@ -296,3 +296,62 @@ describe('init', () => {
     assert.match(out.join('\n'), /kept   \.env/);
   });
 });
+
+describe('at scale', () => {
+  const page = (items: unknown[], next?: string, status = 200, headers: Record<string, string> = {}) =>
+    new Response(JSON.stringify(items), { status, headers: { ...(next ? { link: `<${next}>; rel="next"` } : {}), ...headers } });
+
+  it('finds the matching issue past the first 100 open ones, so a repeat report never opens a duplicate', async () => {
+    const verdict = await triage({ message: 'checkout crashes' }, bugVerdict());
+    const target = { number: 150, title: 't', body: `x ${'<!-- blaze:key=' + groupKey(verdict) + ' -->'}`, state: 'open', labels: [{ name: 'blazeresolver' }], html_url: 'u' };
+    const filler = Array.from({ length: 100 }, (_, i) => ({ number: i + 1, title: 't', body: 'other', state: 'open', labels: [], html_url: 'u' }));
+    const calls: string[] = [];
+    const f = (async (url: string, init: any) => {
+      calls.push(`${init.method} ${url}`);
+      if (url.includes('/issues?') && !url.includes('page=2')) return page(filler, 'https://api.github.com/repos/acme/shop/issues?page=2');
+      if (url.includes('page=2')) return page([target]);
+      return new Response(JSON.stringify({ html_url: 'c', number: 1 }), { status: 201 });
+    }) as unknown as typeof fetch;
+
+    const res = await createHandler({ repo: 'acme/shop', githubToken: 't', complete: bugVerdict(), fetch: f })(post({ message: 'checkout crashes' }, '10.0.0.1'));
+    assert.equal(res.status, 202);
+    assert.ok(calls.some((c) => c === 'POST https://api.github.com/repos/acme/shop/issues/150/comments'));
+    assert.ok(!calls.some((c) => c === 'POST https://api.github.com/repos/acme/shop/issues'));
+  });
+
+  it('retries GitHub rate limits and outages, and never sends the token to a foreign pagination link', async () => {
+    const { listOpenIssues } = await import('../github/index.js');
+    let n = 0;
+    const urls: string[] = [];
+    const f = (async (url: string) => {
+      urls.push(url);
+      n++;
+      if (n === 1) return page([], undefined, 429, { 'retry-after': '0' });
+      if (n === 2) return page([], undefined, 502);
+      return page([{ number: 1, title: 't', body: '', state: 'open', labels: [] }], 'https://evil.test/steal');
+    }) as unknown as typeof fetch;
+    const issues = await listOpenIssues('t', 'acme/shop', 'blazeresolver', f);
+    assert.equal(issues.length, 1);
+    assert.equal(urls.length, 3);
+    assert.ok(!urls.some((u) => u.startsWith('https://evil.test')));
+  });
+
+  it('logs why a report could not be filed, naming an expired token', async () => {
+    const f = (async () => new Response('Bad credentials', { status: 401 })) as unknown as typeof fetch;
+    const logged: string[] = [];
+    const original = console.error;
+    console.error = (msg: string) => logged.push(msg);
+    try {
+      const res = await createHandler({ repo: 'acme/shop', githubToken: 't', complete: bugVerdict(), fetch: f })(post({ message: 'checkout crashes' }, '10.0.0.2'));
+      assert.equal(res.status, 502);
+    } finally {
+      console.error = original;
+    }
+    assert.match(logged.join('\n'), /token expired or revoked/);
+  });
+
+  it('only starts the fix job for a new issue or the blazeresolver label, not the labels it adds itself', async () => {
+    const { WORKFLOW } = await import('../cli/templates.js');
+    assert.match(WORKFLOW, /github\.event\.action == 'opened' \|\| github\.event\.label\.name == 'blazeresolver'/);
+  });
+});

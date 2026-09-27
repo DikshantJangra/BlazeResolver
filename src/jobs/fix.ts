@@ -119,7 +119,8 @@ export async function runFix(opts: FixJobOptions): Promise<FixOutcome> {
   let workspaces: GitWorkspace | undefined;
 
   try {
-    execFileSync('git', ['clone', '--quiet', remote, repoDir], { stdio: 'pipe', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+    // Latest commit of the default branch only: big histories would make every fix slow to start.
+    execFileSync('git', ['clone', '--quiet', '--depth', '1', '--single-branch', '--branch', project.defaultBranch, remote, repoDir], { stdio: 'pipe', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
     // Keep the token out of the clone's config, where the repo's own tests could read it.
     execFileSync('git', ['remote', 'set-url', 'origin', opts.remoteUrl ?? plainUrl(project.repo)], { cwd: repoDir });
 
