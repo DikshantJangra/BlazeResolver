@@ -43,7 +43,7 @@ A human always merges. BlazeResolver opens pull requests, never merges them, and
 ## Requirements
 
 - A GitHub repository with GitHub Actions enabled.
-- Node.js 20 or newer where you run the CLI (the workflow uses Node 22 on the runner).
+- Node.js 22.16 or newer where you run the CLI (the workflow uses Node 22 on the runner).
 - A backend that can serve one HTTP route: a Next.js app, an Express server, or any runtime that speaks the Web `Request`/`Response` API (Cloudflare Workers, Vercel, Deno, Bun).
 - Tests in your repo. BlazeResolver only opens a pull request for a fix that passes them. Without tests, every report goes to a human.
 
