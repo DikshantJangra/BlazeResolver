@@ -1,15 +1,15 @@
 /*
- * BlazeResolver support widget (Blazzy AI). Loaded from CDN or local bundle.
+ * BlazeResolver support widget. Loaded from CDN or local bundle.
  *   <script src="https://cdn.jsdelivr.net/npm/blazeresolver@latest/widget/widget.js" data-endpoint="/api/blaze" data-app-version="1.4.2"></script>
  *
  * Optional attributes:
  *   data-user-id, data-user-email   who is reporting (or call BlazeResolver.identify({ id, email }))
  *   data-accent="#ff7a00"            brand color
  *   data-position="right|left"
- *   data-title="Ask Blazzy"
+ *   data-title="BlazeResolver"
  *   data-ask-email="true"            ask for an email to be told about the fix
  *   data-launcher="false"            no floating button; open it from your own UI instead
- * Open it from anywhere: <a href="#" data-blazeresolver-open>Ask Blazzy</a>, or BlazeResolver.open('optional text').
+ * Open it from anywhere: <a href="#" data-blazeresolver-open>Report a bug</a>, or BlazeResolver.open('optional text').
  */
 (function () {
   'use strict';
@@ -20,7 +20,7 @@
   var endpoint = attr('endpoint') || '/api/blaze';
   var version = attr('app-version');
   var user = { id: attr('user-id'), email: attr('user-email') };
-  var title = attr('title') || 'Ask Blazzy';
+  var title = attr('title') || 'BlazeResolver';
   var showLauncher = attr('launcher') !== 'false';
   var askEmail = attr('ask-email') === 'true';
 
@@ -44,20 +44,8 @@
     remember('Unhandled rejection: ' + (r && r.message ? r.message : String(r)));
   });
 
-  // Official Blazzy Mascot SVG
-  var BLAZZY_SVG = '<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-    '<circle cx="24" cy="24" r="22" fill="#FFF7ED" stroke="#FF7A00" stroke-width="2.5"/>' +
-    '<path d="M12 24C12 17.3726 17.3726 12 24 12C30.6274 12 36 17.3726 36 24" stroke="#FF7A00" stroke-width="3" stroke-linecap="round"/>' +
-    '<rect x="9" y="20" width="5" height="10" rx="2.5" fill="#FF7A00"/>' +
-    '<rect x="34" y="20" width="5" height="10" rx="2.5" fill="#FF7A00"/>' +
-    '<path d="M36 27C36 32 30 35 27 35" stroke="#FF7A00" stroke-width="2.5" stroke-linecap="round"/>' +
-    '<circle cx="26" cy="35" r="2" fill="#FF7A00"/>' +
-    '<circle cx="19" cy="23" r="2.5" fill="#EA580C"/>' +
-    '<circle cx="29" cy="23" r="2.5" fill="#EA580C"/>' +
-    '<circle cx="20" cy="22" r="0.8" fill="#FFFFFF"/>' +
-    '<circle cx="30" cy="22" r="0.8" fill="#FFFFFF"/>' +
-    '<path d="M19 28C20.5 30.5 27.5 30.5 29 28" stroke="#EA580C" stroke-width="2" stroke-linecap="round"/>' +
-    '</svg>';
+  // Official BlazeResolver Logo
+  var BLAZZY_SVG = '<img src="' + (attr('logo') || '/blazyy.svg') + '" alt="BlazeResolver" style="width:100%;height:100%;object-fit:contain;pointer-events:none;" draggable="false" />';
 
   var icon = function (path) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
@@ -71,14 +59,14 @@
     '*{box-sizing:border-box}[hidden]{display:none!important}' +
     'button{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}' +
     'button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}' +
-    'svg{display:block}' +
+    'svg,img{display:block}' +
 
-    '.launcher{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:2147483646;width:58px;height:58px;padding:0;' +
+    '.launcher{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:2147483646;width:58px;height:58px;padding:6px;' +
     'border-radius:50%;border:2px solid var(--accent);background:#fff7ed;color:var(--text);display:grid;place-items:center;' +
     'box-shadow:0 6px 20px rgba(0,0,0,.15);transition:transform .2s cubic-bezier(0.16,1,0.3,1),box-shadow .2s ease}' +
     '.launcher:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 8px 26px rgba(0,0,0,.18)}' +
-    '.launcher svg{width:40px;height:40px}' +
-    '.launcher.open{background:#fff;border-color:var(--line)}' +
+    '.launcher svg,.launcher img{width:40px;height:40px;border-radius:8px;object-fit:contain}' +
+    '.launcher.open{background:#fff;border-color:var(--line);padding:0}' +
     '.launcher.open svg{width:24px;height:24px;color:var(--accent)}' +
 
     '.panel{position:fixed;right:20px;bottom:calc(90px + env(safe-area-inset-bottom,0px));z-index:2147483647;width:370px;max-width:calc(100vw - 32px);' +
@@ -87,10 +75,9 @@
     'opacity:0;transform:translateY(10px) scale(0.98);transition:opacity .18s ease,transform .18s ease}' +
     '.panel.open{opacity:1;transform:none}' +
     '.head{display:flex;align-items:center;gap:10px;padding:14px 14px 12px 16px;border-bottom:1px solid var(--line);background:#fff7ed}' +
-    '.head svg{width:32px;height:32px;flex:none}' +
+    '.head svg,.head img{width:32px;height:32px;flex:none;border-radius:6px;object-fit:contain}' +
     '.title-wrap{flex:1;min-width:0}' +
     '.title{margin:0;font-size:15px;font-weight:700;color:#111827;display:flex;align-items:center;gap:6px}' +
-    '.badge{background:#ea580c;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;text-transform:uppercase;letter-spacing:0.5px}' +
     '.subtitle{margin:2px 0 0;font-size:11.5px;color:var(--muted)}' +
     '.x{width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:var(--muted);display:grid;place-items:center;transition:background .15s}' +
     '.x:hover{background:#f3f4f6;color:var(--text)}' +
@@ -138,18 +125,18 @@
     '<style>' + CSS + '</style>' +
     '<button class="launcher" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="bz-panel">' + BLAZZY_SVG + '</button>' +
     '<section class="panel" id="bz-panel" role="dialog" aria-labelledby="bz-title" hidden>' +
-    '<div class="head">' + BLAZZY_SVG + '<div class="title-wrap"><h2 class="title" id="bz-title"><span class="title-text"></span><span class="badge">Live</span></h2><p class="subtitle">AI Resolution & Support</p></div>' +
+    '<div class="head">' + BLAZZY_SVG + '<div class="title-wrap"><h2 class="title" id="bz-title"><span class="title-text"></span></h2><p class="subtitle">Autonomous Bug Resolution</p></div>' +
     '<button class="x" type="button" aria-label="Close">' + CLOSE + '</button></div>' +
     '<div class="body form">' +
     '<textarea maxlength="' + MAX_MESSAGE + '" placeholder="Describe what happened or ask a question..." aria-label="Describe what happened or ask a question"></textarea>' +
     '<div class="count" aria-live="polite"></div>' +
     '<input class="email" type="email" inputmode="email" autocomplete="email" maxlength="200" placeholder="Your email, to hear when it\'s resolved (optional)" aria-label="Your email (optional)" hidden>' +
     '<div class="row"><label class="ctx"><input type="checkbox" checked>Include page details</label>' +
-    '<button class="send" type="button" disabled>Send to Blazzy</button></div>' +
+    '<button class="send" type="button" disabled>Send Report</button></div>' +
     '<div class="status" role="alert"></div>' +
     '</div>' +
     '<div class="done" hidden><div class="tick">' + CHECK + '</div>' +
-    '<h3 tabindex="-1">Thanks, Blazzy got it!</h3><p></p>' +
+    '<h3 tabindex="-1">Report received</h3><p></p>' +
     '<button class="done-btn" type="button">Done</button></div>' +
     '</section>';
 
@@ -183,7 +170,7 @@
     var len = field.value.length;
     count.textContent = len > MAX_MESSAGE - 500 ? len + ' / ' + MAX_MESSAGE : '';
     sendBtn.disabled = sending || !field.value.trim();
-    sendBtn.textContent = sending ? 'Sending…' : 'Send to Blazzy';
+    sendBtn.textContent = sending ? 'Sending…' : 'Send Report';
   }
 
   function autosize() {
@@ -249,11 +236,11 @@
           autosize();
           var answered = typeof answer === 'string' && answer;
           done.classList.toggle('answered', !!answered);
-          $('.done h3').textContent = answered ? "Here's what Blazzy found" : 'Thanks, Blazzy got it!';
+          $('.done h3').textContent = answered ? "Here's what BlazeResolver found" : 'Report received';
           var followUp = email && !emailInput.hidden ? "We'll email " + email + " when it's resolved." : '';
           $('.done p').textContent = answered
             ? answer
-            : reply ? reply + (followUp ? '\n\n' + followUp : '') : followUp || "Blazzy is looking into it.";
+            : reply ? reply + (followUp ? '\n\n' + followUp : '') : followUp || "BlazeResolver is looking into it.";
           form.hidden = true;
           done.hidden = false;
           $('.done h3').focus();

@@ -1,6 +1,6 @@
 import React from 'react';
-import { RiCustomerService2Line, RiBookmarkLine, RiAddLine, RiUserSmileLine, RiShieldUserLine } from 'react-icons/ri';
-import { BlazzyBadge } from './BlazzyMascot.js';
+import { RiBookmarkLine, RiAddLine, RiUserSmileLine, RiShieldUserLine } from 'react-icons/ri';
+import { BlazzyIcon, BlazzyBadge } from './BlazzyMascot.js';
 
 interface SupportHeaderProps {
   mode: 'admin' | 'customer';
@@ -19,9 +19,7 @@ export const SupportHeader: React.FC<SupportHeaderProps> = ({
     <div className="bg-white border-b border-gray-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
       <div>
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200 flex items-center justify-center text-[#FF7A00]">
-            <RiCustomerService2Line size={20} />
-          </div>
+          <BlazzyIcon className="w-8 h-8 rounded-lg object-contain border border-orange-200 bg-orange-50 p-1 shadow-2xs" />
           <div>
             <h1 className="text-lg font-bold text-gray-900 tracking-tight flex items-center gap-2 m-0 leading-tight">
               <span>BlazeResolver Customer Support</span>

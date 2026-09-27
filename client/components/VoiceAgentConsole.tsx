@@ -542,7 +542,7 @@ export const VoiceAgentConsole: React.FC<VoiceAgentConsoleProps> = ({
                   <FiLayers className="text-xl mb-1.5 text-slate-300" />
                   <span className="font-medium text-slate-600">No tools triggered yet</span>
                   <span className="text-[11px] text-slate-400 mt-0.5">
-                    Ask Blazzy to look up your order or calculate refund!
+                    Ask BlazeResolver to look up your order or calculate refund!
                   </span>
                 </div>
               ) : (

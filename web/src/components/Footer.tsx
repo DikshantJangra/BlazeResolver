@@ -14,7 +14,7 @@ export default function Footer() {
         <div className="flex flex-wrap items-center gap-ds-5">
           <div className="flex items-center gap-2">
             <img
-              src={asset("/blazyy.png")}
+              src={asset("/blazyy.svg")}
               alt="BlazeResolver"
               className="w-5 h-5 rounded object-contain"
             />

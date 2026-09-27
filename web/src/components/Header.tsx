@@ -35,7 +35,7 @@ export default function Header() {
           <Link className="flex items-center gap-[10px] min-w-0" href="/">
             <span className="shrink-0 inline-flex items-center gap-2.5">
               <img
-                src={asset("/blazyy.png")}
+                src={asset("/blazyy.svg")}
                 alt="BlazeResolver"
                 className="w-8 h-8 rounded-lg object-contain shadow-md"
               />
@@ -141,7 +141,7 @@ export default function Header() {
             onClick={() => setMobileMenuOpen(false)}
           >
             <img
-              src={asset("/blazyy.png")}
+              src={asset("/blazyy.svg")}
               alt="BlazeResolver"
               className="w-8 h-8 rounded-lg object-contain"
             />

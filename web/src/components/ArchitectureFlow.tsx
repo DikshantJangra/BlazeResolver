@@ -85,7 +85,7 @@ export default function ArchitectureFlow() {
     >
       <div className="max-w-[880px] mx-auto flex flex-col items-center gap-6 text-center">
         <img
-          src={asset("/blazyy.png")}
+          src={asset("/blazyy.svg")}
           alt="BlazeResolver"
           width={160}
           height={160}

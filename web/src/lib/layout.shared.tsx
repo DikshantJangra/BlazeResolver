@@ -8,7 +8,7 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: (
         <span className="inline-flex items-center gap-2 font-semibold">
-          <img src={asset("/blazyy.png")} alt="" width={24} height={24} className="rounded-md" />
+          <img src={asset("/blazyy.svg")} alt="" width={24} height={24} className="rounded-md" />
           <span>
             Blaze<span className="text-fd-primary">Resolver</span>
           </span>

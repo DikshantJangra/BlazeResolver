@@ -30,8 +30,8 @@ export const BlazzySupportWidget: React.FC<BlazzySupportWidgetProps> = ({
   customerName = '',
   customerEmail = '',
   orderId,
-  title = 'Ask Blazzy',
-  subtitle = 'Instant AI resolution & support'
+  title = 'BlazeResolver',
+  subtitle = 'Autonomous AI resolution & support'
 }) => {
   const baseUrl = apiBaseUrl.replace(/\/$/, '');
   const [isOpen, setIsOpen] = useState(false);
