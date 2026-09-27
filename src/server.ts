@@ -461,8 +461,8 @@ const supportStore = new SupportStore();
 // Get Tickets
 app.get('/api/support/tickets', (req, res) => {
   try {
-    const { status, priority, category, search } = req.query as Record<string, string>;
-    const tickets = supportStore.getTickets({ status, priority, category, search });
+    const { status, priority, category, search, customerEmail } = req.query as Record<string, string>;
+    const tickets = supportStore.getTickets({ status, priority, category, search, customerEmail });
     return res.json({ success: true, data: tickets });
   } catch (err: unknown) {
     return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
@@ -490,7 +490,7 @@ app.patch('/api/support/tickets/:id', (req, res) => {
 // Create Ticket (Customer Portal or Inbound API)
 app.post('/api/support/tickets/create', async (req, res) => {
   try {
-    const { subject, rawText, category, orderId, customerId, customerName, customerEmail, customerPhone, outletName } = req.body;
+    const { subject, rawText, category, orderId, customerId, customerName, customerEmail, customerPhone, outletName, intakeChannel } = req.body;
     if (!rawText) return res.status(400).json({ success: false, error: 'rawText is required' });
 
     const result = await supportStore.createTicketFromCustomer(
@@ -503,7 +503,8 @@ app.post('/api/support/tickets/create', async (req, res) => {
         customerName,
         customerEmail,
         customerPhone,
-        outletName
+        outletName,
+        intakeChannel
       },
       pipeline
     );
@@ -615,11 +616,14 @@ app.post('/api/support/tickets/:id/messages', async (req, res) => {
             const docsContext = canned.map(c => `## ${c.title}\n${c.body}`).join('\n\n');
             const relevantChunks = retrieve(docsContext, text, 2);
             let responseText = aiResult.response.text;
+            let ragApplied = false;
 
             if (relevantChunks.length > 0 && aiResult.triage.sentiment === 'frustrated') {
-              const matchedCanned = canned.find(c => c.title.toLowerCase().includes('refund') || c.title.toLowerCase().includes('apology'));
+              const title = relevantChunks[0].headings[relevantChunks[0].headings.length - 1];
+              const matchedCanned = canned.find(c => c.title === title);
               if (matchedCanned && !responseText.includes(matchedCanned.body.slice(0, 20))) {
                 responseText = `${responseText}\n\n${matchedCanned.body}`;
+                ragApplied = true;
               }
             }
 
@@ -634,19 +638,45 @@ app.post('/api/support/tickets/:id/messages', async (req, res) => {
             });
 
             // Update ticket AI report
-            supportStore.updateTicket(ticketId, {
+            const updatedTicket = supportStore.updateTicket(ticketId, {
               aiReport: {
                 ...ticket.aiReport,
+                triageId: aiResult.triage.id,
                 intent: aiResult.triage.intent,
+                triageCategory: aiResult.triage.category,
+                triageSeverity: aiResult.triage.severity,
+                triageItemName: aiResult.triage.itemName,
+                triageResourceId: aiResult.triage.resourceId,
+                triageOrderId: aiResult.triage.orderId,
                 sentiment: aiResult.triage.sentiment,
                 urgencyScore: aiResult.triage.urgencyScore,
+                guardrailPassed: aiResult.triage.guardrailPassed,
+                isPromptInjection: aiResult.triage.isPromptInjection,
                 policyAllowed: aiResult.resolution.policyDecision.allowed,
                 policyRationale: aiResult.resolution.policyDecision.rationale,
                 suggestedAction: aiResult.resolution.policyDecision.recommendedAction,
+                requiresHitl: aiResult.resolution.hitlRequired,
+                claimedAmount: aiResult.triage.claimedAmount,
+                incidentId: aiResult.correlation.incident?.incidentId,
+                incidentTitle: aiResult.correlation.incident?.title,
+                clusterKey: aiResult.correlation.cluster?.clusterKey,
+                isSystemic: aiResult.correlation.isSystemic,
+                ragMatches: relevantChunks.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+                ragApplied,
+                resolutionActions: aiResult.resolution.actions.map(({ actionType, approvalStatus, amount, reason }) => ({
+                  actionType,
+                  approvalStatus,
+                  amount,
+                  reason
+                })),
+                responseChannel: aiResult.response.channel,
+                responseTone: aiResult.response.tone,
+                responseQualityPassed: aiResult.response.qualityPassed,
                 executionDurationMs: aiResult.executionDurationMs,
                 processedAt: aiResult.timestamp instanceof Date ? aiResult.timestamp.toISOString() : String(aiResult.timestamp)
               }
             });
+            broadcastLiveEvent('support_ticket_updated', updatedTicket, 'everyone');
 
             broadcastLiveEvent('support_message_created', { ticketId, message: aiReply }, 'everyone');
 
@@ -768,7 +798,7 @@ Write ONLY the final draft message for the customer in a warm, professional, con
 - Subject: ${ticket.subject}
 - Customer: ${ticket.customerName || 'Customer'}
 - Order: #${ticket.orderNumber || 'N/A'} (Outlet: ${ticket.outletName || 'Hub'})
-- AI Triage Intent: ${ticket.aiReport?.intent || ticket.category} (Urgency: ${ticket.aiReport?.urgencyScore ?? 50}/100)
+- AI Triage Intent: ${ticket.aiReport?.intent || ticket.category} (Urgency: ${Math.round((ticket.aiReport?.urgencyScore ?? 0) * 100)}/100)
 - Policy Rationale: ${ticket.aiReport?.policyRationale || 'Standard resolution'}
 - Suggested Action: ${ticket.aiReport?.suggestedAction || 'Review and assist'}
 
@@ -820,6 +850,9 @@ app.post('/api/support/tickets/:id/diagnose', async (req, res) => {
     const messages = supportStore.getMessages(ticketId);
     const userTexts = messages.filter(m => m.senderType === 'user').map(m => m.body || m.content).join(' ');
     const diagnosisText = userTexts || ticket.subject;
+    const canned = supportStore.getCannedResponses();
+    const docsContext = canned.map((response) => `## ${response.title}\n${response.body}`).join('\n\n');
+    const relevant = retrieve(docsContext, diagnosisText, 2);
 
     const input: CustomerInput = {
       id: `diag_${Date.now()}`,
@@ -836,6 +869,11 @@ app.post('/api/support/tickets/:id/diagnose', async (req, res) => {
       aiReport: {
         triageId: aiResult.triage.id,
         intent: aiResult.triage.intent,
+        triageCategory: aiResult.triage.category,
+        triageSeverity: aiResult.triage.severity,
+        triageItemName: aiResult.triage.itemName,
+        triageResourceId: aiResult.triage.resourceId,
+        triageOrderId: aiResult.triage.orderId,
         sentiment: aiResult.triage.sentiment,
         urgencyScore: aiResult.triage.urgencyScore,
         guardrailPassed: aiResult.triage.guardrailPassed,
@@ -849,6 +887,17 @@ app.post('/api/support/tickets/:id/diagnose', async (req, res) => {
         incidentTitle: aiResult.correlation.incident?.title,
         clusterKey: aiResult.correlation.cluster?.clusterKey,
         isSystemic: aiResult.correlation.isSystemic,
+        ragMatches: relevant.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+        ragApplied: false,
+        resolutionActions: aiResult.resolution.actions.map(({ actionType, approvalStatus, amount, reason }) => ({
+          actionType,
+          approvalStatus,
+          amount,
+          reason
+        })),
+        responseChannel: aiResult.response.channel,
+        responseTone: aiResult.response.tone,
+        responseQualityPassed: aiResult.response.qualityPassed,
         executionDurationMs: aiResult.executionDurationMs,
         processedAt: aiResult.timestamp instanceof Date ? aiResult.timestamp.toISOString() : String(aiResult.timestamp)
       }

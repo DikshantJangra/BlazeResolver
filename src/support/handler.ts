@@ -156,8 +156,18 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
       });
     }
     if (ticket.isHumanTakeover) return undefined;
-    const replyText = await writeReply(complete, store, ticket, text, await searchKnowledge(text));
-    store.updateTicket(ticketId, { lastAiReplyAt: new Date().toISOString() });
+    const knowledge = await searchKnowledge(text);
+    const replyText = await writeReply(complete, store, ticket, text, knowledge);
+    store.updateTicket(ticketId, {
+      lastAiReplyAt: new Date().toISOString(),
+      aiReport: {
+        ...ticket.aiReport,
+        ragMatches: knowledge.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+        ragApplied: knowledge.length > 0,
+        responseChannel: 'text',
+        processedAt: new Date().toISOString()
+      }
+    });
     return store.addMessage(ticketId, {
       ticketId,
       role: 'agent',
@@ -192,7 +202,8 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
         const priority = searchParams.get('priority') || undefined;
         const category = searchParams.get('category') || undefined;
         const search = searchParams.get('search') || undefined;
-        const tickets = store.getTickets({ status, priority, category, search });
+        const customerEmail = searchParams.get('customerEmail') || undefined;
+        const tickets = store.getTickets({ status, priority, category, search, customerEmail });
         return json(200, { success: true, data: tickets });
       }
 
@@ -202,7 +213,7 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
         (segments.length === 2 && segments[0] === 'tickets' && segments[1] === 'create' && method === 'POST')
       ) {
         const body = await req.json().catch(() => ({}));
-        const { subject, rawText, message, content, category, orderId, customerId, customerName, customerEmail, customerPhone, outletName } = body;
+        const { subject, rawText, message, content, category, orderId, customerId, customerName, customerEmail, customerPhone, outletName, intakeChannel } = body;
         const complaintText = rawText || message || content;
         if (!complaintText) {
           return json(400, { success: false, error: 'rawText or message is required' });
@@ -217,7 +228,8 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
           customerName,
           customerEmail,
           customerPhone,
-          outletName
+          outletName,
+          intakeChannel
         });
         const aiReply = result.aiReply ?? (await respondToCustomer(result.ticket.id, complaintText));
 
@@ -429,11 +441,8 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
         const updatedReport: SupportTicket['aiReport'] = {
           ...ticket.aiReport,
           processedAt: new Date().toISOString(),
-          guardrailPassed: true,
-          urgencyScore: ticket.priority === 'urgent' ? 90 : 45,
-          policyAllowed: true,
-          suggestedAction: ticket.category === 'refund' ? 'refund_credit' : 'support_resolution',
-          policyRationale: `Verified against operational support policies. RAG matches: ${relevant.map(r => r.headings.join(' > ') || r.text.slice(0, 30)).join(', ') || 'none'}`
+          ragMatches: relevant.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+          ragApplied: false
         };
 
         const updated = store.updateTicket(ticketId, { aiReport: updatedReport });

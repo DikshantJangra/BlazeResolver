@@ -90,7 +90,7 @@ export default function VideoSection() {
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-fg/[0.08] bg-fg/[0.02]">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono bg-fg/[0.06] border border-fg/10 text-fg/90">
-              <span className={`w-2 h-2 rounded-full ${isPlaying ? "bg-[#28c840] animate-ping" : "bg-fg/40"}`} />
+              <span className={`w-2 h-2 rounded-full ${isPlaying ? "bg-brand animate-ping" : "bg-fg/40"}`} />
               <span className="font-semibold">acme/shop</span>
             </span>
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono bg-fg/[0.06] text-fg/80 border border-fg/10">

@@ -8,7 +8,7 @@ import {
   git, isNext, needsJsExtension, pickLayout, repoRoot, usesTypeScript
 } from './detect.js';
 import { MARK, hasManaged, indentOf, insertAfter, insertBefore, insertInline, lastImportLine } from './edit.js';
-import { expressRouterFile, pagesFile, routeFile, supportRouteFile, supportPagesFile, widgetTag, workflow, agentsRequirements, blazeTriageAgent, blazeResolverAgent, dbSchema, drizzleSchema, prismaSchema, type ModuleStyle } from './templates.js';
+import { expressRouterFile, pagesFile, routeFile, supportRouteFile, supportPagesFile, widgetTag, workflow, agentsRequirements, blazeTriageAgent, blazeResolverAgent, type ModuleStyle } from './templates.js';
 
 /** Everything `init` changed, so `remove` can undo exactly that and nothing else. */
 export interface Manifest {
@@ -84,13 +84,6 @@ const ENV_SECTIONS: EnvSection[] = [
       '# Fine-grained token: Issues read and write permissions on this repo.',
     vars: [{ key: 'BLAZE_GITHUB_TOKEN', comment: '# gh auth token or fine-grained PAT' }]
   },
-  {
-    header: '# --- BlazeResolver: Operational Store / Database (100% Optional) ---------------\n' +
-      '# - Frontend-only / Serverless apps: No database needed! GitHub Issues & Actions act as the store.\n' +
-      '# - Backend / Fullstack apps: Connect your Postgres / Supabase / Neon instance if desired.\n' +
-      '#   Ready-to-use schemas placed in agents/: SQL (schema.sql), Drizzle (schema.drizzle.ts), Prisma (schema.prisma).',
-    vars: [{ key: 'BLAZE_DATABASE_URL', comment: '# postgresql://user:password@localhost:5432/blazeresolver (optional)' }]
-  }
 ];
 
 /**
@@ -400,17 +393,11 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     say(`  ${step++}. Paste any AI key into .env as API_KEYS= (or API_KEY_1, API_KEY_2).`);
     say('     Universal auto-detection works with Gemini, Claude, OpenAI, Groq, NVIDIA, DeepSeek, xAI, etc.');
     say('     Check recognized providers anytime: npx blazeresolver providers');
-    say(`  ${step++}. Operational DB (100% Optional):`);
-    say('     - Frontend-only: No DB needed! GitHub Issues & Actions act as the operational store.');
-    say('     - Existing DB / Backend: Schemas placed in agents/:');
-    say('       • PostgreSQL: agents/blazeresolver-schema.sql');
-    say('       • Drizzle ORM: agents/schema.drizzle.ts');
-    say('       • Prisma ORM: agents/schema.prisma');
     say(`  ${step++}. Give the GitHub Actions workflow the same keys:   gh secret set API_KEYS`);
     say(`  ${step++}. GitHub, Settings, Actions, General: turn on "Allow GitHub Actions to create and approve pull requests".`);
-    say(`  ${step++}. Protect ${branch} (Settings, Branches) so every fix needs a human review.`);
+    say(`  ${step++}. Run npx blazeresolver harden to require human review on ${branch}.`);
     if (!layout.frontend) say(`  ${step++}. Widget tag for your page: ${widgetTag(endpoint, opts.pin)}`);
-    say('\nThen commit the new files (not .env). Undo everything with `npx blazeresolver remove`.');
+    say('\nRun `npx blazeresolver doctor`, then commit the new files (not .env). Undo everything with `npx blazeresolver remove`.');
     say(opts.pin ? `Pinned to blazeresolver@${opts.pin}: nothing changes until you re-run init with a newer --pin.` : 'Updates are automatic: the widget loads from a CDN and the workflow runs blazeresolver@latest (use --pin <version> to lock it).');
   }
 
@@ -420,12 +407,6 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     createFile('agents/blaze_triage_agent.py', blazeTriageAgent);
     createFile('agents/blaze_resolver_agent.py', blazeResolverAgent);
     createFile('agents/requirements.txt', agentsRequirements);
-  }
-
-  function placeSchema() {
-    createFile('agents/blazeresolver-schema.sql', dbSchema);
-    createFile('agents/schema.drizzle.ts', drizzleSchema);
-    createFile('agents/schema.prisma', prismaSchema);
   }
 
   say(`\nBlazeResolver for ${repo} (default branch ${branch})`);
@@ -439,7 +420,6 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
     ensureEnv((installTarget ?? layout.handlerPkg)?.dir ?? '');
     const endpoint = placeWidget();
     placeAgents();
-    placeSchema();
     createFile('.github/workflows/blazeresolver.yml', workflow({ pin: opts.pin ?? existing?.pin, app: opts.app || existing?.app }));
     installDependency();
     if (!cmds.hasTests && !opts.test) {

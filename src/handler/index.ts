@@ -26,7 +26,14 @@ export interface HandlerOptions {
    * Reports accepted per IP every 10 minutes, and in total per hour, per server instance. Defaults 10 and 100
    * (BLAZE_RATE_LIMIT_PER_HOUR overrides the total). GitHub caps content creation at about 500 per hour per token.
    */
-  rateLimit?: { perIp?: number; perHour?: number };
+  rateLimit?: {
+    perIp?: number;
+    perHour?: number;
+    /** Atomic shared limiter for serverless deployments. Return true when the limit is exceeded. */
+    check?: (id: string, max: number, windowMs: number) => boolean | Promise<boolean>;
+  };
+  /** Distributed lock for issue deduplication. Defaults to a process-local lock. */
+  withIssueLock?: <T>(key: string, run: () => Promise<T>) => Promise<T>;
   /** Set when the widget runs on a different origin than the handler. */
   allowOrigin?: string;
   fetch?: typeof fetch;
@@ -52,8 +59,9 @@ function withDeadline(complete: Complete | undefined, ms: number): Complete | un
 }
 const env = (name: string) => (globalThis as any).process?.env?.[name] as string | undefined;
 
-// ponytail: in-memory counters, per instance. Serverless instances don't share them, so this only blunts a single-source flood.
+// ponytail: process-local fallback; pass rateLimit.check backed by shared storage when deploying multiple instances.
 const hits = new Map<string, number[]>();
+const filing = new Map<string, Promise<void>>();
 let lastSweep = 0;
 function limited(id: string, max: number, windowMs: number): boolean {
   const now = Date.now();
@@ -68,6 +76,20 @@ function limited(id: string, max: number, windowMs: number): boolean {
   return recent.length > max;
 }
 
+async function serialize<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const previous = filing.get(key);
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  filing.set(key, current);
+  await previous;
+  try {
+    return await run();
+  } finally {
+    release();
+    if (filing.get(key) === current) filing.delete(key);
+  }
+}
+
 /**
  * A Web-standard `(Request) => Response` handler for the widget. Mount it in Next.js, Cloudflare, Vercel, Deno or Bun as is,
  * or in Express with `nodeHandler`. It triages a report and files it as a GitHub issue; the workflow in that repo does the rest.
@@ -80,6 +102,7 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
   const storeEmails = options.storeEmails ?? env('BLAZE_NOTIFY_CUSTOMERS') === 'true';
   const perIp = options.rateLimit?.perIp ?? 10;
   const perHour = options.rateLimit?.perHour ?? (Number(env('BLAZE_RATE_LIMIT_PER_HOUR')) || 100);
+  const lockIssue = options.withIssueLock ?? serialize;
   const cors: Record<string, string> = options.allowOrigin
     ? { 'access-control-allow-origin': options.allowOrigin, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' }
     : {};
@@ -92,7 +115,12 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
     if (!token) return reply(500, { error: 'BLAZE_GITHUB_TOKEN is not set' });
 
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'unknown';
-    if (limited(`ip:${ip}`, perIp, 600_000) || limited('all', perHour, 3_600_000)) return reply(429, { error: 'rate limit' });
+    const checkLimit = options.rateLimit?.check ?? limited;
+    try {
+      if (await checkLimit(`ip:${ip}`, perIp, 600_000) || await checkLimit('all', perHour, 3_600_000)) return reply(429, { error: 'rate limit' });
+    } catch {
+      return reply(503, { error: 'rate limiter unavailable' });
+    }
 
     const text = await req.text();
     if (text.length > MAX_BODY) return reply(413, { error: 'too large' });
@@ -133,19 +161,21 @@ export function createHandler(options: HandlerOptions): (req: Request) => Promis
 
       const key = groupKey(verdict);
       const symptom = symptomOf(verdict, report.consoleErrors);
-      const existing = (await listOpenIssues(token, options.repo, 'blazeresolver', f)).find((i) => {
-        const recorded = symptomIn(i.body);
-        // Issues filed before symptom markers existed only carry the key.
-        return recorded ? sameSymptom(recorded, symptom) : !!i.body?.includes(keyMarker(key));
+      await lockIssue(`${options.repo}:${key}`, async () => {
+        const existing = (await listOpenIssues(token, options.repo, 'blazeresolver', f)).find((i) => {
+          const recorded = symptomIn(i.body);
+          // Issues filed before symptom markers existed only carry the key.
+          return recorded ? sameSymptom(recorded, symptom) : !!i.body?.includes(keyMarker(key));
+        });
+        if (existing) {
+          await commentOnIssue(token, options.repo, existing.number, `Another customer reported this.\n\n${renderReport(report, verdict)}${email ? `\n\n${emailMarker(email)}` : ''}`, f);
+        } else {
+          await openIssue(
+            { token, repo: options.repo, title: `[${verdict.kind}] ${verdict.summary}`.slice(0, 200), body: renderIssueBody(report, verdict, key, email), labels: ['blazeresolver', ...(verdict.severity === 'critical' ? ['priority:critical'] : [])] },
+            f
+          );
+        }
       });
-      if (existing) {
-        await commentOnIssue(token, options.repo, existing.number, `Another customer reported this.\n\n${renderReport(report, verdict)}${email ? `\n\n${emailMarker(email)}` : ''}`, f);
-      } else {
-        await openIssue(
-          { token, repo: options.repo, title: `[${verdict.kind}] ${verdict.summary}`.slice(0, 200), body: renderIssueBody(report, verdict, key, email), labels: ['blazeresolver', ...(verdict.severity === 'critical' ? ['priority:critical'] : [])] },
-          f
-        );
-      }
       return ack();
     } catch (err) {
       // Loud on purpose: an expired token or a GitHub limit would otherwise drop every report without a trace.

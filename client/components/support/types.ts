@@ -10,6 +10,7 @@ export interface SupportTicket {
   customerName?: string | null;
   customerEmail?: string | null;
   customerPhone?: string | null;
+  intakeChannel?: string;
   orderId?: string | null;
   orderNumber?: string | null;
   orderTotalPaise?: number | null;
@@ -45,6 +46,17 @@ export interface SupportTicket {
     isSystemic?: boolean;
     executionDurationMs?: number;
     processedAt?: string;
+    triageCategory?: string;
+    triageSeverity?: string;
+    triageItemName?: string;
+    triageResourceId?: string;
+    triageOrderId?: string;
+    ragMatches?: string[];
+    ragApplied?: boolean;
+    resolutionActions?: Array<{ actionType: string; approvalStatus: string; amount?: number; reason?: string }>;
+    responseChannel?: string;
+    responseTone?: string;
+    responseQualityPassed?: boolean;
   };
   [key: string]: any;
 }

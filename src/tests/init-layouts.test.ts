@@ -213,10 +213,7 @@ describe('init finds frontend and backend by what they are, not what they are ca
       '.github/workflows/blazeresolver.yml',
       'agents/blaze_resolver_agent.py',
       'agents/blaze_triage_agent.py',
-      'agents/blazeresolver-schema.sql',
       'agents/requirements.txt',
-      'agents/schema.drizzle.ts',
-      'agents/schema.prisma',
       'blazeresolver.config.json'
     ]);
   });

@@ -1,19 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   RiSendPlaneFill,
-  RiAttachmentLine,
   RiStarFill,
   RiAddLine,
   RiShieldCheckLine,
   RiShoppingBag3Line,
   RiCheckDoubleLine,
-  RiRobot2Line,
   RiUserSmileLine,
   RiUserVoiceLine,
   RiEmotionHappyLine,
-  RiCloseLine
 } from 'react-icons/ri';
-import { BlazzyIcon, BlazzyBadge } from './BlazzyMascot.js';
+import { BlazzyIcon } from './BlazzyMascot.js';
 import type { SupportTicket, SupportMessage, TicketRating } from './types.js';
 
 export interface CustomerSupportPortalProps {
@@ -26,12 +23,13 @@ export interface CustomerSupportPortalProps {
 export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
   apiBaseUrl = '',
   wsUrl,
-  onOpenNewTicketModal,
   onRefreshFeed
 }) => {
   const baseUrl = apiBaseUrl ? apiBaseUrl.replace(/\/$/, '') : '';
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [customerIdentity, setCustomerIdentity] = useState<{ name: string; email: string } | null>(null);
+  const [isStartingChat, setIsStartingChat] = useState(false);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [rating, setRating] = useState<TicketRating | null>(null);
   const [inputMessage, setInputMessage] = useState('');
@@ -41,33 +39,34 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
   const [submittingRating, setSubmittingRating] = useState(false);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [conversationError, setConversationError] = useState('');
 
   const selectedTicketRef = useRef<SupportTicket | null>(null);
   selectedTicketRef.current = selectedTicket;
 
-  // New ticket modal
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showIdentityForm, setShowIdentityForm] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerEmail, setNewCustomerEmail] = useState('');
-  const [newSubject, setNewSubject] = useState('');
-  const [newCategory, setNewCategory] = useState('orders');
-  const [newOrderId, setNewOrderId] = useState('');
-  const [newComplaintText, setNewComplaintText] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchTickets = async () => {
+  const fetchTickets = async (email = customerIdentity?.email) => {
+    if (!email) {
+      setTickets([]);
+      setIsLoading(false);
+      return;
+    }
     try {
-      const res = await fetch(`${baseUrl}/api/support/tickets`);
+      const params = new URLSearchParams({ customerEmail: email });
+      const res = await fetch(`${baseUrl}/api/support/tickets?${params}`);
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         const json = await res.json();
         if (json.success && json.data) {
           setTickets(json.data);
-          if (!selectedTicket && json.data.length > 0) {
-            setSelectedTicket(json.data[0]);
-          }
+          const current = selectedTicketRef.current;
+          const match = current && json.data.find((t: SupportTicket) => t.id === current.id);
+          setSelectedTicket(match || (isStartingChat ? null : json.data[0] || null));
         }
       } else {
         console.warn('CustomerSupportPortal: Non-JSON response received from /api/support/tickets:', res.status);
@@ -136,7 +135,10 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
             } else if (payload.type === 'support_ticket_updated') {
               setTickets((prev) => prev.map((t) => (t.id === payload.data.id ? payload.data : t)));
               setSelectedTicket((prev) => (prev?.id === payload.data.id ? { ...prev, ...payload.data } : prev));
-            } else if (payload.type === 'support_ticket_created') {
+            } else if (
+              payload.type === 'support_ticket_created' &&
+              String(payload.data.customerEmail || '').trim().toLowerCase() === customerIdentity?.email.toLowerCase()
+            ) {
               setTickets((prev) => [payload.data, ...prev.filter((t) => t.id !== payload.data.id)]);
             }
           } catch {}
@@ -158,13 +160,18 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
         ws.close();
       }
     };
-  }, [wsUrl, baseUrl]);
+  }, [wsUrl, baseUrl, customerIdentity?.email]);
 
   useEffect(() => {
-    fetchTickets();
-    const interval = setInterval(fetchTickets, 5000);
+    if (!customerIdentity) {
+      setTickets([]);
+      setIsLoading(false);
+      return;
+    }
+    fetchTickets(customerIdentity.email);
+    const interval = setInterval(() => fetchTickets(customerIdentity.email), 5000);
     return () => clearInterval(interval);
-  }, [baseUrl]);
+  }, [baseUrl, customerIdentity?.email, isStartingChat]);
 
   useEffect(() => {
     if (selectedTicket) {
@@ -173,91 +180,84 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
   }, [selectedTicket?.id]);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showCreateModal) {
-        setShowCreateModal(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showCreateModal]);
-
-  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim() || !selectedTicket || isSending) return;
+    const text = inputMessage.trim();
+    if (!text || (!selectedTicket && !isStartingChat) || isSending) return;
 
     setIsSending(true);
-    const text = inputMessage.trim();
-    setInputMessage('');
+    setConversationError('');
 
     try {
-      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: 'user',
-          senderType: 'user',
-          authorName: selectedTicket.customerName || 'Customer',
-          body: text,
-          content: text
-        })
-      });
-
-      if (res.ok) {
+      if (!selectedTicket) {
+        if (!customerIdentity) throw new Error('Add your name and email to start a chat.');
+        const res = await fetch(`${baseUrl}/api/support/tickets/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rawText: text,
+            customerName: customerIdentity.name,
+            customerEmail: customerIdentity.email,
+            intakeChannel: 'customer_portal'
+          })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success || !json.data?.ticket) throw new Error(json.error || 'Could not start this chat.');
+        setInputMessage('');
+        setSelectedTicket(json.data.ticket);
+        setIsStartingChat(false);
+        await loadTicketMessages(json.data.ticket.id);
+        await fetchTickets(customerIdentity.email);
+        onRefreshFeed?.();
+      } else {
+        const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role: 'user',
+            senderType: 'user',
+            authorName: customerIdentity?.name || selectedTicket.customerName || 'Customer',
+            body: text,
+            content: text
+          })
+        });
+        if (!res.ok) throw new Error('Could not send your message. Please try again.');
+        setInputMessage('');
         await loadTicketMessages(selectedTicket.id);
         fetchTickets();
         onRefreshFeed?.();
       }
     } catch (err) {
-      console.error('Failed to send message:', err);
+      setConversationError(err instanceof Error ? err.message : 'Could not send your message. Please try again.');
     } finally {
       setIsSending(false);
     }
   };
 
-  const handleCreateTicket = async (e: React.FormEvent) => {
+  const handleCreateTicket = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComplaintText.trim() || isCreating) return;
+    const name = newCustomerName.trim();
+    const email = newCustomerEmail.trim();
+    if (!name || !email) return;
+    setCustomerIdentity({ name, email });
+    setSelectedTicket(null);
+    setMessages([]);
+    setInputMessage('');
+    setConversationError('');
+    setIsStartingChat(true);
+    setShowIdentityForm(false);
+  };
 
-    setIsCreating(true);
-    try {
-      const res = await fetch(`${baseUrl}/api/support/tickets/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subject: newSubject.trim() || newComplaintText.trim().slice(0, 45) + '...',
-          rawText: newComplaintText.trim(),
-          category: newCategory,
-          orderId: newOrderId.trim() || undefined,
-          customerName: newCustomerName.trim() || 'Customer',
-          customerEmail: newCustomerEmail.trim() || undefined
-        })
-      });
-
-      const ct = res.headers.get('content-type') || '';
-      if (res.ok && ct.includes('application/json')) {
-        const json = await res.json();
-        if (json.success && json.data?.ticket) {
-          setShowCreateModal(false);
-          setNewSubject('');
-          setNewCustomerName('');
-          setNewCustomerEmail('');
-          setNewOrderId('');
-          setNewComplaintText('');
-          await fetchTickets();
-          setSelectedTicket(json.data.ticket);
-          onRefreshFeed?.();
-        }
-      }
-    } catch (err) {
-      console.error('Failed to create ticket:', err);
-    } finally {
-      setIsCreating(false);
-    }
+  const handleNewConversation = () => {
+    setSelectedTicket(null);
+    setMessages([]);
+    setInputMessage('');
+    setConversationError('');
+    if (customerIdentity) setIsStartingChat(true);
+    else setShowIdentityForm(true);
   };
 
   const handleSubmitRating = async () => {
@@ -288,7 +288,7 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
 
   return (
     <div
-      className="blaze-customer-portal w-full flex-1 flex min-h-0 overflow-hidden bg-gray-50/50"
+      className="blaze-customer-portal w-full flex-1 flex flex-col sm:flex-row min-h-0 overflow-hidden bg-gray-50/50"
       style={{
         minHeight: '100vh',
         height: '100%',
@@ -298,7 +298,7 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
       }}
     >
       {/* Left Sidebar: My Support Tickets */}
-      <div className="w-80 lg:w-96 bg-white border-r border-gray-200 flex flex-col min-h-0 overflow-hidden shrink-0">
+      <div className={`${selectedTicket || isStartingChat || showIdentityForm ? 'hidden sm:flex' : 'flex'} w-full sm:w-80 lg:w-96 bg-white border-r border-gray-200 flex-col min-h-0 overflow-hidden shrink-0`}>
         <div className="p-3.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/80">
           <div>
             <h3 className="font-bold text-sm text-gray-900">Your Support Requests</h3>
@@ -306,11 +306,11 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => setShowCreateModal(true)}
+            onClick={handleNewConversation}
             className="px-3 py-1.5 rounded-xl bg-[#FF7A00] hover:bg-[#E66E00] text-white text-xs font-bold transition-colors shadow-2xs flex items-center gap-1"
           >
             <RiAddLine className="w-4 h-4" />
-            <span>New Query</span>
+            <span>New Chat</span>
           </button>
         </div>
 
@@ -322,7 +322,7 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
               <RiShoppingBag3Line className="w-10 h-10 mx-auto text-gray-300 mb-2" />
               <p className="font-semibold text-xs text-gray-700">No active support requests</p>
               <p className="text-[11px] text-gray-400 mt-1">
-                Have a question or issue with an order? Click &quot;New Query&quot; to connect with BlazeResolver.
+                Start a chat and follow replies here.
               </p>
             </div>
           ) : (
@@ -331,7 +331,10 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
               return (
                 <div
                   key={t.id}
-                  onClick={() => setSelectedTicket(t)}
+                  onClick={() => {
+                    setSelectedTicket(t);
+                    setIsStartingChat(false);
+                  }}
                   className={`p-3 rounded-xl cursor-pointer transition-all flex flex-col gap-1 ${
                     isSelected
                       ? 'bg-orange-50/80 border border-orange-200 shadow-2xs'
@@ -370,32 +373,35 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
       </div>
 
       {/* Right Area: Interactive Customer Support Chat */}
-      {selectedTicket ? (
-        <div className="flex-1 bg-white flex flex-col min-h-0 overflow-hidden">
+      {selectedTicket || isStartingChat ? (
+        <div className="flex-1 min-w-0 bg-white flex flex-col min-h-0 overflow-hidden">
           {/* Header */}
           <div className="p-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
             <div>
+              <button type="button" onClick={() => { setSelectedTicket(null); setMessages([]); setIsStartingChat(false); }} className="sm:hidden text-[11px] font-semibold text-orange-700 mb-1">
+                ‹ Your requests
+              </button>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold text-gray-500">
-                  {selectedTicket.ticketNumber || selectedTicket.id.slice(0, 8)}
+                  {selectedTicket ? selectedTicket.ticketNumber || selectedTicket.id.slice(0, 8) : 'New chat'}
                 </span>
-                <h3 className="font-bold text-sm text-gray-900">{selectedTicket.subject}</h3>
+                <h3 className="font-bold text-sm text-gray-900">{selectedTicket?.subject || 'How can we help?'}</h3>
               </div>
               <p className="text-xs text-gray-500 mt-0.5">
-                {selectedTicket.orderNumber && (
+                {selectedTicket?.orderNumber && (
                   <span className="font-medium text-gray-700">Order #{selectedTicket.orderNumber} • </span>
                 )}
-                <span>Category: <strong className="capitalize">{selectedTicket.category || 'General'}</strong></span>
+                {selectedTicket ? <span>Category: <strong className="capitalize">{selectedTicket.category || 'General'}</strong></span> : <span>Your message starts the request.</span>}
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              {selectedTicket.isHumanTakeover ? (
+              {selectedTicket?.isHumanTakeover ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-900 text-xs font-semibold border border-blue-200">
                   <RiUserVoiceLine className="w-4 h-4 shrink-0 text-blue-600" />
                   <span>Human Specialist Connected</span>
                 </span>
-              ) : (
+              ) : selectedTicket ? (
                 <>
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-900 text-xs font-semibold border border-orange-200">
                     <BlazzyIcon className="w-4 h-4 shrink-0" color="#EA580C" />
@@ -405,18 +411,20 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
                     type="button"
                     onClick={async () => {
                       if (!selectedTicket || isSending) return;
-                      setInputMessage('');
-                      await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
+                      setConversationError('');
+                      const res = await fetch(`${baseUrl}/api/support/tickets/${selectedTicket.id}/messages`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           senderType: 'user',
                           role: 'user',
-                          authorName: selectedTicket.customerName || 'Customer',
+                          authorName: customerIdentity?.name || selectedTicket.customerName || 'Customer',
+                          body: 'I would like to speak to a human support specialist please.',
                           content: 'I would like to speak to a human support specialist please.'
                         })
                       });
-                      loadTicketMessages(selectedTicket.id);
+                      if (res.ok) await loadTicketMessages(selectedTicket.id);
+                      else setConversationError('Could not request a specialist. Please try again.');
                     }}
                     className="px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium border border-gray-300 transition-colors flex items-center gap-1"
                     title="Request human support specialist takeover"
@@ -425,7 +433,7 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
                     <span>Talk to Human</span>
                   </button>
                 </>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -486,7 +494,7 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
           </div>
 
           {/* CSAT Rating Widget */}
-          <div className="p-3 border-t border-gray-200 bg-amber-50/50 flex flex-col gap-2">
+          {selectedTicket && <div className="p-3 border-t border-gray-200 bg-amber-50/50 flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="font-bold text-xs text-amber-900 flex items-center gap-1.5">
                 <RiEmotionHappyLine className="w-4 h-4 text-amber-600" />
@@ -531,16 +539,18 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
                 <span>Thank you! Your feedback has been recorded.</span>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Composer */}
           <div className="border-t border-gray-200 bg-white p-3 flex flex-col gap-1.5">
+            {conversationError && <p role="alert" className="text-xs text-red-600 px-1">{conversationError}</p>}
             <form onSubmit={handleSendMessage} className="flex items-center gap-2">
               <input
                 type="text"
-                placeholder="Ask a question or reply to assistant..."
+                placeholder={selectedTicket ? 'Ask a question or reply to support...' : 'Describe what you need help with...'}
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
+                aria-label="Message"
                 className="flex-1 p-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-500 text-xs"
               />
               <button
@@ -555,138 +565,64 @@ export const CustomerSupportPortal: React.FC<CustomerSupportPortalProps> = ({
             <div className="flex items-center justify-between text-[10px] text-gray-400 px-1 select-none">
               <span className="flex items-center gap-1">
                 <RiShieldCheckLine className="w-3 h-3 text-emerald-600" />
-                <span>Protected by BlazeResolver Triage Guardrails</span>
+                <span>BlazeResolver triage and support</span>
               </span>
-              <span>All communications audited per compliance policy</span>
             </div>
           </div>
         </div>
+      ) : showIdentityForm ? (
+        <form onSubmit={handleCreateTicket} className="flex-1 min-w-0 flex flex-col items-center justify-center gap-4 p-8 bg-white">
+          <div className="max-w-sm w-full">
+            <div className="mb-5 text-center">
+              <BlazzyIcon className="w-10 h-10 mx-auto mb-2" />
+              <h3 className="font-bold text-base text-gray-900">Start a support chat</h3>
+              <p className="text-xs text-gray-500 mt-1">Add your name and email. Tell us what you need in the chat.</p>
+            </div>
+            <label className="block mb-3 text-xs font-semibold text-gray-700">
+              Name
+              <input
+                type="text"
+                autoComplete="name"
+                value={newCustomerName}
+                onChange={(e) => setNewCustomerName(e.target.value)}
+                required
+                className="mt-1 w-full p-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-400/20 focus:border-orange-500 outline-none"
+              />
+            </label>
+            <label className="block text-xs font-semibold text-gray-700">
+              Email
+              <input
+                type="email"
+                autoComplete="email"
+                value={newCustomerEmail}
+                onChange={(e) => setNewCustomerEmail(e.target.value)}
+                required
+                className="mt-1 w-full p-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-400/20 focus:border-orange-500 outline-none"
+              />
+            </label>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setShowIdentityForm(false)} className="flex-1 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200">
+                Cancel
+              </button>
+              <button type="submit" className="flex-1 px-4 py-2.5 rounded-xl bg-[#FF7A00] text-white text-xs font-bold hover:bg-[#E66E00]">
+                Continue
+              </button>
+            </div>
+          </div>
+        </form>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-400">
+        <div className="hidden sm:flex flex-1 flex-col items-center justify-center p-8 text-center text-gray-400">
           <RiUserSmileLine className="w-12 h-12 text-gray-300 mb-2" />
           <p className="font-semibold text-sm text-gray-700">Welcome to Customer Support</p>
           <p className="text-xs text-gray-400 mt-1 max-w-sm">
-            Select an existing ticket from the left panel or click &quot;New Query&quot; to start a live assisted conversation with BlazeResolver.
+            {customerIdentity ? 'Select a request or start a new chat.' : 'Share your name and email to start a chat and track replies here.'}
           </p>
+          <button type="button" onClick={handleNewConversation} className="mt-4 px-4 py-2 rounded-xl bg-[#FF7A00] text-white text-xs font-bold hover:bg-[#E66E00]">
+            Start a chat
+          </button>
         </div>
       )}
 
-      {/* Modal: Create New Support Ticket */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form
-            onSubmit={handleCreateTicket}
-            className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-gray-200 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150"
-          >
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="font-bold text-sm text-gray-900 flex items-center gap-1.5 text-orange-600">
-                <BlazzyIcon className="w-4 h-4" color="#EA580C" />
-                <span>Submit Customer Support Request</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <RiCloseLine className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-semibold block mb-1 text-xs text-gray-700">Your Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Alex Morgan"
-                  value={newCustomerName}
-                  onChange={(e) => setNewCustomerName(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-orange-400/20 focus:border-orange-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="font-semibold block mb-1 text-xs text-gray-700">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="e.g. alex@example.com"
-                  value={newCustomerEmail}
-                  onChange={(e) => setNewCustomerEmail(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-orange-400/20 focus:border-orange-500 outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="font-semibold block mb-1 text-xs text-gray-700">Issue Subject</label>
-              <input
-                type="text"
-                placeholder="e.g. Missing beverage in order #9821"
-                value={newSubject}
-                onChange={(e) => setNewSubject(e.target.value)}
-                className="w-full p-2.5 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-orange-400/20 focus:border-orange-500 outline-none"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-semibold block mb-1 text-xs text-gray-700">Category</label>
-                <select
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-orange-400/20 outline-none"
-                >
-                  <option value="orders">Missing / Wrong Item</option>
-                  <option value="kitchen">Food Quality & Taste</option>
-                  <option value="delivery">Delivery Delay</option>
-                  <option value="billing">Payment & Billing</option>
-                  <option value="refund">Refund Request</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-semibold block mb-1 text-xs text-gray-700">Linked Order</label>
-                <input
-                  type="text"
-                  placeholder="e.g. ORD-9821"
-                  value={newOrderId}
-                  onChange={(e) => setNewOrderId(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-orange-400/20 outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="font-semibold block mb-1 text-xs text-gray-700">Problem Description</label>
-              <textarea
-                placeholder="Describe what happened in detail. Our AI will automatically verify against active policy..."
-                value={newComplaintText}
-                onChange={(e) => setNewComplaintText(e.target.value)}
-                rows={4}
-                className="w-full p-2.5 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-orange-400/20 focus:border-orange-500 outline-none resize-none"
-                required
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="px-3.5 py-2 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isCreating || !newComplaintText.trim()}
-                className="px-4 py-2 text-xs font-bold text-white bg-[#FF7A00] hover:bg-[#E66E00] rounded-xl transition-colors shadow-2xs disabled:opacity-50 flex items-center gap-1.5"
-              >
-                <RiSendPlaneFill className="w-4 h-4" />
-                <span>{isCreating ? 'Processing AI Triage...' : 'Submit to BlazeResolver'}</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 };

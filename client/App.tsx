@@ -34,6 +34,7 @@ import { CloseTicketModal } from './components/support/CloseTicketModal.js';
 import { EscalateTicketModal } from './components/support/EscalateTicketModal.js';
 import { BlazzyIcon, BlazzyBadge } from './components/support/BlazzyMascot.js';
 import { BlazzySupportWidget } from './components/support/BlazzySupportWidget.js';
+import { CustomerSupportPortal } from './components/support/CustomerSupportPortal.js';
 import type { SupportTicket, SupportMessage, CustomerContext, SupportCannedResponse, TicketRating } from './components/support/types.js';
 
 export interface PipelineResult {
@@ -174,6 +175,12 @@ export interface HitlAction {
 }
 
 export default function App() {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  if (path === '/customer') return <CustomerSupportPortal />;
+  return <DashboardApp showWidget={path !== '/admin'} />;
+}
+
+function DashboardApp({ showWidget }: { showWidget: boolean }) {
   // Live Support State
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
@@ -830,6 +837,7 @@ export default function App() {
               <CustomerContextPanel
                 customerContext={customerContext}
                 selectedTicket={selectedTicket}
+                firstCustomerMessage={messages.find((message) => !message.internalNote && message.senderType === 'user')}
                 ticketRating={ticketRating}
               />
             )}
@@ -1275,10 +1283,8 @@ export default function App() {
         onConfirmEscalate={handleConfirmEscalate}
       />
 
-      {/* Floating Blazzy AI Support Widget (SVG Mascot) */}
-      <BlazzySupportWidget />
+      {showWidget && <BlazzySupportWidget />}
+
     </div>
   );
 }
-
-

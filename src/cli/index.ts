@@ -10,6 +10,7 @@ import { detectRepo } from './detect.js';
 import { runInit } from './init.js';
 import { runNotifyCommand } from './notify.js';
 import { runRemove } from './remove.js';
+import { runDoctor } from './doctor.js';
 import { describeProviders } from '../triage/providers.js';
 import { resolveEmbedder } from '../answer/embed.js';
 import { engineVersion } from '../version.js';
@@ -23,6 +24,7 @@ Usage: npx blazeresolver@latest <command> [options]
   npx blazeresolver app       create a GitHub App for the fix job: short-lived, one-repo tokens, and PRs that trigger your CI
   npx blazeresolver harden    set up branch protection, CODEOWNERS, safe Actions defaults and secret scanning on GitHub
   npx blazeresolver providers show which AI providers your keys were recognized as, in failover order
+  npx blazeresolver doctor    check this install, GitHub access, Actions secrets, sandbox and branch protection
   blazeresolver fix           run by the workflow: fix the issue that triggered it
   blazeresolver notify        run by the workflow: tell customers a merged fix shipped
 
@@ -38,6 +40,12 @@ Docs: https://github.com/DikshantJangra/BlazeResolver#readme`;
 
 /** `blazeresolver <command> --help`. Checked before a command runs, so asking for help never changes anything. */
 const COMMAND_HELP: Record<string, string> = {
+  doctor: `blazeresolver doctor: check this installation
+
+Usage: npx blazeresolver doctor
+
+Checks local config, endpoint token, GitHub access, workflow, Docker sandbox, provider keys, branch ruleset and Actions
+secrets. It never changes files or prints secret values. Needs gh auth to inspect GitHub settings.`,
   init: `blazeresolver init: set up BlazeResolver in this repo
 
 Usage: npx blazeresolver@latest init [options]
@@ -181,6 +189,10 @@ try {
     console.log(lines.length ? lines.map((l, i) => `${i + 1}. ${l}`).join('\n') : 'No AI keys found. Put any provider key in .env as API_KEYS=...');
     const embedder = resolveEmbedder();
     console.log(`\nHelp-doc search: ${embedder ? `keywords + semantic (${embedder.id})` : 'keywords only. For semantic search too, add a key for a provider with embeddings (OpenAI, Voyage, Gemini, Mistral, Cohere) or set BLAZE_EMBED_BASE_URL.'}`);
+  } else if (command === 'doctor') {
+    const checks = await runDoctor({ cwd: process.cwd() });
+    for (const check of checks) console.log(`${check.status === 'ok' ? 'OK' : check.status.toUpperCase()} ${check.name}: ${check.detail}`);
+    if (checks.some((check) => check.status === 'fail')) process.exitCode = 1;
   } else if (command === 'fix') {
     console.log(await runFixCommand({ env: process.env, config: config() }));
   } else if (command === 'notify') {

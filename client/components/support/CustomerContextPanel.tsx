@@ -21,6 +21,7 @@ import type { CustomerContext, SupportMessage, SupportTicket, TicketRating } fro
 export interface CustomerContextPanelProps {
   customerContext: CustomerContext | null;
   selectedTicket?: SupportTicket | null;
+  firstCustomerMessage?: SupportMessage | null;
   ticketRating?: TicketRating | null;
   internalNotes?: SupportMessage[];
   onExecuteAction?: (action: string, amount?: number) => Promise<void>;
@@ -32,6 +33,7 @@ export interface CustomerContextPanelProps {
 export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
   customerContext,
   selectedTicket,
+  firstCustomerMessage,
   ticketRating,
   internalNotes,
   onExecuteAction,
@@ -40,6 +42,7 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
   isDiagnosing
 }) => {
   const aiReport = selectedTicket?.aiReport;
+  const urgencyScore = aiReport?.urgencyScore == null ? null : Math.round(aiReport.urgencyScore * 100);
 
   return (
     <div className="w-80 lg:w-96 bg-gray-50/80 p-4 border-l border-gray-200 overflow-y-auto flex flex-col gap-4 text-xs shrink-0">
@@ -54,6 +57,23 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
         )}
       </div>
 
+      {selectedTicket && (
+        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-2xs flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-bold text-gray-900">Request intake</span>
+            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] capitalize">
+              {(selectedTicket.intakeChannel || 'support API').replace(/[_-]/g, ' ')}
+            </span>
+          </div>
+          <span className="text-[10px] text-gray-500">
+            Received {new Date(selectedTicket.createdAt).toLocaleString()}
+          </span>
+          <p className="text-[11px] text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-5">
+            {firstCustomerMessage?.body || firstCustomerMessage?.content || selectedTicket.subject}
+          </p>
+        </div>
+      )}
+
       {/* AI Performance & Triage Execution Report */}
       {aiReport && (
         <div className="bg-white p-3.5 rounded-2xl border border-orange-200 shadow-2xs flex flex-col gap-3">
@@ -62,7 +82,7 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
               <RiCpuLine className="w-4 h-4 text-orange-600" />
               <span>AI Triage & Policy Verdict</span>
             </div>
-            {aiReport.executionDurationMs && (
+            {aiReport.executionDurationMs != null && (
               <span className="text-[10px] font-mono text-gray-500 flex items-center gap-0.5">
                 <RiTimerLine className="w-3 h-3 text-gray-400" />
                 {aiReport.executionDurationMs}ms
@@ -73,7 +93,11 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
           <div className="grid grid-cols-2 gap-2 bg-orange-50/50 p-2.5 rounded-xl border border-orange-100 text-[11px]">
             <div>
               <span className="text-gray-500 block text-[10px]">Intent Classified</span>
-              <span className="font-bold text-gray-900 capitalize">{aiReport.intent || selectedTicket?.category || 'General'}</span>
+              <span className="font-bold text-gray-900 capitalize break-all">{aiReport.intent || selectedTicket?.category || 'General'}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-[10px]">Category / Severity</span>
+              <span className="font-bold text-gray-900 capitalize break-all">{aiReport.triageCategory || '—'} / {aiReport.triageSeverity || '—'}</span>
             </div>
             <div>
               <span className="text-gray-500 block text-[10px]">Customer Sentiment</span>
@@ -81,8 +105,25 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
             </div>
             <div>
               <span className="text-gray-500 block text-[10px]">Guardrail Check</span>
-              <span className="font-semibold text-emerald-700 flex items-center gap-1">
-                <RiShieldCheckLine className="w-3.5 h-3.5" /> Passed Clean
+              <span className={`font-semibold flex items-center gap-1 ${aiReport.guardrailPassed === true ? 'text-emerald-700' : aiReport.guardrailPassed === false ? 'text-red-700' : 'text-gray-500'}`}>
+                <RiShieldCheckLine className="w-3.5 h-3.5" />
+                {aiReport.guardrailPassed === true ? 'Passed' : aiReport.guardrailPassed === false ? 'Blocked' : 'Not recorded'}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-[10px]">Triage ID</span>
+              <span className="font-mono text-[10px] text-gray-800 break-all">{aiReport.triageId || 'Not recorded'}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-[10px]">Prompt injection</span>
+              <span className={`font-semibold ${aiReport.isPromptInjection ? 'text-red-700' : 'text-gray-700'}`}>
+                {aiReport.isPromptInjection == null ? 'Not recorded' : aiReport.isPromptInjection ? 'Detected' : 'Not detected'}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-[10px]">Human review</span>
+              <span className="font-semibold text-gray-800">
+                {aiReport.requiresHitl == null ? 'Not recorded' : aiReport.requiresHitl ? 'Required' : 'Not required'}
               </span>
             </div>
             <div>
@@ -91,17 +132,17 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
                 <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
                   <div
                     className={`h-full rounded-full ${
-                      (aiReport.urgencyScore || 50) > 75
+                      (urgencyScore ?? 0) > 75
                         ? 'bg-red-500'
-                        : (aiReport.urgencyScore || 50) > 50
+                        : (urgencyScore ?? 0) > 50
                           ? 'bg-amber-500'
                           : 'bg-emerald-500'
                     }`}
-                    style={{ width: `${aiReport.urgencyScore || 50}%` }}
+                    style={{ width: `${urgencyScore ?? 0}%` }}
                   />
                 </div>
                 <span className="font-mono font-bold text-gray-800 text-[10px]">
-                  {aiReport.urgencyScore || 50}/100
+                  {urgencyScore == null ? 'Not recorded' : `${urgencyScore}/100`}
                 </span>
               </div>
             </div>
@@ -113,12 +154,14 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
               <span className="text-gray-700">Policy Authorization:</span>
               <span
                 className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                  aiReport.policyAllowed
+                  aiReport.policyAllowed === true
                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'bg-amber-50 text-amber-800 border border-amber-200'
+                    : aiReport.policyAllowed === false
+                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                      : 'bg-gray-100 text-gray-700 border border-gray-200'
                 }`}
               >
-                {aiReport.policyAllowed ? 'Auto-Approve Eligible' : 'Requires Review'}
+                {aiReport.policyAllowed === true ? 'Auto-Approve Eligible' : aiReport.policyAllowed === false ? 'Requires Review' : 'Not recorded'}
               </span>
             </div>
             {aiReport.policyRationale && (
@@ -132,6 +175,45 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
               </div>
             )}
           </div>
+
+          <div className="p-2.5 rounded-xl bg-blue-50/60 border border-blue-100 flex flex-col gap-1.5 text-[11px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-blue-950">Knowledge retrieval (RAG)</span>
+              <span className="text-[10px] font-semibold text-blue-800">
+                {aiReport.ragApplied ? 'Used in reply' : aiReport.ragMatches === undefined ? 'Not run' : aiReport.ragMatches.length ? 'Retrieved, not applied' : 'No match'}
+              </span>
+            </div>
+            {aiReport.ragMatches?.length ? (
+              <ul className="list-disc pl-4 text-blue-900 space-y-0.5">
+                {aiReport.ragMatches.map((match, index) => <li key={`${match}-${index}`}>{match}</li>)}
+              </ul>
+            ) : (
+              <p className="text-blue-900/70">{aiReport.ragMatches ? 'No knowledge sections matched this message.' : 'No retrieval run is recorded for this analysis.'}</p>
+            )}
+          </div>
+
+          {aiReport.resolutionActions?.length ? (
+            <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 flex flex-col gap-1.5 text-[11px]">
+              <span className="font-bold text-gray-800">Resolution actions</span>
+              {aiReport.resolutionActions.map((action, index) => (
+                <div key={`${action.actionType}-${index}`} className="flex items-start justify-between gap-2">
+                  <span className="capitalize text-gray-700">{action.actionType}{action.amount != null ? ` · ₹${action.amount}` : ''}</span>
+                  <span className="capitalize text-gray-500">{action.approvalStatus.replace(/_/g, ' ')}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {(aiReport.responseChannel || aiReport.responseTone || aiReport.responseQualityPassed != null) && (
+            <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-[11px]">
+              <span className="font-bold text-gray-800 block mb-1">Assistant response</span>
+              <div className="text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
+                {aiReport.responseChannel && <span>Channel: {aiReport.responseChannel}</span>}
+                {aiReport.responseTone && <span>Tone: {aiReport.responseTone}</span>}
+                {aiReport.responseQualityPassed != null && <span>Quality: {aiReport.responseQualityPassed ? 'passed' : 'review'}</span>}
+              </div>
+            </div>
+          )}
 
           {/* 1-Click HITL Action & AI Harness Controls */}
           <div className="flex flex-col gap-1.5 pt-1">
@@ -186,6 +268,11 @@ export const CustomerContextPanel: React.FC<CustomerContextPanelProps> = ({
               </p>
             </div>
           )}
+        </div>
+      )}
+      {selectedTicket && !aiReport && (
+        <div className="bg-white p-3.5 rounded-2xl border border-gray-200 text-[11px] text-gray-600">
+          No AI triage report is recorded for this request yet.
         </div>
       )}
 

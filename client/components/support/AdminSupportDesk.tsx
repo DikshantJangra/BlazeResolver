@@ -53,6 +53,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
 
   // Fetch ticket list
   const fetchTickets = async () => {
+    if (viewMode !== 'admin') return;
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
@@ -84,6 +85,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
 
   // Fetch canned responses
   const fetchCannedResponses = async () => {
+    if (viewMode !== 'admin') return;
     try {
       const res = await fetch(`${baseUrl}/api/support/canned-responses`, {
         headers: { ...authHeaders }
@@ -100,7 +102,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
 
   // Real-time WebSocket connection
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || viewMode !== 'admin') return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const defaultWs = `${protocol}//${window.location.host}/ws`;
     const targetWs = wsUrl || (baseUrl ? baseUrl.replace(/^http/, 'ws') + '/ws' : defaultWs);
@@ -158,17 +160,19 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         ws.close();
       }
     };
-  }, [wsUrl, baseUrl]);
+  }, [wsUrl, baseUrl, viewMode]);
 
   useEffect(() => {
+    if (viewMode !== 'admin') return;
     fetchTickets();
     fetchCannedResponses();
     const interval = setInterval(fetchTickets, 5000);
     return () => clearInterval(interval);
-  }, [statusFilter, priorityFilter, categoryFilter, searchQuery, baseUrl]);
+  }, [statusFilter, priorityFilter, categoryFilter, searchQuery, baseUrl, viewMode]);
 
   // When ticket selected -> load messages & customer context
   useEffect(() => {
+    if (viewMode !== 'admin') return;
     if (!selectedTicket) {
       setMessages([]);
       setCustomerContext(null);
@@ -214,7 +218,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [selectedTicket?.id]);
+  }, [selectedTicket?.id, viewMode]);
 
   const handleUpdateTicket = async (updates: Partial<SupportTicket>) => {
     if (!selectedTicket) return;
@@ -550,7 +554,6 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
         mode={viewMode}
         onModeChange={setViewMode}
         onOpenCannedModal={() => setShowCannedModal(true)}
-        onOpenNewTicketModal={() => {}}
       />
 
       {/* Main View: Admin Desk vs Customer Portal */}
@@ -592,6 +595,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
             <CustomerContextPanel
               customerContext={customerContext}
               selectedTicket={selectedTicket}
+              firstCustomerMessage={messages.find((message) => !message.internalNote && message.senderType === 'user')}
               ticketRating={ticketRating}
               internalNotes={messages.filter((m) => m.internalNote)}
               onExecuteAction={handleExecuteTicketAction}
@@ -602,10 +606,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
           )}
         </div>
       ) : (
-        <CustomerSupportPortal
-          onOpenNewTicketModal={() => {}}
-          onRefreshFeed={fetchTickets}
-        />
+        <CustomerSupportPortal />
       )}
 
       {/* Canned Responses Library Drawer */}

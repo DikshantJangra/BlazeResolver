@@ -6,7 +6,7 @@ interface SupportHeaderProps {
   mode: 'admin' | 'customer';
   onModeChange: (mode: 'admin' | 'customer') => void;
   onOpenCannedModal: () => void;
-  onOpenNewTicketModal: () => void;
+  onOpenNewTicketModal?: () => void;
 }
 
 export const SupportHeader: React.FC<SupportHeaderProps> = ({
@@ -72,7 +72,7 @@ export const SupportHeader: React.FC<SupportHeaderProps> = ({
             <RiBookmarkLine className="w-4 h-4 text-gray-500" />
             <span>Canned Responses</span>
           </button>
-        ) : (
+        ) : onOpenNewTicketModal ? (
           <button
             type="button"
             onClick={onOpenNewTicketModal}
@@ -81,7 +81,7 @@ export const SupportHeader: React.FC<SupportHeaderProps> = ({
             <RiAddLine className="w-4 h-4" />
             <span>Submit New Ticket</span>
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   );

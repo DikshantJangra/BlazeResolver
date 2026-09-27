@@ -7,7 +7,6 @@ import {
   FaShieldHalved,
   FaCircleCheck,
   FaCircleDot,
-  FaComment,
   FaCheck,
   FaXmark,
   FaLock,
@@ -80,14 +79,17 @@ export default function StickyShowcase() {
           {slides.map((slide) => {
             const isActive = activeSlide === slide.id;
             return (
-              <div
+              <button
                 key={slide.id}
+                type="button"
                 onClick={() => setActiveSlide(slide.id)}
-                className={`p-6 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                aria-pressed={isActive}
+                className={`w-full rounded-2xl border p-4 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70 ${
                   isActive
-                    ? "bg-surface-hover border-fg/20 shadow-xl"
-                    : "bg-surface/40 border-fg/[0.06] hover:bg-surface/80 hover:border-fg/12 opacity-60 hover:opacity-90"
+                    ? "bg-surface-hover shadow-lg"
+                    : "bg-surface/40 hover:bg-surface/80"
                 }`}
+                style={{ borderColor: isActive ? tint(slide.accent, 35) : tint(ACCENT.fg, 8) }}
               >
                 <div className="flex items-center justify-between gap-3 mb-2.5">
                   <div className="flex items-center gap-3">
@@ -109,7 +111,7 @@ export default function StickyShowcase() {
                     </span>
                   </div>
 
-                  {isActive && <span className="w-2 h-2 rounded-full bg-[#28c840] animate-pulse" />}
+                  <span className="font-mono text-[10px] tabular-nums text-fg/35">0{slide.id + 1}</span>
                 </div>
 
                 <h3 className="font-ds-sans font-bold text-lg sm:text-xl text-fg tracking-tight mb-2">
@@ -118,7 +120,7 @@ export default function StickyShowcase() {
                 <p className="text-xs sm:text-sm text-fg/65 leading-relaxed font-normal">
                   {slide.description}
                 </p>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -136,6 +138,7 @@ export default function StickyShowcase() {
                     ? "bg-fg/10 text-fg border border-fg/15 font-semibold"
                     : "text-fg/50 hover:text-fg hover:bg-fg/[0.04]"
                 }`}
+                aria-pressed={activeSlide === s.id}
               >
                 {s.badge}
               </button>
@@ -158,27 +161,37 @@ export default function StickyShowcase() {
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2.5">
                   {[
-                    { time: "09:14", who: "Customer report", text: "\"Applying SAVE10 at checkout shows a blank page\"", accent: ACCENT.info },
-                    { time: "09:31", who: "Another customer reported this", text: "\"checkout just breaks when I add my coupon\"", accent: ACCENT.brandSoft },
-                    { time: "10:02", who: "Another customer reported this", text: "\"can't pay, page goes white after discount\"", accent: ACCENT.brandSoft },
-                    { time: "10:47", who: "Another customer reported this", text: "\"TypeError at cart.js:88 when using a promo\"", accent: ACCENT.brandSoft },
+                    { time: "09:14", who: "First report", text: "Applying SAVE10 at checkout shows a blank page", accent: ACCENT.info },
+                    { time: "09:31", who: "Repeat report", text: "Checkout just breaks when I add my coupon", accent: ACCENT.brandSoft },
+                    { time: "10:02", who: "Repeat report", text: "Can't pay, page goes white after discount", accent: ACCENT.brandSoft },
+                    { time: "10:47", who: "Repeat report", text: "TypeError at cart.js:88 when using a promo", accent: ACCENT.brandSoft },
                   ].map((row, i) => (
-                    <div key={i} className="flex items-start gap-2.5 text-xs p-2.5 rounded-xl bg-fg/[0.02] border border-fg/[0.05]">
-                      <span className="text-fg/40 font-mono text-[11px] shrink-0 mt-0.5">{row.time}</span>
-                      <FaComment className="w-3 h-3 shrink-0 mt-0.5" style={{ color: row.accent }} />
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="font-mono text-[10px] font-semibold" style={{ color: row.accent }}>{row.who}</span>
-                        <span className="text-fg/85 leading-relaxed">{row.text}</span>
+                    <div key={i} className="relative flex items-stretch gap-3">
+                      <span className="w-11 shrink-0 pt-3 text-right font-mono text-[10px] tabular-nums text-fg/40">{row.time}</span>
+                      <span className="relative flex w-3 shrink-0 justify-center pt-3">
+                        {i < 3 && <span className="absolute bottom-[-0.75rem] top-4 w-px bg-fg/10" />}
+                        <span className="relative z-10 h-2 w-2 rounded-full ring-4 ring-surface" style={{ backgroundColor: row.accent }} />
+                      </span>
+                      <div className="min-w-0 flex-1 rounded-xl border border-fg/[0.06] bg-fg/[0.025] px-3 py-2.5">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide" style={{ color: row.accent }}>{row.who}</span>
+                          {i > 0 && <span className="shrink-0 font-mono text-[10px] text-fg/35">+1</span>}
+                        </div>
+                        <span className="block text-xs leading-relaxed text-fg/85">&ldquo;{row.text}&rdquo;</span>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-fg/[0.08] text-xs font-mono text-fg/40">
-                  <span>Grouped by feature, page and summary</span>
-                  <span className="text-ok font-medium">4 reports → 1 issue</span>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ok/20 bg-ok/[0.05] px-3.5 py-3">
+                  <span className="font-mono text-[10px] text-fg/55">Matched by feature, page &amp; summary</span>
+                  <span className="inline-flex items-center gap-2 font-mono text-xs font-semibold text-ok">
+                    <span>4 reports</span>
+                    <span aria-hidden="true" className="text-fg/35">→</span>
+                    <span>1 issue</span>
+                  </span>
                 </div>
               </div>
             )}
@@ -207,11 +220,11 @@ export default function StickyShowcase() {
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2.5">
-                    <div className="p-3 rounded-xl bg-red-500/[0.05] border border-red-500/20 flex items-center gap-2">
+                    <div className="p-3 rounded-xl bg-brand/[0.05] border border-brand/20 flex items-center gap-2">
                       <FaFlask className="w-3 h-3 text-bad" />
                       <span className="text-fg/80">Before: <span className="text-bad font-mono">1 failing</span></span>
                     </div>
-                    <div className="p-3 rounded-xl bg-[#28c840]/[0.06] border border-[#28c840]/25 flex items-center gap-2">
+                    <div className="p-3 rounded-xl bg-brand/[0.06] border border-brand/25 flex items-center gap-2">
                       <FaCircleCheck className="w-3 h-3 text-ok" />
                       <span className="text-fg/80">After: <span className="text-ok font-mono">all passing</span></span>
                     </div>
@@ -228,9 +241,9 @@ export default function StickyShowcase() {
                 <div className="flex items-center justify-between pt-3 border-t border-fg/[0.08] text-xs font-mono gap-3">
                   <span className="text-fg/40">Attempt 2 of 3 · build passing</span>
                   {merged ? (
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-500/15 text-violet border border-purple-500/30">MERGED</span>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-brand/15 text-brand-soft border border-brand/30">MERGED</span>
                   ) : closed ? (
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-500/15 text-bad border border-red-500/30">CLOSED</span>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-brand/15 text-brand-soft border border-brand/30">CLOSED</span>
                   ) : (
                     <div className="flex items-center gap-2">
                       <button
@@ -269,7 +282,7 @@ export default function StickyShowcase() {
                 </div>
 
                 <div className="flex flex-col gap-2.5">
-                  <div className="p-3.5 rounded-xl bg-red-500/[0.04] border border-red-500/25 flex items-center justify-between gap-3">
+                  <div className="p-3.5 rounded-xl bg-brand/[0.04] border border-brand/25 flex items-center justify-between gap-3">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-fg text-xs font-semibold font-ds-sans flex items-center gap-1.5">
                         <FaTriangleExclamation className="text-bad w-3 h-3" />
@@ -277,7 +290,7 @@ export default function StickyShowcase() {
                       </span>
                       <span className="text-[11px] text-bad/70">Prompt injection: acknowledged to the sender, nothing filed</span>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-red-500/15 text-bad border border-red-500/30 shrink-0">BLOCKED</span>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-brand/15 text-brand-soft border border-brand/30 shrink-0">BLOCKED</span>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-fg/[0.02] border border-fg/[0.08] flex items-center justify-between gap-3">
@@ -299,7 +312,7 @@ export default function StickyShowcase() {
                       </span>
                       <span className="text-[11px] text-fg/50">Fixes arrive as pull requests; only a person merges them</span>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#28c840]/15 text-ok border border-[#28c840]/30 shrink-0">HUMAN ONLY</span>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-brand/15 text-brand-soft border border-brand/30 shrink-0">HUMAN ONLY</span>
                   </div>
                 </div>
 

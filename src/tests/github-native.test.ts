@@ -75,6 +75,32 @@ describe('report handler', () => {
     assert.deepEqual(emailsIn([gh.issues[0].body, ...gh.issues[0].comments]).sort(), ['a@x.com', 'b@x.com']);
   });
 
+  it('serializes concurrent duplicate reports before checking or creating issues', async () => {
+    const gh = fakeGithub();
+    const handler = createHandler({ repo: 'acme/shop', githubToken: 't', complete: bugVerdict(), fetch: gh.f });
+    await Promise.all([
+      handler(post({ message: 'checkout crashes' }, '2.2.2.2')),
+      handler(post({ message: 'checkout crashes' }, '3.3.3.3'))
+    ]);
+    assert.equal(gh.issues.length, 1);
+    assert.equal(gh.issues[0].comments.length, 1);
+  });
+
+  it('uses a shared limiter when supplied and fails closed if it is unavailable', async () => {
+    const gh = fakeGithub();
+    const keys: string[] = [];
+    const limited = createHandler({
+      repo: 'acme/shop', githubToken: 't', fetch: gh.f,
+      rateLimit: { check: async (key) => { keys.push(key); return key === 'all'; } }
+    });
+    assert.equal((await limited(post({ message: 'checkout crashes' }))).status, 429);
+    assert.deepEqual(keys, ['ip:1.1.1.1', 'all']);
+
+    const unavailable = createHandler({ repo: 'acme/shop', githubToken: 't', fetch: gh.f, rateLimit: { check: async () => { throw new Error('offline'); } } });
+    assert.equal((await unavailable(post({ message: 'checkout crashes' }))).status, 503);
+    assert.equal(gh.issues.length, 0);
+  });
+
   it('never stores emails unless the site owner opts in', async () => {
     const gh = fakeGithub();
     const handler = createHandler({ repo: 'acme/shop', githubToken: 't', complete: bugVerdict(), fetch: gh.f });

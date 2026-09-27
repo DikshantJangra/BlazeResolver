@@ -50,7 +50,8 @@ No server to host. Everything runs in your repo and on GitHub.
 ```bash
 npx blazeresolver init      # set it up
 npx blazeresolver app       # optional: a GitHub App for the fix job (short-lived, one-repo tokens; PRs trigger your CI)
-npx blazeresolver harden    # optional: branch protection, CODEOWNERS, safe Actions defaults, secret scanning
+npx blazeresolver harden    # protect the default branch before enabling automated fixes
+npx blazeresolver doctor    # check credentials, workflow, sandbox and review rules
 npx blazeresolver remove    # take it all back out
 ```
 
@@ -67,7 +68,9 @@ npx blazeresolver remove    # take it all back out
 
 `remove` undoes exactly that: it deletes the files `init` created (a file you have since rewritten is kept), takes its marked lines back out of the files it edited, uninstalls the package, and removes the config. Values you typed into `.env` are never deleted. Your other code is never touched.
 
-Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo), paste any AI key into `.env` as `API_KEYS`, run `gh secret set API_KEYS`, allow Actions to create pull requests, protect your default branch. A human always reviews and merges the PR.
+Then: give your backend `BLAZE_GITHUB_TOKEN` (Issues write, one repo), paste any AI key into `.env` as `API_KEYS`, run `gh secret set API_KEYS`, allow Actions to create pull requests, and run `npx blazeresolver harden`. Run `npx blazeresolver doctor` to check setup. A human reviews and merges every PR.
+
+The endpoint defaults to per-process rate limits and issue locks. For a serverless deployment with multiple instances, pass `rateLimit.check` and `withIssueLock` callbacks backed by shared atomic storage. Store errors fail closed.
 
 ### The widget
 
@@ -139,7 +142,7 @@ npm run demo:fix    # the fix engine on a sample repo, end to end
 npm run dev         # the support desk preview: API on :3001, dashboard on http://127.0.0.1:5173
 ```
 
-The support desk is an early local preview, separate from the GitHub-native flow: no authentication, in-memory demo data. Don't deploy it. See the [docs](https://github.com/DikshantJangra/BlazeResolver/tree/main/web/content/docs/support-desk.mdx).
+The repository also contains an early local support desk preview, separate from the GitHub-native flow: no authentication, in-memory demo data. Don't deploy it. See the [docs](https://github.com/DikshantJangra/BlazeResolver/tree/main/web/content/docs/support-desk.mdx).
 
 ## License
 

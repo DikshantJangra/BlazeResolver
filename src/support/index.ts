@@ -1,5 +1,6 @@
 import { BlazeResolverPipeline } from '../core/pipeline/index.js';
 import { CustomerInput } from '../core/types.js';
+import { retrieve } from '../answer/retrieve.js';
 
 export interface SupportTicket {
   id: string;
@@ -13,6 +14,7 @@ export interface SupportTicket {
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
+  intakeChannel?: string;
   orderId?: string;
   orderNumber?: string;
   orderTotalPaise?: number;
@@ -49,6 +51,17 @@ export interface SupportTicket {
     isSystemic?: boolean;
     executionDurationMs?: number;
     processedAt?: string;
+    triageCategory?: string;
+    triageSeverity?: string;
+    triageItemName?: string;
+    triageResourceId?: string;
+    triageOrderId?: string;
+    ragMatches?: string[];
+    ragApplied?: boolean;
+    resolutionActions?: Array<{ actionType: string; approvalStatus: string; amount?: number; reason?: string }>;
+    responseChannel?: string;
+    responseTone?: string;
+    responseQualityPassed?: boolean;
   };
 }
 
@@ -159,6 +172,7 @@ export class SupportStore {
     priority?: string;
     category?: string;
     search?: string;
+    customerEmail?: string;
   }): SupportTicket[] {
     let result = Array.from(this.tickets.values());
 
@@ -180,6 +194,10 @@ export class SupportStore {
           (t.customerName && t.customerName.toLowerCase().includes(q)) ||
           (t.orderNumber && t.orderNumber.toLowerCase().includes(q))
       );
+    }
+    if (filters?.customerEmail) {
+      const email = filters.customerEmail.trim().toLowerCase();
+      result = result.filter((t) => t.customerEmail?.trim().toLowerCase() === email);
     }
 
     // Sort newest lastMessageAt first
@@ -228,6 +246,7 @@ export class SupportStore {
       customerEmail?: string;
       customerPhone?: string;
       outletName?: string;
+      intakeChannel?: string;
     },
     pipeline?: BlazeResolverPipeline
   ): Promise<{ ticket: SupportTicket; initialMessage: SupportMessage; aiReply?: SupportMessage }> {
@@ -250,6 +269,18 @@ export class SupportStore {
         };
 
         const result = await pipeline.processComplaint(input);
+        const docsContext = this.cannedResponses.map((response) => `## ${response.title}\n${response.body}`).join('\n\n');
+        const relevant = retrieve(docsContext, data.rawText, 2);
+        let ragApplied = false;
+        let responseText = result.response.text;
+        if (relevant.length && result.triage.sentiment === 'frustrated') {
+          const title = relevant[0].headings[relevant[0].headings.length - 1];
+          const matched = this.cannedResponses.find((response) => response.title === title);
+          if (matched) {
+            ragApplied = true;
+            if (!responseText.includes(matched.body.slice(0, 20))) responseText = `${responseText}\n\n${matched.body}`;
+          }
+        }
         aiReport = {
           triageId: result.triage.id,
           intent: result.triage.intent,
@@ -262,14 +293,39 @@ export class SupportStore {
           suggestedAction: result.resolution.policyDecision.recommendedAction,
           requiresHitl: result.resolution.hitlRequired,
           claimedAmount: result.triage.claimedAmount,
+          ragMatches: relevant.map((chunk) => chunk.headings.join(' > ') || chunk.text.slice(0, 90)),
+          ragApplied,
+          resolutionActions: result.resolution.actions.map(({ actionType, approvalStatus, amount, reason }) => ({
+            actionType,
+            approvalStatus,
+            amount,
+            reason
+          })),
+          responseChannel: result.response.channel,
+          responseTone: result.response.tone,
+          responseQualityPassed: result.response.qualityPassed,
           incidentId: result.correlation.incident?.incidentId,
           incidentTitle: result.correlation.incident?.title,
           clusterKey: result.correlation.cluster?.clusterKey,
           isSystemic: result.correlation.isSystemic,
           executionDurationMs: result.executionDurationMs,
+          triageCategory: result.triage.category,
+          triageSeverity: result.triage.severity,
+          triageItemName: result.triage.itemName,
+          triageResourceId: result.triage.resourceId,
+          triageOrderId: result.triage.orderId,
+          resolutionActions: result.resolution.actions.map(({ actionType, approvalStatus, amount, reason }) => ({
+            actionType,
+            approvalStatus,
+            amount,
+            reason
+          })),
+          responseChannel: result.response.channel,
+          responseTone: result.response.tone,
+          responseQualityPassed: result.response.qualityPassed,
           processedAt: result.timestamp instanceof Date ? result.timestamp.toISOString() : String(result.timestamp)
         };
-        aiResponseText = result.response.text;
+        aiResponseText = responseText;
       } catch (err) {
         console.error('AI pipeline processing error for ticket:', err);
       }
@@ -279,13 +335,14 @@ export class SupportStore {
       id,
       ticketNumber,
       status: 'open',
-      priority: aiReport?.urgencyScore && aiReport.urgencyScore > 75 ? 'urgent' : 'normal',
+      priority: aiReport?.urgencyScore != null && aiReport.urgencyScore >= 0.75 ? 'urgent' : 'normal',
       subject: data.subject || (data.rawText.slice(0, 50) + (data.rawText.length > 50 ? '...' : '')),
       category: data.category || aiReport?.intent || 'general',
       customerId: data.customerId || 'cust_user',
       customerName: data.customerName || 'Customer',
-      customerEmail: data.customerEmail || 'customer@example.com',
-      customerPhone: data.customerPhone || '+91 98000 00000',
+      customerEmail: data.customerEmail,
+      customerPhone: data.customerPhone,
+      intakeChannel: data.intakeChannel || 'support_api',
       orderId: data.orderId,
       orderNumber: data.orderId ? data.orderId.replace(/^[^\d]*/, '') : undefined,
       outletName: data.outletName || 'Downtown Kitchen Hub',
@@ -465,4 +522,3 @@ export class SupportStore {
 }
 
 export * from './handler.js';
-

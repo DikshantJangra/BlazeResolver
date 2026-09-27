@@ -2601,11 +2601,11 @@ body {
   --lp-brand: #ff6b00;
   --lp-brand-soft: #ff8533;
   --lp-brand-light: #ffa066;
-  --lp-ok: #28c840;
-  --lp-blue: #0055ff;
-  --lp-info: #8da4ff;
-  --lp-bad: #f87171;
-  --lp-violet: #d8b4fe;
+  --lp-ok: var(--lp-brand-soft);
+  --lp-blue: var(--lp-brand-soft);
+  --lp-info: var(--lp-brand-soft);
+  --lp-bad: var(--lp-brand-soft);
+  --lp-violet: var(--lp-brand-soft);
   --lp-cream: #fbf0df;
 }
 [data-theme="light"] {
@@ -2617,11 +2617,11 @@ body {
   --lp-brand: #e85d00;
   --lp-brand-soft: #c2410c;
   --lp-brand-light: #f97316;
-  --lp-ok: #15803d;
-  --lp-blue: #0047d6;
-  --lp-info: #1d4ed8;
-  --lp-bad: #dc2626;
-  --lp-violet: #7e22ce;
+  --lp-ok: var(--lp-brand-soft);
+  --lp-blue: var(--lp-brand-soft);
+  --lp-info: var(--lp-brand-soft);
+  --lp-bad: var(--lp-brand-soft);
+  --lp-violet: var(--lp-brand-soft);
   --lp-cream: #57534e;
 }
 @theme inline {

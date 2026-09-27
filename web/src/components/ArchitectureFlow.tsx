@@ -19,7 +19,7 @@ export default function ArchitectureFlow() {
     {
       title: "Report",
       description:
-        "A small widget in your app. The customer describes what broke; the page address and recent JavaScript errors come along (they can untick that). Unsent drafts are kept.",
+        "Customers report bugs right in your app. BlazeResolver captures the page URL and recent browser errors, which they can leave out. Unsent drafts are saved.",
       tag: "Widget · ~14 KB",
       accentColor: ACCENT.brand,
       icon: <FaComments className="w-4 h-4" />,
@@ -27,7 +27,7 @@ export default function ArchitectureFlow() {
     {
       title: "Triage",
       description:
-        "One route in your own backend screens for prompt injection, has AI triage the report, and files real bugs as GitHub issues. The same bug reported again becomes a comment, not a new issue.",
+        "Your backend route screens reports for prompt injection. AI files valid bugs as GitHub issues, and repeat reports add context to the existing issue.",
       tag: "Your /api/blaze route",
       accentColor: ACCENT.blue,
       icon: <FaFilter className="w-4 h-4" />,
@@ -35,7 +35,7 @@ export default function ArchitectureFlow() {
     {
       title: "Fix",
       description:
-        "The new issue starts a workflow in your repo. On GitHub's runner it maps your codebase, finds the root cause, patches it, and runs your tests and build, retrying up to three times.",
+        "A new issue starts a GitHub Actions workflow. It maps your code, finds the cause, and tries a fix, running your tests and build with up to three attempts.",
       tag: "GitHub Actions",
       accentColor: ACCENT.ok,
       icon: <FaGears className="w-4 h-4" />,
@@ -43,7 +43,7 @@ export default function ArchitectureFlow() {
     {
       title: "Review",
       description:
-        "A pull request with the root cause, the evidence and the test output, closing the issue. You review and merge. Customers who left an email hear it's fixed.",
+        "Review a pull request with the fix, root cause, and test results. It closes the issue when merged; customers who shared an email get a fix update.",
       tag: "Pull request",
       accentColor: ACCENT.brandSoft,
       icon: <FaCodePullRequest className="w-4 h-4" />,
@@ -83,6 +83,13 @@ export default function ArchitectureFlow() {
       className="relative z-10 ds-container py-24 sm:py-32 scroll-mt-20"
     >
       <div className="max-w-[880px] mx-auto flex flex-col items-center gap-6 text-center">
+        <img
+          src="/blazyy.png"
+          alt="BlazeResolver"
+          width={160}
+          height={160}
+          className="h-40 w-40 object-contain"
+        />
         {/* Formula Badge */}
         <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 border border-fg/12 bg-fg/[0.04] backdrop-blur-xl shadow-sm">
           <span className="flex items-center gap-1.5 font-mono text-xs font-semibold text-fg/90">
@@ -129,28 +136,51 @@ export default function ArchitectureFlow() {
 
       {/* 4 Stage Cards */}
       <div className="mt-16 sm:mt-20">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2 h-2 rounded-full bg-[#FF6B00] animate-pulse" />
-            <span className="font-mono text-xs font-semibold text-fg/90 uppercase tracking-widest">
-              Report to pull request
+        <div className="mb-7 flex flex-col gap-5 border-b border-fg/[0.08] pb-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-brand/40 animate-ping" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand" />
+              </span>
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-fg/55">
+                Automated fix workflow
+              </span>
+            </div>
+            <h3 className="mt-2 flex items-center gap-2 text-xl font-semibold tracking-tight text-fg sm:text-2xl">
+              Report
+              <FaArrowRight aria-hidden="true" className="h-3.5 w-3.5 text-brand" />
+              <span className="text-fg/55">pull request</span>
+            </h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-fg/[0.08] bg-fg/[0.025] px-3.5 py-2.5 font-mono text-[11px] text-fg/55 sm:mb-0.5">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+              AI writes the fix
+            </span>
+            <FaArrowRight aria-hidden="true" className="hidden h-3 w-3 text-fg/25 sm:block" />
+            <span className="inline-flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-soft" />
+              Your tests prove it
+            </span>
+            <FaArrowRight aria-hidden="true" className="hidden h-3 w-3 text-fg/25 sm:block" />
+            <span className="inline-flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-soft" />
+              You merge it
             </span>
           </div>
-          <span className="font-mono text-xs text-fg/40">
-            AI writes the fix • Your tests prove it • You merge it
-          </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {stages.map((stage, idx) => (
             <div
               key={stage.title}
-              className="group rounded-2xl border border-fg/[0.08] bg-surface/70 backdrop-blur-xl p-6 flex flex-col justify-between transition-all duration-300 hover:border-fg/20 hover:bg-surface-hover hover:-translate-y-1 shadow-lg"
+              className="group relative flex flex-col justify-between rounded-2xl border border-fg/[0.08] bg-surface/70 p-6 shadow-lg backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-fg/20 hover:bg-surface-hover"
             >
               <div>
-                <div className="flex items-center gap-3 mb-3.5">
+                <div className="mb-3.5 flex items-center gap-3">
                   <div
-                    className="p-2.5 rounded-xl border flex items-center justify-center shrink-0"
+                    className="flex shrink-0 items-center justify-center rounded-xl border p-2.5"
                     style={{
                       backgroundColor: tint(stage.accentColor, 8),
                       borderColor: tint(stage.accentColor, 19),
@@ -159,26 +189,30 @@ export default function ArchitectureFlow() {
                   >
                     {stage.icon}
                   </div>
-                  <h3 className="text-base font-bold text-fg tracking-tight">
-                    <span className="font-mono text-xs text-fg/40 mr-2">0{idx + 1}</span>
+                  <h3 className="text-base font-bold tracking-tight text-fg">
                     {stage.title}
                   </h3>
+                  <span className="ml-auto font-mono text-xs tabular-nums text-fg/35">
+                    0{idx + 1}
+                  </span>
                 </div>
-
-                <p className="text-xs text-fg/65 leading-relaxed">
+                <p className="text-xs leading-relaxed text-fg/65">
                   {stage.description}
                 </p>
               </div>
 
               <div
-                className="mt-5 pt-3.5 border-t border-fg/[0.06] font-mono text-[11px] font-medium flex items-center justify-between"
+                className="mt-5 flex items-center justify-between border-t border-fg/[0.06] pt-3.5 font-mono text-[11px] font-medium"
                 style={{ color: stage.accentColor }}
               >
                 <span>{stage.tag}</span>
-                {idx < stages.length - 1 && (
-                  <FaArrowRight className="hidden lg:block text-fg/20 group-hover:text-fg/60 transition-colors" />
-                )}
               </div>
+              {idx < stages.length - 1 && (
+                <FaArrowRight
+                  aria-hidden="true"
+                  className="absolute -right-4 top-1/2 z-10 hidden h-4 w-4 -translate-y-1/2 text-fg/35 transition-colors group-hover:text-brand lg:block"
+                />
+              )}
             </div>
           ))}
         </div>

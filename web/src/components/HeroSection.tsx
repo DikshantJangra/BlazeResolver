@@ -36,7 +36,7 @@ export default function HeroSection() {
   > = {
     npm: {
       label: "npx",
-      icon: <SiNpm className="w-3.5 h-3.5 text-[#e05d44]" />,
+      icon: <SiNpm className="w-3.5 h-3.5 text-brand" />,
       command: "npx blazeresolver@latest init",
       rendered: (
         <>
@@ -47,7 +47,7 @@ export default function HeroSection() {
     },
     pnpm: {
       label: "pnpm",
-      icon: <SiPnpm className="w-3 h-3 text-[#f69220]" />,
+      icon: <SiPnpm className="w-3 h-3 text-brand-soft" />,
       command: "pnpm dlx blazeresolver@latest init",
       rendered: (
         <>
@@ -58,7 +58,7 @@ export default function HeroSection() {
     },
     bun: {
       label: "bun",
-      icon: <SiBun className="w-3 h-3 text-cream" />,
+      icon: <SiBun className="w-3 h-3 text-brand" />,
       command: "bunx blazeresolver@latest init",
       rendered: (
         <>
@@ -119,7 +119,7 @@ export default function HeroSection() {
           </h2>
 
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-fg/[0.04] border border-fg/[0.1] backdrop-blur-xl shadow-xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#28c840] animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
             <span className="font-mono text-[11px] sm:text-xs font-normal text-fg/75 tracking-normal">
               Open source · Runs on your GitHub Actions
             </span>
@@ -246,7 +246,7 @@ export default function HeroSection() {
 
                 {/* Status Tag */}
                 <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono text-fg/40">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#28c840]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand" />
                   <span>Apache-2.0</span>
                 </div>
               </div>
@@ -286,7 +286,7 @@ export default function HeroSection() {
                     aria-label="Copy command"
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer border ${
                       copied
-                        ? "bg-emerald-500/15 border-emerald-500/30 text-ok"
+                        ? "bg-brand/15 border-brand/30 text-brand-soft"
                         : "bg-fg/[0.06] hover:bg-fg/[0.12] border-fg/10 text-fg/70 hover:text-fg"
                     }`}
                   >

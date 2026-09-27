@@ -139,6 +139,8 @@ ${tokenNote}
       issues: write
     steps:
       - uses: ${ACTIONS.checkout}
+        with:
+          persist-credentials: false
       - uses: ${ACTIONS.setupPython}
         with:
           python-version: "3.12"
@@ -168,6 +170,7 @@ ${tokenNote}
       - uses: ${ACTIONS.checkout}
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: ${ACTIONS.setupPython}
         with:
           python-version: "3.12"
@@ -1200,148 +1203,4 @@ if __name__ == "__main__":
         await run_fix_agent(args.issue, args.repo_root)
 
     asyncio.run(main())
-`;
-
-/** blazeresolver-schema.sql — run once against your Postgres instance */
-export const dbSchema = `-- BlazeResolver Database Schema
--- Run this once against your PostgreSQL database to create the operational store.
--- Added by \`npx blazeresolver init\`; safe to re-run (all statements are idempotent).
-
-create extension if not exists pgcrypto;
-
--- ============================================================
--- Tickets: Escalation & Incident Queue
--- Includes proposed action attachment for 1-click HITL approval
--- ============================================================
-create table if not exists tickets (
-  id uuid primary key default gen_random_uuid(),
-  customer_id text,
-  conversation_id text,
-  order_id text,
-  resource_id text,
-  category text not null,
-  urgency text not null check (urgency in ('low', 'medium', 'high', 'critical')),
-  status text not null default 'open' check (status in ('open', 'in_progress', 'resolved', 'rejected')),
-  handoff_summary text not null,
-  proposed_action jsonb default null,
-  reviewed_by text default null,
-  reviewed_at timestamptz default null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
--- ============================================================
--- Agent Logs: Structured Observability per agent stage call
--- ============================================================
-create table if not exists agent_logs (
-  id uuid primary key default gen_random_uuid(),
-  conversation_id text,
-  agent_name text not null,
-  input_summary text,
-  output_summary text,
-  tool_calls jsonb default '[]',
-  guardrail_flags jsonb default '[]',
-  latency_ms integer,
-  created_at timestamptz not null default now()
-);
-
--- Optimized Indexes
-create index if not exists tickets_status_idx on tickets(status);
-create index if not exists tickets_customer_idx on tickets(customer_id);
-create index if not exists tickets_resource_idx on tickets(resource_id);
-create index if not exists agent_logs_conversation_idx on agent_logs(conversation_id);
-create index if not exists agent_logs_agent_idx on agent_logs(agent_name);
-`;
-
-/** agents/schema.drizzle.ts — Drizzle ORM table definitions */
-export const drizzleSchema = `// BlazeResolver Database Schema for Drizzle ORM
-import { pgTable, text, timestamp, uuid, jsonb, integer, index } from 'drizzle-orm/pg-core';
-
-// ============================================================
-// Tickets: Escalation & Incident Queue
-// Includes proposed action attachment for 1-click HITL approval
-// ============================================================
-export const tickets = pgTable('tickets', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  customerId: text('customer_id'),
-  conversationId: text('conversation_id'),
-  orderId: text('order_id'),
-  resourceId: text('resource_id'),
-  category: text('category').notNull(),
-  urgency: text('urgency').notNull(), // 'low' | 'medium' | 'high' | 'critical'
-  status: text('status').notNull().default('open'), // 'open' | 'in_progress' | 'resolved' | 'rejected'
-  handoffSummary: text('handoff_summary').notNull(),
-  proposedAction: jsonb('proposed_action'),
-  reviewedBy: text('reviewed_by'),
-  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  statusIdx: index('tickets_status_idx').on(table.status),
-  customerIdx: index('tickets_customer_idx').on(table.customerId),
-  resourceIdx: index('tickets_resource_idx').on(table.resourceId),
-}));
-
-// ============================================================
-// Agent Logs: Structured Observability per agent stage call
-// ============================================================
-export const agentLogs = pgTable('agent_logs', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  conversationId: text('conversation_id'),
-  agentName: text('agent_name').notNull(),
-  inputSummary: text('input_summary'),
-  outputSummary: text('output_summary'),
-  toolCalls: jsonb('tool_calls').default([]),
-  guardrailFlags: jsonb('guardrail_flags').default([]),
-  latencyMs: integer('latency_ms'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  convIdx: index('agent_logs_conversation_idx').on(table.conversationId),
-  agentIdx: index('agent_logs_agent_idx').on(table.agentName),
-}));
-`;
-
-/** agents/schema.prisma — Prisma ORM models */
-export const prismaSchema = `// ============================================================
-// BlazeResolver Operational Store for Prisma
-// Append these models to your schema.prisma
-// ============================================================
-
-model BlazeTicket {
-  id              String    @id @default(uuid())
-  customerId      String?   @map("customer_id")
-  conversationId  String?   @map("conversation_id")
-  orderId         String?   @map("order_id")
-  resourceId      String?   @map("resource_id")
-  category        String
-  urgency         String    // low, medium, high, critical
-  status          String    @default("open") // open, in_progress, resolved, rejected
-  handoffSummary  String    @map("handoff_summary")
-  proposedAction  Json?     @map("proposed_action")
-  reviewedBy      String?   @map("reviewed_by")
-  reviewedAt      DateTime? @map("reviewed_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  @@index([status])
-  @@index([customerId])
-  @@index([resourceId])
-  @@map("tickets")
-}
-
-model BlazeAgentLog {
-  id              String   @id @default(uuid())
-  conversationId  String?  @map("conversation_id")
-  agentName       String   @map("agent_name")
-  inputSummary    String?  @map("input_summary")
-  outputSummary   String?  @map("output_summary")
-  toolCalls       Json     @default("[]") @map("tool_calls")
-  guardrailFlags  Json     @default("[]") @map("guardrail_flags")
-  latencyMs       Int?     @map("latency_ms")
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  @@index([conversationId])
-  @@index([agentName])
-  @@map("agent_logs")
-}
 `;

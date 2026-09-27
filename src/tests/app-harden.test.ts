@@ -10,6 +10,7 @@ import { appJwt, buildManifest, runApp, startManifestServer, type Gh } from '../
 import { codeownersBlock, rulesetBody, runHarden, RULESET_NAME } from '../cli/harden.js';
 import { runInit } from '../cli/init.js';
 import { runRemove } from '../cli/remove.js';
+import { workflow } from '../cli/templates.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'blaze-a-'));
 const keys = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
@@ -33,6 +34,12 @@ const snapshot = (dir: string, base = dir, out: Record<string, string> = {}) => 
   return out;
 };
 const nextApp = () => repo({ 'package.json': JSON.stringify({ dependencies: { next: '15' }, scripts: { test: 'vitest' } }), 'app/layout.jsx': '<html><body>{children}</body></html>\n' });
+
+describe('checked-in workflow', () => {
+  it('matches the least-privilege workflow new installs receive', () => {
+    assert.equal(readFileSync(join(process.cwd(), '.github/workflows/blazeresolver.yml'), 'utf8'), workflow());
+  });
+});
 
 /** GitHub as far as the app flow can see it. */
 function fakeGithub(o: { ownerType?: string; installedAfter?: number } = {}) {
