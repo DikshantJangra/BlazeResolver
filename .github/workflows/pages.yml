@@ -34,6 +34,9 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Build root blazeresolver package
+        run: npm ci && npm run build
+        working-directory: .
       - run: npm ci
       - run: npm run build:pages
         env:

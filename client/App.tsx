@@ -34,6 +34,7 @@ import { CloseTicketModal } from './components/support/CloseTicketModal.js';
 import { EscalateTicketModal } from './components/support/EscalateTicketModal.js';
 import { BlazzyIcon, BlazzyBadge } from './components/support/BlazzyMascot.js';
 import { CustomerSupportPortal } from './components/support/CustomerSupportPortal.js';
+import { BlazzySupportWidget } from './components/support/BlazzySupportWidget.js';
 import { BlazeTimeline } from './components/timeline/BlazeTimeline.js';
 import type { SupportTicket, SupportMessage, CustomerContext, SupportCannedResponse, TicketRating } from './components/support/types.js';
 
