@@ -3,12 +3,36 @@ import type { Complete } from '../triage/index.js';
 import type { AIProvider, FixRequest, InvestigationRequest } from './ai-provider.js';
 import type { FixProposal, Investigation } from './types.js';
 
+const EvidenceItem = z.union([
+  z.string(),
+  z.record(z.unknown()).transform((obj) => {
+    if (obj.file || obj.path || obj.line || obj.observation || obj.snippet || obj.message) {
+      const loc = [obj.file ?? obj.path, obj.line].filter(Boolean).join(':');
+      const text = obj.observation ?? obj.snippet ?? obj.message ?? obj.description ?? obj.text ?? JSON.stringify(obj);
+      return loc ? `${loc} — ${text}` : String(text);
+    }
+    return JSON.stringify(obj);
+  }),
+  z.unknown().transform((val) => String(val))
+]);
+
+const SuspectedFileItem = z.union([
+  z.string(),
+  z.record(z.unknown()).transform((obj) => String(obj.path ?? obj.file ?? JSON.stringify(obj))),
+  z.unknown().transform((val) => String(val))
+]);
+
 const InvestigationSchema = z.object({
   summary: z.string(),
   rootCause: z.string(),
-  suspectedFiles: z.array(z.string()).max(8),
-  confidence: z.enum(['low', 'medium', 'high']),
-  evidence: z.array(z.string()).optional()
+  suspectedFiles: z.array(SuspectedFileItem),
+  confidence: z.enum(['low', 'medium', 'high']).or(
+    z.string().transform((c) => {
+      const lower = c.toLowerCase();
+      return lower.includes('high') ? 'high' : lower.includes('med') ? 'medium' : 'low';
+    })
+  ),
+  evidence: z.array(EvidenceItem).optional()
 });
 
 const FixSchema = z.object({

@@ -10,6 +10,8 @@ export interface GitWorkspaceOptions {
   repo: string;
   /** Branch, tag or commit each workspace starts from. Defaults to the clone's checked-out HEAD. */
   baseRef?: string;
+  /** Local working-tree changes to stage into each new workspace before running the baseline. */
+  basePatch?: string;
   /** Shell command that runs the project's tests inside a workspace. */
   testCommand: string;
   /**
@@ -90,6 +92,9 @@ export class GitWorkspace implements WorkspaceInterface {
 
     const base = this.options.baseRef ? await resolveBaseRef(path, this.options.baseRef) : 'HEAD';
     await git('create', path, ['checkout', '--quiet', '-b', branch, base]);
+    if (this.options.basePatch?.trim()) {
+      await git('create', path, ['apply', '--index', '--binary', '-'], this.options.basePatch);
+    }
 
     return { id, path, branch };
   }

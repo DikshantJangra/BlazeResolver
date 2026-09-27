@@ -50,8 +50,10 @@ const NO_KEY = 'not-needed';
 
 type Retry = (err: unknown) => boolean;
 
-/** Another key of the same provider can help with auth, rate-limit and server errors, not with a bad request. */
-const keyRetry: Retry = (err) => err instanceof ProviderError && ([401, 403, 408, 429].includes(err.status) || err.status >= 500);
+/** Another key of the same provider can help with auth, rate-limit, timeout and server errors, not with a bad request. */
+const keyRetry: Retry = (err) =>
+  (err instanceof ProviderError && ([401, 403, 408, 429].includes(err.status) || err.status >= 500)) ||
+  (err instanceof Error && /timeout|abort/i.test(err.message));
 /** Another provider can help with anything: an outage, a bad model name, a timeout. */
 const anyError: Retry = () => true;
 
@@ -236,11 +238,11 @@ const DEFS: ProviderDef[] = [
     name: 'gemini',
     envPrefix: 'GEMINI',
     aliases: ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
-    keyFormat: /^AIza[\w-]{30,}$/,
+    keyFormat: /^(AIza[\w-]{30,}|AQ\.[\w-]{20,})$/,
     serves: /^(gemini|gemma)/i,
     vendorOnly: true,
     modelEnv: 'GEMINI_MODEL',
-    defaultModel: 'gemini-2.0-flash',
+    defaultModel: 'gemini-3.8-flash',
     call: (key, model, t) => geminiCall(key, model, t)
   },
   compat({ name: 'xai', envPrefix: 'XAI', keyFormat: /^xai-/, serves: /^grok/i, vendorOnly: true, modelEnv: 'XAI_MODEL', defaultModel: 'grok-2-latest', baseUrl: 'https://api.x.ai/v1' }),
@@ -286,7 +288,7 @@ const DEFS: ProviderDef[] = [
     aliases: ['NVIDIA_NIM_API_KEY', 'NGC_API_KEY'],
     keyFormat: /^nvapi-/,
     modelEnv: 'NVIDIA_MODEL',
-    defaultModel: 'meta/llama-3.1-70b-instruct',
+    defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
     baseUrlEnv: 'NVIDIA_BASE_URL'
   }),

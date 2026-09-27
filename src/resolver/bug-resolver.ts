@@ -16,6 +16,8 @@ export interface BugResolverOptions {
   forbiddenPaths?: RegExp[];
   /** Exact secret values (the server's own keys and token). A fix that contains one is refused. Known credential formats always are. */
   secretValues?: string[];
+  /** Called at the start of each stage (clone, investigate, each attempt's propose/patch/test/build). For progress output; never throws from here. */
+  onProgress?: (event: string) => void;
 }
 
 /** CI config, secrets, lockfiles, and the code where a wrong fix costs the most: auth, payments, migrations. */
@@ -56,6 +58,7 @@ const MAX_PATH_SUFFIXES = 6;
  */
 export class BugResolver {
   private readonly maxAttempts: number;
+  private readonly onProgress: (event: string) => void;
 
   constructor(private options: BugResolverOptions) {
     const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
@@ -63,6 +66,7 @@ export class BugResolver {
       throw new RangeError(`maxAttempts must be an integer from 1 to ${HARD_MAX_ATTEMPTS}, got ${maxAttempts}`);
     }
     this.maxAttempts = maxAttempts;
+    this.onProgress = options.onProgress ?? (() => {});
   }
 
   public async resolve(incident: Incident): Promise<ResolutionResult> {
@@ -71,10 +75,12 @@ export class BugResolver {
 
     try {
       // Reproduce: run the tests on an untouched workspace.
+      this.onProgress('cloning a workspace and running the baseline tests (this clones+installs fresh, so it can take a while)...');
       const baselineWorkspace = await workspaces.createWorkspace();
       result.baseline = await workspaces.runTests(baselineWorkspace);
 
       // Understand.
+      this.onProgress(`baseline tests ${result.baseline.success ? 'passed' : 'failed'}; investigating root cause...`);
       const context = await this.gatherContext(incident);
       result.investigation = await withPrefix('investigation failed', () =>
         ai.investigate({
@@ -86,6 +92,7 @@ export class BugResolver {
       );
 
       // Fix, test, build; retry with the failure.
+      this.onProgress(`root cause found (${result.investigation.confidence} confidence); proposing a fix...`);
       for (let number = 1; number <= this.maxAttempts; number++) {
         const attempt = await this.attempt(number, incident, result.investigation, result.attempts);
         result.attempts.push(attempt);
@@ -113,6 +120,7 @@ export class BugResolver {
     previousAttempts: FixAttempt[]
   ): Promise<FixAttempt> {
     const { codebase, workspaces, ai } = this.options;
+    this.onProgress(`attempt ${number}: cloning a fresh workspace...`);
     const workspace = await workspaces.createWorkspace();
 
     // The AI sees the files it suspects plus any it edited before, exactly as the patch will be applied to them.
@@ -120,6 +128,7 @@ export class BugResolver {
       ...investigation.suspectedFiles,
       ...previousAttempts.flatMap((a) => a.proposal.edits.map((e) => e.path))
     ];
+    this.onProgress(`attempt ${number}: asking the model for a fix...`);
     const proposal = await withPrefix(`fix proposal ${number} failed`, async () =>
       ai.proposeFix({
         incident,
@@ -159,11 +168,13 @@ export class BugResolver {
       return attempt;
     }
 
+    this.onProgress(`attempt ${number}: patch applied (${attempt.proposal.summary}); running tests...`);
     attempt.tests = await workspaces.runTests(workspace);
     if (!attempt.tests.success) {
       attempt.failure = { stage: 'test', output: attempt.tests.output };
       return attempt;
     }
+    this.onProgress(`attempt ${number}: tests passed; running the build...`);
 
     attempt.build = await workspaces.runBuild(workspace);
     if (!attempt.build.success) {

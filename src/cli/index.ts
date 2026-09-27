@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
 import { repoRoot } from './detect.js';
@@ -11,6 +13,7 @@ import { runInit } from './init.js';
 import { runNotifyCommand } from './notify.js';
 import { runRemove } from './remove.js';
 import { runDoctor } from './doctor.js';
+import { runTryCommand } from './try.js';
 import { describeProviders } from '../triage/providers.js';
 import { resolveEmbedder } from '../answer/embed.js';
 import { engineVersion } from '../version.js';
@@ -25,9 +28,11 @@ Usage: npx blazeresolver@latest <command> [options]
   npx blazeresolver harden    set up branch protection, CODEOWNERS, safe Actions defaults and secret scanning on GitHub
   npx blazeresolver providers show which AI providers your keys were recognized as, in failover order
   npx blazeresolver doctor    check this install, GitHub access, Actions secrets, sandbox and branch protection
+  npx blazeresolver try       run the real fix engine on your machine: real AI, real tests/build, a local branch
   blazeresolver fix           run by the workflow: fix the issue that triggered it
   blazeresolver notify        run by the workflow: tell customers a merged fix shipped
 
+try options:    --title "..."  --description "what's wrong" (required)  --file <path>  --attempts <n>
 init options:   --repo owner/name  --branch main  --backend <folder>  --frontend <folder>
                 --install "<cmd>"  --test "<cmd>"  --build "<cmd>"  --yes (accept what was detected)  --force  --no-install
                 --no-sandbox (run tests with network instead of offline in a container)  --sandbox-image <image>
@@ -103,6 +108,23 @@ Options:
 Usage: npx blazeresolver providers
 
 Reads .env and the environment, and lists each recognized provider in failover order, keys masked. Takes no options.`,
+  try: `blazeresolver try: run the real fix engine locally
+
+Usage: npx blazeresolver try --description "what's wrong" [options]
+
+Same engine the workflow runs, on your machine instead of a GitHub Actions runner: clones this repo for real, calls a
+real AI provider (a key from .env or the environment), runs your project's real test and build commands (offline in
+a container when blazeresolver.config.json says so), and applies the AI's patch with real git. No GitHub issue, no
+GitHub API calls, nothing pushed. On success the fix is committed and fetched into this repo as a local branch, left
+uncommitted to your current branch, so you can inspect or check it out with plain git.
+
+Needs blazeresolver.config.json (from \`blazeresolver init\`) and an AI key in .env.
+
+Options:
+  --title "..."         short name for the incident (default: generic)
+  --description "..."   required: what's wrong, as specific as you'd write a bug report
+  --file <path>          repo-relative file you suspect, added as a hint
+  --attempts <n>         fix attempts before giving up (default: 3, max 5)`,
   fix: `blazeresolver fix: run by the workflow, not by hand
 
 Usage: blazeresolver fix
@@ -193,6 +215,51 @@ try {
     const checks = await runDoctor({ cwd: process.cwd() });
     for (const check of checks) console.log(`${check.status === 'ok' ? 'OK' : check.status.toUpperCase()} ${check.name}: ${check.detail}`);
     if (checks.some((check) => check.status === 'fail')) process.exitCode = 1;
+  } else if (command === 'try') {
+    (await import('dotenv')).config({ quiet: true });
+    const { values } = parseArgs({
+      args: rest,
+      options: { title: { type: 'string' }, description: { type: 'string' }, file: { type: 'string' }, attempts: { type: 'string' } }
+    });
+    if (!values.description) throw new Error('--description "what is wrong" is required. blazeresolver try --help for options.');
+    const root = repoRoot(process.cwd());
+    const fileFromCwd = resolve(process.cwd(), values.file ?? '');
+    const fileFromRoot = resolve(root, values.file ?? '');
+    const filePath = values.file
+      ? existsSync(fileFromCwd) ? fileFromCwd : fileFromRoot
+      : undefined;
+    const file = filePath && filePath !== root && filePath.startsWith(`${root}${sep}`) ? relative(root, filePath) : undefined;
+    if (values.file && !file) throw new Error(`--file must name a file inside this repository: ${values.file}`);
+    const incident = {
+      id: randomUUID(),
+      title: values.title ?? 'Local fix attempt',
+      description: file ? `${values.description}\n\nLikely file: ${file}` : values.description
+    };
+    const { result, branch } = await runTryCommand({
+      root,
+      config: config(),
+      env: process.env,
+      incident,
+      maxAttempts: values.attempts ? Number(values.attempts) : undefined,
+      onProgress: (event) => console.log(`[${new Date().toLocaleTimeString('en-GB')}] ${event}`)
+    });
+
+    console.log(`STATUS: ${result.status}`);
+    if (result.failureReason) console.log(`REASON: ${result.failureReason}`);
+    if (result.investigation) {
+      console.log(`\nROOT CAUSE (${result.investigation.confidence}): ${result.investigation.rootCause}`);
+      console.log(`SUSPECTED FILES: ${result.investigation.suspectedFiles.join(', ')}`);
+    }
+    for (const a of result.attempts) {
+      console.log(`\nATTEMPT ${a.number}: ${a.proposal.summary}`);
+      console.log(a.failure ? `  FAILED at ${a.failure.stage}` : '  tests+build PASSED');
+    }
+    if (branch) {
+      console.log(`\n--- DIFF ---\n${result.diff}`);
+      console.log(`\nCommitted to local branch '${branch}' (not checked out, not pushed).`);
+      console.log(`Inspect:   git -C ${root} log -p ${branch} -1`);
+      console.log(`Check out: git -C ${root} checkout ${branch}`);
+    }
   } else if (command === 'fix') {
     console.log(await runFixCommand({ env: process.env, config: config() }));
   } else if (command === 'notify') {

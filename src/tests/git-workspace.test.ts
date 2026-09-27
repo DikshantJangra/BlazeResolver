@@ -62,6 +62,20 @@ describe('GitWorkspace', () => {
     assert.match(readFileSync(join(repo, 'math.js'), 'utf-8'), /a - b/);
   });
 
+  it('stages the local working-tree snapshot before baseline checks', async () => {
+    const local = new GitWorkspace({
+      repo,
+      baseRef: 'main',
+      basePatch: PATCH,
+      workspacesDir: join(root, 'workspaces'),
+      testCommand: `node -e "import('./math.js').then(m => process.exit(m.add(2, 3) === 5 ? 0 : 1))"`,
+      buildCommand: 'true'
+    });
+    const ws = await local.createWorkspace();
+    assert.strictEqual((await local.runTests(ws)).success, true);
+    assert.match(await local.gitDiff(ws), /\+export const add = \(a, b\) => a \+ b;/);
+  });
+
   it('rejects a patch that does not apply, leaving files unchanged', async () => {
     const ws = await workspaces.createWorkspace();
     await assert.rejects(workspaces.applyPatch(ws, PATCH.replace('a - b', 'a * b')), GitWorkspaceError);
