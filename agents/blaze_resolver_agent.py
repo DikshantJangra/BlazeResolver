@@ -352,14 +352,15 @@ async def run_sidecar(port: int, config: LocalAgentConfig) -> int | None:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length))
             prompt: str = body.get("prompt", "")
-            model_override: str | None = body.get("model")
+            model_override = body.get("model")
+            if model_override is not None and not isinstance(model_override, str):
+                self.send_response(400)
+                self.end_headers()
+                return
 
             try:
-                cfg = config if not model_override else LocalAgentConfig(
-                    system_instructions=config.system_instructions,
-                    tools=config.tools or [],
-                    budget_config=types.BudgetConfig(max_model_calls=30, max_tool_calls=60),
-                )
+                # Only the model changes: the key, tools, hooks and budget stay as configured.
+                cfg = config.model_copy(update={"model": model_override}) if model_override else config
 
                 async def _run() -> str:
                     async with Agent(config=cfg) as a:
