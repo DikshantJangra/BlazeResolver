@@ -105,7 +105,7 @@ const store = new IncidentStore();
 // Served from here, so every install picks up widget updates as soon as this server is updated.
 // Path differs between `tsx src/server.ts` and compiled `dist/server/src/server.js`.
 const widgetPath = ['../widget/widget.js', '../../../widget/widget.js'].map((p) => fileURLToPath(new URL(p, import.meta.url))).find(existsSync)!;
-app.get('/widget.js', (_req, res) => res.type('application/javascript').set('Cache-Control', 'public, max-age=300').sendFile(widgetPath));
+app.get(['/widget.js', '/widget/widget.js'], (_req, res) => res.type('application/javascript').set('Cache-Control', 'public, max-age=60').sendFile(widgetPath));
 const svgPath = ['../assets/blazyy.svg', '../../../assets/blazyy.svg'].map((p) => fileURLToPath(new URL(p, import.meta.url))).find(existsSync);
 if (svgPath) {
   app.get('/blazyy.svg', (_req, res) => res.type('image/svg+xml').set('Cache-Control', 'public, max-age=300').sendFile(svgPath));
