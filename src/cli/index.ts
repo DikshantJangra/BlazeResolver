@@ -241,7 +241,8 @@ try {
     for (const check of checks) console.log(`${check.status === 'ok' ? 'OK' : check.status.toUpperCase()} ${check.name}: ${check.detail}`);
     if (checks.some((check) => check.status === 'fail')) process.exitCode = 1;
   } else if (command === 'try') {
-    (await import('dotenv')).config({ quiet: true });
+    const dotenv = await import('dotenv');
+    for (const path of ['.env.local', '.env', 'web/.env', '../.env']) dotenv.config({ path, quiet: true });
     const { values } = parseArgs({
       args: rest,
       options: { title: { type: 'string' }, description: { type: 'string' }, file: { type: 'string' }, attempts: { type: 'string' } }

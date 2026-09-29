@@ -79,7 +79,7 @@ function failover(calls: Complete[], rotate: boolean, retry: Retry): Complete {
       } catch (err) {
         if (!retry(err)) throw err;
         coolingUntil[i] = Date.now() + COOLDOWN_MS;
-        lastErr = err;
+        lastErr ??= err; // the first failure is the preferred provider's; a later dead fallback must not mask a retryable one
       }
     }
     throw lastErr;

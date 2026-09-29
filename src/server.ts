@@ -33,6 +33,7 @@ import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { DEMO_SAVED_REPLIES, SupportStore, type SupportTicket } from './support/index.js';
+import { cliLocalFix, enqueueLocalFix } from './support/local-fix.js';
 import { fetchTimelineEvents } from './timeline/index.js';
 
 const app = express();
@@ -213,7 +214,8 @@ function escalateTicket(ticket: SupportTicket, opts: { title?: string; descripti
   );
 
   const firstProject = registry.list()[0];
-  const canRunFix = !!firstProject && !!incident && isNew && fixEnabled;
+  const isLocal = process.env.BLAZE_LOCAL_FIX === 'true';
+  const canRunFix = (!!firstProject && !!incident && isNew && fixEnabled) || isLocal;
   const branchName = `blazeresolver/fix-${incident?.id || ticket.id}`;
   const priority: SupportTicket['priority'] = opts.priority ?? (opts.severity === 'critical' ? 'urgent' : 'high');
 
@@ -225,14 +227,52 @@ function escalateTicket(ticket: SupportTicket, opts: { title?: string; descripti
     aiReport: { ...ticket.aiReport, incidentId: incident?.id, incidentTitle: opts.title || ticket.subject, isSystemic: true, suggestedAction: 'Automated Code Fix Pipeline' }
   });
 
-  const note = canRunFix
+  const note = isLocal
+    ? `⚡ Confirmed as a bug: ${opts.title || ticket.subject}. Starting the automated local fix pipeline on this machine. Target branch: ${branchName}`
+    : canRunFix
     ? `⚡ Escalated to the autonomous fix pipeline [${(opts.type || 'bug').toUpperCase()}]: ${opts.title || ticket.subject}. Target branch: ${branchName}`
     : `⚡ Filed as incident ${incident?.id ?? ''} [${(opts.type || 'bug').toUpperCase()}]: ${opts.title || ticket.subject}. Automated fix pipeline is not configured (needs a registered project, BLAZE_GITHUB_TOKEN and BLAZE_FIX_ENABLED=true) — needs a human engineer.`;
   const msg = supportStore.addMessage(ticket.id, { ticketId: ticket.id, role: 'system', senderType: 'system', content: note, body: note });
   broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
   broadcastLiveEvent('support_message_created', { ticketId: ticket.id, message: msg }, 'everyone');
 
-  if (canRunFix) enqueueFix(firstProject!, incident!, ticket.id);
+  if (isLocal) {
+    const localRunner = cliLocalFix();
+    void enqueueLocalFix(
+      localRunner,
+      { title: opts.title || ticket.subject, description: `${ticket.subject}\n${opts.description || ''}` },
+      (event) => {
+        const pMsg = supportStore.addMessage(ticket.id, { ticketId: ticket.id, role: 'system', senderType: 'system', content: `🔧 ${event}`, body: `🔧 ${event}` });
+        broadcastLiveEvent('support_message_created', { ticketId: ticket.id, message: pMsg }, 'everyone');
+      }
+    ).then((outcome) => {
+      if (outcome.status === 'READY_FOR_REVIEW' && outcome.branch) {
+        const u = supportStore.updateTicket(ticket.id, { pulseStatus: 'fix_ready', githubBranch: outcome.branch });
+        const sMsg = supportStore.addMessage(ticket.id, {
+          ticketId: ticket.id,
+          role: 'system',
+          senderType: 'system',
+          content: `✅ A fix passed the tests and build. It is committed to the local branch ${outcome.branch} for review.`,
+          body: `✅ A fix passed the tests and build. It is committed to the local branch ${outcome.branch} for review.`
+        });
+        broadcastLiveEvent('support_ticket_updated', u, 'everyone');
+        broadcastLiveEvent('support_message_created', { ticketId: ticket.id, message: sMsg }, 'everyone');
+      } else {
+        const u = supportStore.updateTicket(ticket.id, { pulseStatus: 'needs_human' });
+        const sMsg = supportStore.addMessage(ticket.id, {
+          ticketId: ticket.id,
+          role: 'system',
+          senderType: 'system',
+          content: `⚠️ The automated fix pipeline could not produce a passing fix (${outcome.reason ?? 'no fix passed'}). An engineer will take it from here.`,
+          body: `⚠️ The automated fix pipeline could not produce a passing fix (${outcome.reason ?? 'no fix passed'}). An engineer will take it from here.`
+        });
+        broadcastLiveEvent('support_ticket_updated', u, 'everyone');
+        broadcastLiveEvent('support_message_created', { ticketId: ticket.id, message: sMsg }, 'everyone');
+      }
+    });
+  } else if (canRunFix) {
+    enqueueFix(firstProject!, incident!, ticket.id);
+  }
   return { updated, incident, branchName, canRunFix };
 }
 
@@ -607,6 +647,24 @@ app.post(['/api/support/tickets', '/api/support/tickets/create'], async (req, re
     );
 
     broadcastLiveEvent('support_ticket_created', result.ticket, 'everyone');
+
+    const isCodeBug = /\b(bug|error|broken|fail|fix|landing page|code|typo|rather|change|should be|not working)\b/i.test(complaintText);
+    if ((isCodeBug || process.env.BLAZE_LOCAL_FIX === 'true') && !result.ticket.isEscalated) {
+      try {
+        const bugVerdict = await triage(ReportSchema.parse({ message: complaintText }), resolveComplete({ timeoutMs: 8000 }));
+        if (bugVerdict.enterFixLoop) {
+          escalateTicket(supportStore.getTicket(result.ticket.id) ?? result.ticket, {
+            title: bugVerdict.summary,
+            description: complaintText,
+            severity: bugVerdict.severity,
+            type: bugVerdict.kind
+          });
+        }
+      } catch (e) {
+        console.error('Error running software-bug triage for new ticket:', e);
+      }
+    }
+
     return res.status(201).json({ success: true, data: result });
   } catch (err: unknown) {
     return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
