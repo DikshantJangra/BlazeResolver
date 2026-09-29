@@ -8,6 +8,10 @@ BlazeResolver reads variables in two places:
 - **Your backend**, which runs the report endpoint: set these in `.env` and on your host.
 - **The workflow**, which runs the fix engine: set these as repo secrets and variables.
 
+## GitHub Pages
+
+GitHub Pages serves static files and has no server runtime. The Pages build therefore receives only public site settings. Set `BLAZE_SITE_ENDPOINT` as a GitHub Actions **variable** if the Pages site should call an endpoint hosted elsewhere; its URL is compiled into browser assets. Store API keys as **secrets** only for the backend or workflow that uses them. Do not pass credentials through `NEXT_PUBLIC_*` or bundle them into a static build: visitors can read everything shipped to Pages.
+
 ## Report endpoint (your backend)
 
 | Variable | Default | Description |

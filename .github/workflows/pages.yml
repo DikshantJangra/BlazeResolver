@@ -44,7 +44,7 @@ jobs:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
           # Absolute links in llms.txt and the Markdown pages.
           NEXT_PUBLIC_SITE_URL: ${{ steps.pages.outputs.base_url }}
-          # Optional: an endpoint hosted elsewhere, so the site's own widget works (Pages has no server).
+          # Public URL compiled into browser assets; keep credentials on the endpoint's server.
           NEXT_PUBLIC_BLAZE_ENDPOINT: ${{ vars.BLAZE_SITE_ENDPOINT }}
       - uses: actions/upload-pages-artifact@v3
         with:

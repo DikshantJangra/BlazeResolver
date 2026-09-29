@@ -19,7 +19,7 @@ import { LiveEvents, type Audience } from './channels/live-events.js';
 import { getAgentToolSchemas, createAgentToolExecutor } from './channels/byo-agent.js';
 import { buildInboundResponse } from './channels/inbound.js';
 import { CustomerInput } from './core/types.js';
-import { ReportSchema, describeProviders, resolveComplete, triage } from './triage/index.js';
+import { ReportSchema, describeProviders, resolveComplete, triage, type Severity } from './triage/index.js';
 import { ProjectRegistry, type Project } from './projects/index.js';
 import { IncidentStore, type IncidentRecord } from './incidents/index.js';
 import { ClaudeProvider } from './resolver/claude-provider.js';
@@ -32,7 +32,7 @@ import { retrieve, type Chunk } from './answer/retrieve.js';
 import { sendFixedEmail } from './notify/index.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { DEMO_SAVED_REPLIES, SupportStore } from './support/index.js';
+import { DEMO_SAVED_REPLIES, SupportStore, type SupportTicket } from './support/index.js';
 import { fetchTimelineEvents } from './timeline/index.js';
 
 const app = express();
@@ -141,7 +141,8 @@ if (fixSandbox?.ok && !fixSandbox.sandbox) console.warn('Fix engine running WITH
 
 // One fix at a time. ponytail: in-process queue, lost on restart; a real job queue when volume needs it.
 let fixQueue: Promise<unknown> = Promise.resolve();
-function enqueueFix(project: Project, incident: IncidentRecord) {
+/** ticketId links the fix run back to the support ticket that triggered it, so its status/branch/PR show up live. */
+function enqueueFix(project: Project, incident: IncidentRecord, ticketId?: string) {
   fixQueue = fixQueue.then(async () => {
     store.update(incident.id, { status: 'fixing' });
     let update: Partial<IncidentRecord>;
@@ -159,7 +160,69 @@ function enqueueFix(project: Project, incident: IncidentRecord) {
       update = { status: 'needs_human', failureReason: err instanceof Error ? err.message : String(err) };
     }
     broadcastLiveEvent('incident_updated', store.update(incident.id, update), 'admins');
+
+    const ticket = ticketId && supportStore.getTicket(ticketId);
+    if (ticket) {
+      const updatedTicket = supportStore.updateTicket(ticketId!, {
+        pulseStatus: update.status,
+        githubPullRequestUrl: update.prUrl ?? ticket.githubPullRequestUrl,
+        githubIssueUrl: update.issueUrl ?? ticket.githubIssueUrl
+      });
+      const note =
+        update.status === 'pr_opened'
+          ? `✅ Automated fix pipeline opened a pull request for review: ${update.prUrl}`
+          : `⚠️ Automated fix pipeline could not produce a passing fix (${update.failureReason ?? 'needs a human'})${update.issueUrl ? ` — ${update.issueUrl}` : ''}`;
+      const msg = supportStore.addMessage(ticketId!, { ticketId: ticketId!, role: 'system', senderType: 'system', content: note, body: note });
+      broadcastLiveEvent('support_ticket_updated', updatedTicket, 'everyone');
+      broadcastLiveEvent('support_message_created', { ticketId, message: msg }, 'everyone');
+    }
   });
+}
+
+/**
+ * Files a customer-reported software bug/outage as an incident and, when a project and the fix engine are
+ * configured, runs the real fix pipeline against its repo (clone, reproduce, fix, push a branch, open a PR).
+ * Used both by the admin's manual "escalate" action and by the customer chat's automatic bug detection.
+ */
+function escalateTicket(ticket: SupportTicket, opts: { title?: string; description?: string; severity?: Severity; priority?: SupportTicket['priority']; type?: string }) {
+  const triageVerdict: any = {
+    type: 'report',
+    kind: 'bug',
+    severity: opts.severity ?? 'medium',
+    summary: opts.title || ticket.subject,
+    steps: [],
+    source: 'llm',
+    injection: false,
+    enterFixLoop: true
+  };
+  const { incident, isNew } = store.addReport(
+    'default',
+    { message: `${ticket.subject}\n\n${opts.description || ''}`, pageUrl: ticket.outletName || 'app', email: ticket.customerEmail },
+    triageVerdict
+  );
+
+  const firstProject = registry.list()[0];
+  const canRunFix = !!firstProject && !!incident && isNew && fixEnabled;
+  const branchName = `blazeresolver/fix-${incident?.id || ticket.id}`;
+  const priority: SupportTicket['priority'] = opts.priority ?? (opts.severity === 'critical' ? 'urgent' : 'high');
+
+  const updated = supportStore.updateTicket(ticket.id, {
+    isEscalated: true,
+    pulseStatus: canRunFix ? 'investigating' : 'needs_human',
+    priority,
+    githubBranch: canRunFix ? branchName : ticket.githubBranch,
+    aiReport: { ...ticket.aiReport, incidentId: incident?.id, incidentTitle: opts.title || ticket.subject, isSystemic: true, suggestedAction: 'Automated Code Fix Pipeline' }
+  });
+
+  const note = canRunFix
+    ? `⚡ Escalated to the autonomous fix pipeline [${(opts.type || 'bug').toUpperCase()}]: ${opts.title || ticket.subject}. Target branch: ${branchName}`
+    : `⚡ Filed as incident ${incident?.id ?? ''} [${(opts.type || 'bug').toUpperCase()}]: ${opts.title || ticket.subject}. Automated fix pipeline is not configured (needs a registered project, BLAZE_GITHUB_TOKEN and BLAZE_FIX_ENABLED=true) — needs a human engineer.`;
+  const msg = supportStore.addMessage(ticket.id, { ticketId: ticket.id, role: 'system', senderType: 'system', content: note, body: note });
+  broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
+  broadcastLiveEvent('support_message_created', { ticketId: ticket.id, message: msg }, 'everyone');
+
+  if (canRunFix) enqueueFix(firstProject!, incident!, ticket.id);
+  return { updated, incident, branchName, canRunFix };
 }
 
 // Signup: the admin token always works; anyone may register when BLAZE_OPEN_SIGNUP=true (5 per hour per IP).
@@ -701,6 +764,20 @@ app.post('/api/support/tickets/:id/messages', async (req, res) => {
 
             broadcastLiveEvent('support_message_created', { ticketId, message: aiReply }, 'everyone');
 
+            // The order-compensation engine above (refunds, credits, re-deliveries) can't fix a broken product.
+            // Classify separately for an actual software bug/outage; when real and not already escalated, fire the
+            // autonomous code-fix pipeline straight from the customer's own message, no admin click needed.
+            if (!ticket.isEscalated) {
+              try {
+                const bugVerdict = await triage(ReportSchema.parse({ message: text }), resolveComplete({ timeoutMs: 8000 }));
+                if (bugVerdict.enterFixLoop) {
+                  escalateTicket(supportStore.getTicket(ticketId) ?? ticket, { title: bugVerdict.summary, description: bugVerdict.summary, severity: bugVerdict.severity, type: bugVerdict.kind });
+                }
+              } catch (e) {
+                console.error('Error running software-bug triage for auto-escalation:', e);
+              }
+            }
+
             // Multi-step autonomous action follow-up
             const executedActions = aiResult.resolution.actions.filter(a => a.approvalStatus === 'executed' && a.actionType !== 'reject_adversarial');
             const pendingHitlActions = aiResult.resolution.actions.filter(a => a.approvalStatus === 'pending_human');
@@ -992,47 +1069,8 @@ app.post('/api/support/tickets/:id/escalate', async (req, res) => {
     const ticket = supportStore.getTicket(ticketId);
     if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
 
-    // 1. Create or match incident in the IncidentStore
-    const triageVerdict: any = {
-      kind: 'bug',
-      confidence: 'high',
-      title: title || ticket.subject,
-      description: note || ticket.subject,
-      severity: priority === 'urgent' ? 'critical' : priority === 'high' ? 'major' : 'minor',
-      injection: false
-    };
-
-    const { incident, isNew } = store.addReport(
-      'default',
-      {
-        message: `${ticket.subject}\n\n${note || ''}`,
-        pageUrl: ticket.outletName || 'app',
-        email: ticket.customerEmail
-      },
-      triageVerdict
-    );
-
-    const branchName = `blazeresolver/fix-${incident?.id || ticketId}`;
-
-    const updated = supportStore.updateTicket(ticketId, {
-      isEscalated: true,
-      pulseStatus: 'investigating',
-      priority: priority as any,
-      aiReport: {
-        ...ticket.aiReport,
-        incidentId: incident?.id,
-        incidentTitle: title || ticket.subject,
-        isSystemic: true
-      }
-    });
-
-    supportStore.addMessage(ticketId, {
-      ticketId,
-      role: 'system',
-      senderType: 'system',
-      content: `⚡ Escalated to Pulse Dev Pipeline [${type.toUpperCase()}]: ${title}. Target branch: ${branchName}`,
-      body: `⚡ Escalated to Pulse Dev Pipeline [${type.toUpperCase()}]: ${title}. Target branch: ${branchName}`
-    });
+    const severity: Severity = priority === 'urgent' ? 'critical' : priority === 'high' ? 'high' : priority === 'low' ? 'low' : 'medium';
+    const { updated, incident, branchName } = escalateTicket(ticket, { title, description: note, severity, priority, type });
 
     if (note) {
       supportStore.addMessage(ticketId, {
@@ -1046,14 +1084,6 @@ app.post('/api/support/tickets/:id/escalate', async (req, res) => {
       });
     }
 
-    // 2. If a project is configured, trigger the autonomous fix loop
-    const firstProject = registry.list()[0];
-    if (firstProject && incident && isNew && fixEnabled) {
-      enqueueFix(firstProject, incident);
-      supportStore.updateTicket(ticketId, { pulseStatus: 'fixing' });
-    }
-
-    broadcastLiveEvent('support_ticket_updated', updated, 'everyone');
     return res.json({ success: true, data: updated, branch: branchName, incidentId: incident?.id });
   } catch (err: unknown) {
     return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
