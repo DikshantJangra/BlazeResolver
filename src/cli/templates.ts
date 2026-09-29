@@ -1082,8 +1082,16 @@ async def run_fix_agent(issue_number: int, repo_root: str = ".") -> None:
 # Optional HTTP sidecar for the Node AntigravityProvider
 # ---------------------------------------------------------------------------
 
-async def run_sidecar(port: int, config: LocalAgentConfig) -> None:
-    """Tiny HTTP server that lets the TS side call in for one-shot agent turns."""
+# The ports the Node AntigravityProvider tries, so a sidecar moved off a busy port is still found.
+SIDECAR_FALLBACK_PORTS = [7391, 7390]
+
+
+async def run_sidecar(port: int, config: LocalAgentConfig) -> int | None:
+    """Tiny HTTP server that lets the TS side call in for one-shot agent turns.
+
+    Returns the port it listens on, or None when every candidate port is busy. The
+    sidecar is optional, so a busy port never stops the fix pipeline.
+    """
     from http.server import BaseHTTPRequestHandler, HTTPServer
     import threading
 
@@ -1127,10 +1135,18 @@ async def run_sidecar(port: int, config: LocalAgentConfig) -> None:
                 self.end_headers()
                 self.wfile.write(err)
 
-    server = HTTPServer(("localhost", port), Handler)
-    log.info("AGY sidecar listening on http://localhost:%d", port)
-    t = threading.Thread(target=server.serve_forever, daemon=True)
-    t.start()
+    candidates = list(dict.fromkeys([port, *SIDECAR_FALLBACK_PORTS]))
+    for candidate in candidates:
+        try:
+            server = HTTPServer(("localhost", candidate), Handler)
+        except OSError as exc:
+            log.warning("AGY sidecar can't listen on port %d: %s", candidate, exc)
+            continue
+        log.info("AGY sidecar listening on http://localhost:%d", candidate)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return candidate
+    log.error("AGY sidecar not started: ports %s are all in use; running the fix pipeline without it", candidates)
+    return None
 
 
 # ---------------------------------------------------------------------------
