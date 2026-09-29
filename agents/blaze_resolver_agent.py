@@ -109,14 +109,29 @@ def run_tests(workspace_dir: str = ".") -> str:
     return output if output else "(no output)"
 
 
+def _project_command(name: str, default: str, workspace_dir: str) -> str:
+    """The project's own command from blazeresolver.config.json (the one the Node fix engine runs), else default."""
+    try:
+        with open(os.path.join(workspace_dir, "blazeresolver.config.json"), encoding="utf-8") as f:
+            config = json.load(f)
+    except (OSError, ValueError):
+        return default
+    command = config.get(name) if isinstance(config, dict) else None
+    return command if isinstance(command, str) and command.strip() else default
+
+
 def run_build(workspace_dir: str = ".") -> str:
-    """Run the project build and return stdout+stderr.
+    """Run the project's build (buildCommand in blazeresolver.config.json, else npm run build).
+
+    Returns stdout+stderr.
 
     Args:
         workspace_dir: Repo root to run build from (default: current dir).
     """
+    # The same build the Node engine verifies with, so a fix isn't failed by a build the project doesn't use.
     result = subprocess.run(
-        ["npm", "run", "build"],
+        _project_command("buildCommand", "npm run build", workspace_dir),
+        shell=True,
         cwd=workspace_dir,
         capture_output=True,
         text=True,
