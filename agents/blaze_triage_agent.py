@@ -84,8 +84,12 @@ def label_issue(issue_number: int, labels: list[str]) -> str:
     return github_api(f"/repos/{repo}/issues/{issue_number}/labels", "POST", {"labels": labels})
 
 
+# Big diffs (lockfiles, vendored code) would cost a lot and can overflow the model's input.
+MAX_PR_DIFF_CHARS = 50_000
+
+
 def get_pr_diff(pr_number: int) -> str:
-    """Fetch the unified diff of a GitHub pull request.
+    """Fetch the unified diff of a GitHub pull request, cut to MAX_PR_DIFF_CHARS characters.
 
     Args:
         pr_number: Pull request number.
@@ -102,9 +106,16 @@ def get_pr_diff(pr_number: int) -> str:
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.read().decode()
+            diff = resp.read().decode(errors="replace")
     except Exception as exc:
         return f"ERROR: {exc}"
+    if len(diff) <= MAX_PR_DIFF_CHARS:
+        return diff
+    return (
+        diff[:MAX_PR_DIFF_CHARS]
+        + f"\n\n[diff truncated: first {MAX_PR_DIFF_CHARS} of {len(diff)} characters shown; "
+        + "read the remaining changed files directly]"
+    )
 
 
 def list_recent_issues(since_hours: int = 24) -> str:
