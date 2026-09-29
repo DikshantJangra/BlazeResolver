@@ -92,6 +92,12 @@ export class GitWorkspace implements WorkspaceInterface {
 
     const base = this.options.baseRef ? await resolveBaseRef(path, this.options.baseRef) : 'HEAD';
     await git('create', path, ['checkout', '--quiet', '-b', branch, base]);
+    // A clone of a local checkout has that folder as its origin. Give it the checkout's own origin instead, so code and
+    // tests that ask which GitHub repo this is see what they would in the checkout (or in a clone from GitHub).
+    if (isAbsolute(this.options.repo)) {
+      const upstream = await git('create', this.options.repo, ['remote', 'get-url', 'origin']).catch(() => '');
+      if (upstream.trim()) await git('create', path, ['remote', 'set-url', 'origin', upstream.trim()]);
+    }
     if (this.options.basePatch?.trim()) {
       await git('create', path, ['apply', '--index', '--binary', '-'], this.options.basePatch);
     }
@@ -189,7 +195,7 @@ export class GitWorkspace implements WorkspaceInterface {
   private async runInDir(dir: string, command: string, env: NodeJS.ProcessEnv, user?: SandboxUser): Promise<TestResult> {
     const install = this.options.installCommand;
     if (install && !this.installed.has(dir)) {
-      const result = await this.runCommand(dir, install, env, user);
+      const result = await this.runCommand(dir, install, env, user, installContainer(this.options.offline));
       if (!result.success) return { success: false, output: `dependency install failed:\n${result.output}` };
       this.installed.add(dir);
     }
@@ -217,7 +223,7 @@ export class GitWorkspace implements WorkspaceInterface {
     await rm(base, { recursive: true, force: true });
   }
 
-  private runCommand(cwd: string, command: string, baseEnv: NodeJS.ProcessEnv, user?: SandboxUser, offline?: { image: string }): Promise<TestResult> {
+  private runCommand(cwd: string, command: string, baseEnv: NodeJS.ProcessEnv, user?: SandboxUser, offline?: { image: string; network?: boolean }): Promise<TestResult> {
     const timeoutMs = this.options.commandTimeoutMs ?? 15 * 60 * 1000;
     return new Promise((resolvePromise) => {
       // Inherited from a node --test parent, NODE_TEST_CONTEXT makes the project's own `node --test`
@@ -225,7 +231,7 @@ export class GitWorkspace implements WorkspaceInterface {
       const { NODE_TEST_CONTEXT, ...env } = baseEnv;
       const container = offline ? `blaze-${randomUUID().slice(0, 12)}` : undefined;
       const child = offline
-        ? spawn('docker', dockerRunArgs({ name: container!, image: offline.image, cwd, command, user: user ?? currentUser(), env }), { env: dockerClientEnv() })
+        ? spawn('docker', dockerRunArgs({ name: container!, image: offline.image, network: offline.network, cwd, command, user: user ?? currentUser(), env }), { env: dockerClientEnv() })
         : spawn(command, { cwd, shell: true, env, uid: user?.uid, gid: user?.gid });
       let output = '';
       const append = (chunk: Buffer) => {
@@ -279,6 +285,15 @@ function run(command: string, args: string[]): Promise<void> {
   });
 }
 
+/**
+ * Where the dependency install runs. On Linux (CI runners, servers): on the host, as always. Elsewhere (macOS, Windows)
+ * native modules installed on the host are built for it and won't load in the Linux container that runs the tests and
+ * build, so the install runs in that same image instead, with network and otherwise the same limits.
+ */
+export function installContainer(offline: { image: string } | undefined, platform: NodeJS.Platform = process.platform) {
+  return offline && platform !== 'linux' ? { image: offline.image, network: true } : undefined;
+}
+
 const currentUser = (): SandboxUser | undefined =>
   process.getuid && process.getgid ? { uid: process.getuid(), gid: process.getgid() } : undefined;
 
@@ -295,10 +310,11 @@ const CONTAINER_ENV = ['CI', 'NODE_ENV'];
  * `docker run` arguments for a test or build with nothing to reach: no network, no capabilities, no privilege gain,
  * a non-root user, bounded memory, CPU and processes, and only the workspace mounted.
  */
-export function dockerRunArgs(o: { name: string; image: string; cwd: string; command: string; user?: SandboxUser; env: NodeJS.ProcessEnv }): string[] {
+export function dockerRunArgs(o: { name: string; image: string; network?: boolean; cwd: string; command: string; user?: SandboxUser; env: NodeJS.ProcessEnv }): string[] {
   return [
     'run', '--rm', '--name', o.name,
-    '--network', 'none',
+    // Only a dependency install gets network (see installContainer); tests and builds never do.
+    ...(o.network ? [] : ['--network', 'none']),
     '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges',
     '--pids-limit', '1024', '--memory', '4g', '--cpus', '2',

@@ -258,7 +258,9 @@ try {
     const incident = {
       id: randomUUID(),
       title: values.title ?? 'Local fix attempt',
-      description: file ? `${values.description}\n\nLikely file: ${file}` : values.description
+      description: file ? `${values.description}\n\nLikely file: ${file}` : values.description,
+      // As a stack-trace frame, the suspected file is read into the investigation first, not just named in the text.
+      ...(file && { stackTrace: `at ${file}:1` })
     };
     const { result, branch } = await runTryCommand({
       root,
@@ -278,6 +280,8 @@ try {
     for (const a of result.attempts) {
       console.log(`\nATTEMPT ${a.number}: ${a.proposal.summary}`);
       console.log(a.failure ? `  FAILED at ${a.failure.stage}` : '  tests+build PASSED');
+      // The last lines say why, so a failed local run isn't a guessing game.
+      if (a.failure?.output.trim()) console.log(a.failure.output.trim().split('\n').slice(-15).map((l) => `    ${l}`).join('\n'));
     }
     if (branch) {
       console.log(`\n--- DIFF ---\n${result.diff}`);

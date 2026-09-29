@@ -40,7 +40,7 @@ export default function Header() {
                 className="w-8 h-8 rounded-lg object-contain shadow-md"
               />
               <span className="font-bold text-xl tracking-tight text-fg font-ds-display">
-                Blaze<span className="text-brand">Resolver</span>
+                Blaze<span className="text-brand">Reslover</span>
               </span>
             </span>
 

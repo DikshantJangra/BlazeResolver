@@ -166,6 +166,24 @@ describe('init finds frontend and backend by what they are, not what they are ca
     assert.deepEqual(snapshot(dir), before);
   });
 
+  it('Next.js keeps an existing support catch-all instead of adding a second one that stops the server', async () => {
+    const existing = "export { GET } from 'somewhere';\n";
+    const app = repo({
+      'package.json': pj({ dependencies: { next: '15', react: '19' } }),
+      'tsconfig.json': '{}',
+      'src/app/page.tsx': '',
+      'src/app/api/support/[[...slug]]/route.ts': existing
+    });
+    await runInit({ cwd: app, ...quiet, force: true });
+    assert.deepEqual(readdirSync(join(app, 'src/app/api/support')), ['[[...slug]]']);
+    assert.equal(read(app, 'src/app/api/support/[[...slug]]/route.ts'), existing);
+    assert.ok(existsSync(join(app, 'src/app/api/blaze/route.ts')));
+
+    const pages = repo({ 'package.json': pj({ dependencies: { next: '14', react: '18' } }), 'pages/index.js': '', 'pages/api/support/[...path].js': existing });
+    await runInit({ cwd: pages, ...quiet });
+    assert.deepEqual(readdirSync(join(pages, 'pages/api/support')), ['[...path].js']);
+  });
+
   it('Next.js Pages Router gets a pages/api route', async () => {
     const dir = repo({ 'package.json': pj({ dependencies: { next: '14', react: '18' } }), 'pages/index.js': '', 'pages/_document.js': '' });
     const r = await runInit({ cwd: dir, ...quiet });

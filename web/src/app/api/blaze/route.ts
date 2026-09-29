@@ -1,20 +1,12 @@
-import { createHandler } from "blazeresolver/handler";
+import { createHandler } from 'blazeresolver/handler';
 
-export const dynamic = "force-dynamic";
+// Files customer bug reports as GitHub issues. Needs BLAZE_GITHUB_TOKEN (Issues: write on this repo only;
+// a private repo also needs Contents: read-only, so questions can be answered from its README).
+// Added by `npx blazeresolver init`; remove with `npx blazeresolver remove`.
+const handler = createHandler({ repo: 'DikshantJangra/BlazeResolver' });
 
-const repo = process.env.BLAZE_REPO || process.env.GITHUB_REPOSITORY || "DikshantJangra/BlazeResolver";
-const githubToken = process.env.BLAZE_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+// Triage and filing take a few seconds; room for a slow AI provider on serverless hosts (Vercel reads this).
+export const maxDuration = 60;
 
-const handler = createHandler({
-  repo,
-  githubToken,
-  product: process.env.BLAZE_PRODUCT_NAME || "BlazeResolver",
-});
-
-export async function POST(req: Request) {
-  return handler(req);
-}
-
-export async function OPTIONS(req: Request) {
-  return handler(req);
-}
+export const POST = handler;
+export const OPTIONS = handler;

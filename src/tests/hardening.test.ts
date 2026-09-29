@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GitWorkspace, dockerAvailable, dockerRunArgs } from '../codebase/git-workspace.js';
+import { GitWorkspace, dockerAvailable, dockerRunArgs, installContainer } from '../codebase/git-workspace.js';
 import { addedLines, findSecrets, guardEdits, secretValuesFromEnv } from '../resolver/guards.js';
 import { DEFAULT_FORBIDDEN_PATHS } from '../resolver/bug-resolver.js';
 
@@ -114,6 +114,15 @@ describe('offline test sandbox', () => {
     assert.match(joined, /-e CI=true/);
     assert.ok(!joined.includes('leak-me-123456') && !joined.includes('SECRET_TOKEN'));
     assert.deepEqual(args.slice(-3), ['sh', '-c', 'npm test']);
+  });
+
+  it('installs on a Linux host as before, and in the test image (with network) elsewhere, so native modules match', () => {
+    assert.equal(installContainer({ image: 'img' }, 'linux'), undefined);
+    assert.deepEqual(installContainer({ image: 'img' }, 'darwin'), { image: 'img', network: true });
+    assert.equal(installContainer(undefined, 'darwin'), undefined);
+    const args = dockerRunArgs({ name: 'n', image: 'img', network: true, cwd: '/w', command: 'npm ci', env: {} }).join(' ');
+    assert.ok(!args.includes('--network'));
+    assert.match(args, /--cap-drop ALL/);
   });
 
   it('runs tests in a container that has no network, no root, and none of the host secrets', { skip: !docker && 'docker is not available' }, async () => {

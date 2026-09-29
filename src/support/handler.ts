@@ -5,7 +5,9 @@ import { resolveEmbedder, type Embedder } from '../answer/embed.js';
 export { resolveEmbedder, type Embedder, type EmbedKind } from '../answer/embed.js';
 import { defaultVectorStore, type VectorStore } from '../answer/vector-store.js';
 export { defaultVectorStore, localVectorStore, sqliteVectorStore, postgresVectorStore, type VectorStore, type StoredSection, type SectionMatch } from '../answer/vector-store.js';
-import { resolveComplete, type Complete } from '../triage/index.js';
+import { ReportSchema, resolveComplete, triage, type Complete } from '../triage/index.js';
+import { cliLocalFix, enqueueLocalFix, type LocalFixRunner } from './local-fix.js';
+export type { LocalFixRunner, LocalFixRequest, LocalFixOutcome } from './local-fix.js';
 import { openIssue } from '../github/index.js';
 
 export interface SupportHandlerOptions {
@@ -39,6 +41,12 @@ export interface SupportHandlerOptions {
    * a key configured (see `resolveEmbedder`); `false` keeps search keyword-only.
    */
   embed?: Embedder | false;
+  /**
+   * Local development only: when a customer's message is triaged as a real bug, run the fix engine on this machine and
+   * post its progress and the resulting local branch into the ticket (see `local-fix.ts`). Defaults to
+   * BLAZE_LOCAL_FIX=true; off everywhere else. A runner function replaces the CLI (tests).
+   */
+  localFix?: boolean | LocalFixRunner;
   fetch?: typeof fetch;
 }
 
@@ -191,6 +199,36 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
   /** The sections that best match `text`: retrieved from the vector database, with keyword matches. */
   const searchKnowledge = async (text: string, k = 4): Promise<Chunk[]> => search(await knowledge(), text, { k, embedder, store: vectorStore });
   const warm = vectorWarmer(knowledge, embedder, vectorStore, options.embed !== false);
+  const localFixRunner: LocalFixRunner | undefined =
+    typeof options.localFix === 'function' ? options.localFix
+    : (options.localFix ?? env.BLAZE_LOCAL_FIX === 'true') ? cliLocalFix()
+    : undefined;
+
+  const systemNote = (ticketId: string, text: string) =>
+    store.addMessage(ticketId, { ticketId, role: 'system', senderType: 'system', content: text, body: text });
+
+  /**
+   * When the local fix engine is on and triage confirms a real bug (the keyword match alone also catches questions that
+   * mention "fix"), runs it in the background and reports into the ticket: started, each stage, then the branch or why not.
+   */
+  const startLocalFix = async (ticketId: string, text: string) => {
+    if (!localFixRunner) return;
+    const verdict = await triage(ReportSchema.parse({ message: text }), complete).catch(() => undefined);
+    if (!verdict?.enterFixLoop || store.getTicket(ticketId)?.isEscalated) return;
+    store.updateTicket(ticketId, { isEscalated: true, pulseStatus: 'investigating' });
+    systemNote(ticketId, `⚡ Confirmed as a bug: ${verdict.summary.replace(/[.\s]+$/, '')}. Starting the automated fix pipeline on this machine.`);
+    void enqueueLocalFix(localFixRunner, { title: verdict.summary, description: text }, (event) => systemNote(ticketId, `🔧 ${event}`)).then(
+      (outcome) => {
+        if (outcome.status === 'READY_FOR_REVIEW' && outcome.branch) {
+          store.updateTicket(ticketId, { pulseStatus: 'fix_ready', githubBranch: outcome.branch });
+          systemNote(ticketId, `✅ A fix passed the tests and build. It is committed to the local branch ${outcome.branch} for review.`);
+        } else {
+          store.updateTicket(ticketId, { pulseStatus: 'needs_human' });
+          systemNote(ticketId, `⚠️ The automated fix pipeline could not produce a passing fix (${outcome.reason ?? 'no fix passed'}). An engineer will take it from here.`);
+        }
+      }
+    );
+  };
 
   /** Blazzy's reply to a customer's message: hands over to a human when asked, otherwise answers unless a human has taken over. */
   const respondToCustomer = async (ticketId: string, text: string): Promise<SupportMessage | undefined> => {
@@ -236,7 +274,7 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
         processedAt: new Date().toISOString()
       }
     });
-    return store.addMessage(ticketId, {
+    const reply = store.addMessage(ticketId, {
       ticketId,
       role: 'agent',
       senderType: 'bot',
@@ -244,6 +282,9 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
       body: replyText,
       content: replyText
     });
+    // Not awaited: triage and the fix run on their own; the widget picks their notes up when it refreshes the thread.
+    void startLocalFix(ticketId, text);
+    return reply;
   };
 
   return async (req: Request): Promise<Response> => {

@@ -102,3 +102,66 @@ describe("a product's desk answers only from that product", () => {
     assert.deepEqual(store.getCannedResponses().map((r) => r.title), ['Refunds']);
   });
 });
+
+describe('the local fix pipeline from the support chat', () => {
+  const post = (handler: (r: Request) => Promise<Response>, path: string, body: unknown) =>
+    handler(new Request(`http://localhost/api/support/${path}`, { method: 'POST', body: JSON.stringify(body) }));
+  /** Waits for the background triage and fix to post their notes. */
+  const settle = () => new Promise((r) => setTimeout(r, 20));
+  const notes = (store: SupportStore, id: string) => store.getMessages(id).filter((m) => m.senderType === 'system').map((m) => m.body);
+
+  test('runs the fix for a bug report and posts its progress and the local branch into the ticket', async () => {
+    const store = new SupportStore();
+    const requests: { title: string; description: string }[] = [];
+    const handler = createSupportHandler({
+      store, embed: false, complete: async () => { throw new Error('no model'); },
+      localFix: async (request, onProgress) => {
+        requests.push(request);
+        onProgress('attempt 1: running tests...');
+        return { status: 'READY_FOR_REVIEW', branch: 'blazeresolver/fix-abc123' };
+      }
+    });
+    const text = 'The checkout button is broken: clicking it throws a TypeError and nothing happens.';
+    const id = (await (await post(handler, 'tickets', { rawText: text })).json()).data.ticket.id;
+    await settle();
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].description, text);
+    const log = notes(store, id).join('\n');
+    assert.match(log, /Starting the automated fix pipeline/);
+    assert.match(log, /🔧 attempt 1: running tests/);
+    assert.match(log, /local branch blazeresolver\/fix-abc123/);
+    assert.equal(store.getTicket(id)?.githubBranch, 'blazeresolver/fix-abc123');
+
+    // One run per ticket: a follow-up message doesn't start another.
+    await post(handler, `tickets/${id}/messages`, { body: 'It is still broken, the page crashes.', senderType: 'user', role: 'user' });
+    await settle();
+    assert.equal(requests.length, 1);
+  });
+
+  test('says when no fix passed, and leaves questions alone', async () => {
+    const store = new SupportStore();
+    let runs = 0;
+    const handler = createSupportHandler({
+      store, embed: false, complete: async () => { throw new Error('no model'); },
+      localFix: async () => { runs++; return { status: 'FAILED', reason: 'no fix passed within 3 attempt(s)' }; }
+    });
+    const question = (await (await post(handler, 'tickets', { rawText: 'How do I export my data to CSV?' })).json()).data.ticket.id;
+    await settle();
+    assert.equal(runs, 0);
+    assert.deepEqual(notes(store, question), []);
+
+    const bug = (await (await post(handler, 'tickets', { rawText: 'Saving a report fails with a 500 error every time.' })).json()).data.ticket.id;
+    await settle();
+    assert.equal(runs, 1);
+    assert.match(notes(store, bug).join('\n'), /could not produce a passing fix \(no fix passed within 3 attempt\(s\)\)/);
+  });
+
+  test('is off unless BLAZE_LOCAL_FIX=true', async () => {
+    const store = new SupportStore();
+    const handler = createSupportHandler({ store, embed: false, complete: async () => { throw new Error('no model'); } });
+    const id = (await (await post(handler, 'tickets', { rawText: 'The checkout button is broken and throws an error.' })).json()).data.ticket.id;
+    await settle();
+    assert.doesNotMatch(notes(store, id).join('\n'), /fix pipeline on this machine/);
+  });
+});

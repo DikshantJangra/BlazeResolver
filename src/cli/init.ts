@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, posix } from 'node:path';
 import { REPO_PATTERN } from '../github/index.js';
 import {
@@ -218,13 +218,16 @@ export async function runInit(opts: InitOptions): Promise<InitResult> {
         return;
       }
       const ext = usesTypeScript(root, pkg) ? 'ts' : 'js';
-      if (next.kind === 'app') {
-        createFile(`${next.dir}/api/blaze/route.${ext}`, routeFile(repo!));
-        createFile(`${next.dir}/api/support/[...slug]/route.${ext}`, supportRouteFile(repo!));
-      } else {
-        createFile(`${next.dir}/api/blaze.${ext}`, pagesFile(repo!));
-        createFile(`${next.dir}/api/support/[...slug].${ext}`, supportPagesFile(repo!));
-      }
+      const app = next.kind === 'app';
+      createFile(app ? `${next.dir}/api/blaze/route.${ext}` : `${next.dir}/api/blaze.${ext}`, app ? routeFile(repo!) : pagesFile(repo!));
+      // Next.js refuses to start with two catch-alls at one level ([...slug] beside [[...slug]], or another name),
+      // so an existing support catch-all is kept even under --force.
+      const supportDir = `${next.dir}/api/support`;
+      const supportRel = app ? `${supportDir}/[...slug]/route.${ext}` : `${supportDir}/[...slug].${ext}`;
+      const catchAll = existsSync(join(root, supportDir)) ? readdirSync(join(root, supportDir)).find((e) => /^\[\[?\.\.\./.test(e)) : undefined;
+      const own = catchAll && (supportRel === `${supportDir}/${catchAll}` || supportRel.startsWith(`${supportDir}/${catchAll}/`));
+      if (catchAll && !own) say(`  kept    ${supportDir}/${catchAll} (support route already exists)`);
+      else createFile(supportRel, app ? supportRouteFile(repo!) : supportPagesFile(repo!));
       addEnvExample(pkg);
       return;
     }
