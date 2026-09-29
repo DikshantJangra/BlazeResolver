@@ -151,6 +151,13 @@ async function writeReply(
  */
 export function createSupportHandler(options: SupportHandlerOptions = {}): (req: Request) => Promise<Response> {
   const store = getStore(options.store);
+  const adminToken = options.adminToken ?? (globalThis as any).process?.env?.BLAZE_ADMIN_TOKEN;
+  const isAuthorized = (req: Request): boolean => {
+    if (!adminToken) return true;
+    const auth = req.headers.get('authorization');
+    return auth === `Bearer ${adminToken}`;
+  };
+
   const allowOrigin = options.allowOrigin || '*';
   const corsHeaders: Record<string, string> = {
     'access-control-allow-origin': allowOrigin,
@@ -260,11 +267,14 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
 
       // 1. GET /api/support/tickets -> list tickets
       if (segments.length === 1 && segments[0] === 'tickets' && method === 'GET') {
+        const customerEmail = searchParams.get('customerEmail') || undefined;
+        if (!customerEmail && !isAuthorized(req)) {
+          return json(401, { success: false, error: 'Unauthorized: adminToken required to list all tickets' });
+        }
         const status = searchParams.get('status') || undefined;
         const priority = searchParams.get('priority') || undefined;
         const category = searchParams.get('category') || undefined;
         const search = searchParams.get('search') || undefined;
-        const customerEmail = searchParams.get('customerEmail') || undefined;
         const tickets = store.getTickets({ status, priority, category, search, customerEmail });
         return json(200, { success: true, data: tickets });
       }
@@ -358,6 +368,7 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
 
       // 7. POST /api/support/tickets/:id/takeover -> toggle takeover
       if (segments.length === 3 && segments[0] === 'tickets' && segments[2] === 'takeover' && method === 'POST') {
+        if (!isAuthorized(req)) return json(401, { success: false, error: 'Unauthorized: adminToken required' });
         const ticketId = segments[1];
         const body = await req.json().catch(() => ({}));
         const { enabled, reason } = body;
@@ -409,6 +420,7 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
 
       // 9. POST /api/support/tickets/:id/action -> 1-Click HITL Action
       if (segments.length === 3 && segments[0] === 'tickets' && segments[2] === 'action' && method === 'POST') {
+        if (!isAuthorized(req)) return json(401, { success: false, error: 'Unauthorized: adminToken required' });
         const ticketId = segments[1];
         const ticket = store.getTicket(ticketId);
         if (!ticket) return json(404, { success: false, error: 'Ticket not found' });
@@ -437,6 +449,7 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
 
       // 10. POST /api/support/tickets/:id/escalate -> escalate to dev pipeline
       if (segments.length === 3 && segments[0] === 'tickets' && segments[2] === 'escalate' && method === 'POST') {
+        if (!isAuthorized(req)) return json(401, { success: false, error: 'Unauthorized: adminToken required' });
         const ticketId = segments[1];
         const ticket = store.getTicket(ticketId);
         if (!ticket) return json(404, { success: false, error: 'Ticket not found' });
@@ -505,6 +518,7 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
 
       // 11. POST /api/support/tickets/:id/close -> close ticket
       if (segments.length === 3 && segments[0] === 'tickets' && segments[2] === 'close' && method === 'POST') {
+        if (!isAuthorized(req)) return json(401, { success: false, error: 'Unauthorized: adminToken required' });
         const ticketId = segments[1];
         const updated = store.updateTicket(ticketId, { status: 'closed' });
         store.addMessage(ticketId, {
@@ -563,6 +577,7 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
         if (segments.length === 1 && method === 'GET') {
           return json(200, { success: true, data: store.getCannedResponses() });
         }
+        if (!isAuthorized(req)) return json(401, { success: false, error: 'Unauthorized: adminToken required' });
         if (segments.length === 1 && method === 'POST') {
           const body = await req.json().catch(() => ({}));
           const created = store.addCannedResponse(body.title || 'New Response', body.body || '', body.category);
@@ -588,6 +603,7 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
         (segments.length === 1 && segments[0] === 'customer-context' && method === 'GET') ||
         (segments.length === 2 && segments[0] === 'context' && method === 'GET')
       ) {
+        if (!isAuthorized(req)) return json(401, { success: false, error: 'Unauthorized: adminToken required' });
         const customerId = segments[0] === 'context' ? segments[1] : (searchParams.get('customerId') || 'cust_default');
         const context = store.getCustomerContext(customerId);
         return json(200, { success: true, data: context });

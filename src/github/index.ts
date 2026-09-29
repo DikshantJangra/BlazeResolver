@@ -201,3 +201,5 @@ export function pushBranch(cwd: string, remoteUrl: string, branch: string, token
     );
   });
 }
+
+export { checkTokenHealth, type TokenHealthStatus } from './token-health.js';

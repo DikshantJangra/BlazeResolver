@@ -18,6 +18,7 @@
     "demo:fix": "tsx src/cli/fix-demo.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.react.json",
     "test": "tsx --import ./src/tests/hermetic.ts --test src/**/*.test.ts",
+    "test:e2e": "tsx src/cli/validate-e2e.ts",
     "prepublishOnly": "npm run build:server && npm run build:cjs && npm run build:react && npm run build:css",
     "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/cjs-marker.mjs"
   },
@@ -52,13 +53,15 @@
     }
   },
   "dependencies": {
-    "@lzehrung/codegraph": "^2.3.31",
-    "@modelcontextprotocol/client": "^2.1.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "ws": "^8.18.1",
     "zod": "^3.24.2"
+  },
+  "optionalDependencies": {
+    "@lzehrung/codegraph": "^2.3.31",
+    "@modelcontextprotocol/client": "^2.1.0"
   },
   "devDependencies": {
     "@langchain/core": "^1.2.12",

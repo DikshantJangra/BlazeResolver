@@ -24,7 +24,7 @@ import { ProjectRegistry, type Project } from './projects/index.js';
 import { IncidentStore, type IncidentRecord } from './incidents/index.js';
 import { ClaudeProvider } from './resolver/claude-provider.js';
 import { lockDownServerFiles, resolveFixSandbox, runFix } from './jobs/fix.js';
-import { REPO_PATTERN } from './github/index.js';
+import { REPO_PATTERN, checkTokenHealth, type TokenHealthStatus } from './github/index.js';
 import { MAX_HELP_DOCS, answerQuestion, productName, replyToCustomer } from './answer/index.js';
 import { resolveEmbedder } from './answer/embed.js';
 import { defaultVectorStore } from './answer/vector-store.js';
@@ -66,6 +66,17 @@ let { adapters, pipeline } = createPipeline();
 const hasAdminToken = (headers: IncomingHttpHeaders) =>
   !!process.env.BLAZE_ADMIN_TOKEN && headers.authorization === `Bearer ${process.env.BLAZE_ADMIN_TOKEN}`;
 const isAdmin = (req: express.Request) => hasAdminToken(req.headers);
+
+const requireAdmin: express.RequestHandler<any> = (req, res, next) => {
+  if (isAdmin(req)) return next();
+  if (process.env.NODE_ENV === 'production' || process.env.BLAZE_REQUIRE_AUTH === 'true' || process.env.BLAZE_ADMIN_TOKEN) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: valid BLAZE_ADMIN_TOKEN required in Authorization: Bearer <token> header'
+    });
+  }
+  return next();
+};
 
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
@@ -404,7 +415,7 @@ app.post('/api/pipeline/seed', async (req, res) => {
 });
 
 // 3. Reset pipeline & adapters state
-app.post('/api/pipeline/reset', (req, res) => {
+app.post('/api/pipeline/reset', requireAdmin, (req, res) => {
   ({ adapters, pipeline } = createPipeline());
   voiceBridge = new VoiceChannelBridge(pipeline);
   supportStore.resetAll();
@@ -438,7 +449,7 @@ app.get('/api/hitl/queue', (req, res) => {
 });
 
 // 7. Approve / Reject HITL Action
-app.post('/api/hitl/action', async (req, res) => {
+app.post('/api/hitl/action', requireAdmin, async (req, res) => {
   try {
     const { actionId, decision, reason, reviewerName = 'DJ (Supervisor)' } = req.body;
     if (!actionId || !decision) {
@@ -537,12 +548,16 @@ app.get('/api/byo-agent/tools', (req, res) => {
 
 // --- Support Desk & Customer Portal Endpoints ---
 // The demo desk (the example business) starts with demo saved replies; a product's own desk starts with none.
-const supportStore = new SupportStore({ savedReplies: DEMO_SAVED_REPLIES });
+const supportDataPath = process.env.BLAZE_SUPPORT_DATA_PATH || resolve('.blazeresolver/support-desk.json');
+const supportStore = new SupportStore({ savedReplies: DEMO_SAVED_REPLIES, persistPath: supportDataPath });
 
 // Get Tickets
 app.get('/api/support/tickets', (req, res) => {
   try {
     const { status, priority, category, search, customerEmail } = req.query as Record<string, string>;
+    if (!customerEmail && !isAdmin(req) && (process.env.NODE_ENV === 'production' || process.env.BLAZE_REQUIRE_AUTH === 'true' || process.env.BLAZE_ADMIN_TOKEN)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: listing all tickets requires BLAZE_ADMIN_TOKEN' });
+    }
     const tickets = supportStore.getTickets({ status, priority, category, search, customerEmail });
     return res.json({ success: true, data: tickets });
   } catch (err: unknown) {
@@ -569,15 +584,16 @@ app.patch('/api/support/tickets/:id', (req, res) => {
 });
 
 // Create Ticket (Customer Portal or Inbound API)
-app.post('/api/support/tickets/create', async (req, res) => {
+app.post(['/api/support/tickets', '/api/support/tickets/create'], async (req, res) => {
   try {
-    const { subject, rawText, category, orderId, customerId, customerName, customerEmail, customerPhone, outletName, intakeChannel } = req.body;
-    if (!rawText) return res.status(400).json({ success: false, error: 'rawText is required' });
+    const { subject, rawText, message, text, category, orderId, customerId, customerName, customerEmail, customerPhone, outletName, intakeChannel } = req.body;
+    const complaintText = rawText || message || text;
+    if (!complaintText) return res.status(400).json({ success: false, error: 'rawText or message is required' });
 
     const result = await supportStore.createTicketFromCustomer(
       {
         subject,
-        rawText,
+        rawText: complaintText,
         category,
         orderId,
         customerId,
@@ -837,7 +853,7 @@ app.post('/api/support/tickets/:id/messages', async (req, res) => {
 });
 
 // Toggle Human Takeover
-app.post('/api/support/tickets/:id/takeover', (req, res) => {
+app.post('/api/support/tickets/:id/takeover', requireAdmin, (req, res) => {
   try {
     const { enabled, reason } = req.body;
     const ticketId = req.params.id;
@@ -1012,7 +1028,7 @@ app.post('/api/support/tickets/:id/diagnose', async (req, res) => {
 });
 
 // 1-Click HITL Action Execution on Ticket
-app.post('/api/support/tickets/:id/action', async (req, res) => {
+app.post('/api/support/tickets/:id/action', requireAdmin, async (req, res) => {
   try {
     const ticketId = req.params.id;
     const { action, amount, reason = 'Admin resolution' } = req.body;
@@ -1068,7 +1084,7 @@ app.post('/api/support/tickets/:id/action', async (req, res) => {
 });
 
 // Escalate Ticket to Pulse / Dev Pipeline
-app.post('/api/support/tickets/:id/escalate', async (req, res) => {
+app.post('/api/support/tickets/:id/escalate', requireAdmin, async (req, res) => {
   try {
     const ticketId = req.params.id;
     const { title, type = 'bug', priority = 'high', note } = req.body;
@@ -1097,7 +1113,7 @@ app.post('/api/support/tickets/:id/escalate', async (req, res) => {
 });
 
 // Close Ticket
-app.post('/api/support/tickets/:id/close', (req, res) => {
+app.post('/api/support/tickets/:id/close', requireAdmin, (req, res) => {
   try {
     const ticketId = req.params.id;
     const { password } = req.body;
@@ -1126,7 +1142,7 @@ app.post('/api/support/tickets/:id/close', (req, res) => {
 });
 
 // Customer Context 360
-app.get('/api/support/context/:id', (req, res) => {
+app.get('/api/support/context/:id', requireAdmin, (req, res) => {
   try {
     const context = supportStore.getCustomerContext(req.params.id);
     return res.json({ success: true, data: context });
@@ -1140,7 +1156,7 @@ app.get('/api/support/canned-responses', (_req, res) => {
   return res.json({ success: true, data: supportStore.getCannedResponses() });
 });
 
-app.post('/api/support/canned-responses', (req, res) => {
+app.post('/api/support/canned-responses', requireAdmin, (req, res) => {
   try {
     const { title, body, category } = req.body;
     if (!title || !body) return res.status(400).json({ success: false, error: 'Title and body are required' });
@@ -1151,7 +1167,7 @@ app.post('/api/support/canned-responses', (req, res) => {
   }
 });
 
-app.patch('/api/support/canned-responses/:id', (req, res) => {
+app.patch('/api/support/canned-responses/:id', requireAdmin, (req, res) => {
   try {
     const { title, body } = req.body;
     const updated = supportStore.updateCannedResponse(req.params.id, title, body);
@@ -1161,12 +1177,12 @@ app.patch('/api/support/canned-responses/:id', (req, res) => {
   }
 });
 
-app.delete('/api/support/canned-responses/:id', (req, res) => {
+app.delete('/api/support/canned-responses/:id', requireAdmin, (req, res) => {
   const deleted = supportStore.deleteCannedResponse(req.params.id);
   return res.json({ success: deleted });
 });
 
-app.post('/api/support/canned-responses/:id/set-auto-reply', (req, res) => {
+app.post('/api/support/canned-responses/:id/set-auto-reply', requireAdmin, (req, res) => {
   const updated = supportStore.setAutoReply(req.params.id);
   return res.json({ success: true, data: updated });
 });
@@ -1241,14 +1257,60 @@ app.post('/api/pulse/sync-github-commits', handleSyncTimelineCommits);
 app.post('/api/admin/timeline/sync-github-commits', handleSyncTimelineCommits);
 app.post('/api/admin/pulse/sync-github-commits', handleSyncTimelineCommits);
 
-// 12. Health check
-app.get('/api/health', (req, res) => {
-  return res.json({
-    status: 'healthy',
+// 12. Health check (supports /health and /api/health)
+let cachedTokenHealth: TokenHealthStatus | null = null;
+let lastTokenCheckTime = 0;
+
+async function getTokenHealth(force = false): Promise<TokenHealthStatus> {
+  const token = process.env.BLAZE_GITHUB_TOKEN;
+  const repo = process.env.BLAZE_REPO || process.env.GITHUB_REPOSITORY;
+  const now = Date.now();
+  if (!force && cachedTokenHealth && now - lastTokenCheckTime < 5 * 60 * 1000) {
+    return cachedTokenHealth;
+  }
+  cachedTokenHealth = await checkTokenHealth(token, repo);
+  lastTokenCheckTime = now;
+  return cachedTokenHealth;
+}
+
+app.get(['/health', '/api/health'], async (_req, res) => {
+  const tokenHealth = await getTokenHealth();
+  const providers = describeProviders();
+
+  const status = !tokenHealth.configured
+    ? 'ready'
+    : tokenHealth.valid
+    ? tokenHealth.warning
+      ? 'degraded'
+      : 'healthy'
+    : 'error';
+
+  return res.status(status === 'error' ? 503 : 200).json({
+    status,
     system: 'BlazeResolver Engine',
-    version: '1.0.0',
+    version: '0.8.0',
     profile: profile.id,
-    uptime: process.uptime()
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    github: {
+      configured: tokenHealth.configured,
+      valid: tokenHealth.valid,
+      status: tokenHealth.status,
+      expiresAt: tokenHealth.expiresAt,
+      daysUntilExpiration: tokenHealth.daysUntilExpiration,
+      rateLimitRemaining: tokenHealth.rateLimitRemaining,
+      warning: tokenHealth.warning,
+      error: tokenHealth.error
+    },
+    ai: {
+      providers: providers.map((p) => p.split(':')[0]),
+      hasActiveKey: providers.length > 0,
+      embeddings: embedder ? embedder.id : null
+    },
+    storage: {
+      persisted: Boolean(supportDataPath),
+      path: supportDataPath
+    }
   });
 });
 
@@ -1259,11 +1321,28 @@ if (existsSync(join(clientDir, 'index.html'))) {
   app.get(/^\/(?!api\/|ws).*/, (req, res) => res.sendFile(join(clientDir, 'index.html')));
 }
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`\n🚀 BlazeResolver Server running on http://localhost:${PORT} (profile: ${profile.name})`);
   console.log(`🎙️ Voice WebSocket Bridge listening on ws://localhost:${PORT}/ws`);
   const ai = describeProviders();
   console.log(`🤖 AI providers, in failover order:${ai.length ? ai.map((l) => `\n   ${l}`).join('') : ' none (triage uses keyword rules)'}`);
   console.log(`🔎 Help-doc search: ${embedder ? `keywords + semantic (${embedder.id})` : 'keywords only (no embeddings provider configured)'}`);
+
+  const token = process.env.BLAZE_GITHUB_TOKEN;
+  if (token) {
+    const health = await getTokenHealth(true);
+    if (!health.valid) {
+      console.error(`\n⚠️  [blazeresolver] BLAZE_GITHUB_TOKEN check failed: ${health.error || 'Authentication error'}`);
+      console.error(`   Automated issue creation and PRs will fail until token is updated.`);
+      console.error(`   Run 'npx blazeresolver doctor' to verify repository access.\n`);
+    } else if (health.warning) {
+      console.warn(`\n⚠️  [blazeresolver] ${health.warning}\n`);
+    } else {
+      console.log(`🐙 GitHub: authenticated${health.expiresAt ? ` (token expires: ${health.expiresAt})` : ''}`);
+    }
+  } else {
+    console.log(`🐙 GitHub: no token configured (set BLAZE_GITHUB_TOKEN for issue/PR integration)`);
+  }
+
   console.log(`⚡ Ready to triage, correlate, resolve, and respond!\n`);
 });

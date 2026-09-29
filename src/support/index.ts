@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { BlazeResolverPipeline } from '../core/pipeline/index.js';
 import { CustomerInput } from '../core/types.js';
 import { retrieve } from '../answer/retrieve.js';
@@ -159,21 +161,82 @@ export class SupportStore {
   private cannedResponses: SupportCannedResponse[] = [];
   private ratings: Map<string, TicketRating> = new Map();
   private ticketSeq = 1001;
+  private persistPath?: string;
 
   /** The saved replies a new or reset store starts with. */
   private readonly initialReplies: SupportCannedResponse[];
 
   /**
    * Starts with no saved replies: a product's desk answers only from its own docs and the replies its team writes.
-   * The demo server passes DEMO_SAVED_REPLIES.
+   * Pass persistPath or set BLAZE_SUPPORT_DATA_PATH to persist tickets and messages across process restarts.
    */
-  constructor(options: { savedReplies?: SupportCannedResponse[] } = {}) {
+  constructor(options: { savedReplies?: SupportCannedResponse[]; persistPath?: string } = {}) {
     this.initialReplies = options.savedReplies ?? [];
+    this.persistPath = options.persistPath ?? (typeof process !== 'undefined' ? process.env.BLAZE_SUPPORT_DATA_PATH : undefined);
     this.seedDefaults();
+    this.loadState();
   }
 
   private seedDefaults() {
     this.cannedResponses = this.initialReplies.map((reply) => ({ ...reply }));
+  }
+
+  private loadState(): void {
+    if (!this.persistPath) return;
+    try {
+      if (existsSync(this.persistPath)) {
+        const raw = readFileSync(this.persistPath, 'utf8');
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object') {
+          if (Array.isArray(data.tickets)) {
+            for (const t of data.tickets) this.tickets.set(t.id, t);
+          }
+          if (data.messages && typeof data.messages === 'object') {
+            for (const [k, msgs] of Object.entries(data.messages)) {
+              if (Array.isArray(msgs)) this.messages.set(k, msgs as SupportMessage[]);
+            }
+          }
+          if (Array.isArray(data.cannedResponses) && data.cannedResponses.length > 0) {
+            this.cannedResponses = data.cannedResponses;
+          }
+          if (data.ratings && typeof data.ratings === 'object') {
+            for (const [k, r] of Object.entries(data.ratings)) {
+              this.ratings.set(k, r as TicketRating);
+            }
+          }
+          if (typeof data.ticketSeq === 'number') {
+            this.ticketSeq = data.ticketSeq;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[blazeresolver] could not load support store from ${this.persistPath}:`, err);
+    }
+  }
+
+  private saveState(): void {
+    if (!this.persistPath) return;
+    try {
+      const dir = dirname(this.persistPath);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const serialized = JSON.stringify(
+        {
+          tickets: Array.from(this.tickets.values()),
+          messages: Object.fromEntries(this.messages.entries()),
+          cannedResponses: this.cannedResponses,
+          ratings: Object.fromEntries(this.ratings.entries()),
+          ticketSeq: this.ticketSeq,
+          savedAt: new Date().toISOString()
+        },
+        null,
+        2
+      );
+      const tmp = `${this.persistPath}.tmp.${Date.now()}`;
+      writeFileSync(tmp, serialized, 'utf8');
+      renameSync(tmp, this.persistPath);
+    } catch (err) {
+      console.warn(`[blazeresolver] could not persist support store to ${this.persistPath}:`, err);
+    }
   }
 
   public resetAll(): void {
@@ -182,6 +245,7 @@ export class SupportStore {
     this.ratings.clear();
     this.ticketSeq = 1001;
     this.seedDefaults();
+    this.saveState();
   }
 
   public getTickets(filters?: {
@@ -248,6 +312,7 @@ export class SupportStore {
     ticket.lastMessageAt = newMessage.createdAt;
     ticket.updatedAt = newMessage.createdAt;
     this.tickets.set(ticketId, ticket);
+    this.saveState();
 
     return newMessage;
   }
@@ -415,6 +480,7 @@ export class SupportStore {
     }
 
     this.messages.set(id, messagesList);
+    this.saveState();
     return { ticket: newTicket, initialMessage: userMessage, aiReply };
   }
 
@@ -428,6 +494,7 @@ export class SupportStore {
       updatedAt: new Date().toISOString()
     };
     this.tickets.set(id, updated);
+    this.saveState();
     return updated;
   }
 
@@ -468,6 +535,7 @@ export class SupportStore {
       isAutoReply: false
     };
     this.cannedResponses.unshift(newCanned);
+    this.saveState();
     return newCanned;
   }
 
@@ -480,13 +548,16 @@ export class SupportStore {
       title,
       body
     };
+    this.saveState();
     return this.cannedResponses[index];
   }
 
   public deleteCannedResponse(id: string): boolean {
     const initialLen = this.cannedResponses.length;
     this.cannedResponses = this.cannedResponses.filter((c) => c.id !== id);
-    return this.cannedResponses.length < initialLen;
+    const changed = this.cannedResponses.length < initialLen;
+    if (changed) this.saveState();
+    return changed;
   }
 
   public setAutoReply(id: string): SupportCannedResponse[] {
@@ -494,6 +565,7 @@ export class SupportStore {
       ...c,
       isAutoReply: c.id === id ? !c.isAutoReply : false
     }));
+    this.saveState();
     return this.cannedResponses;
   }
 
@@ -508,6 +580,7 @@ export class SupportStore {
       createdAt: new Date().toISOString()
     };
     this.ratings.set(ticketId, r);
+    this.saveState();
     return r;
   }
 }

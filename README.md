@@ -17,6 +17,7 @@
 
 <p align="center">
   <a href="https://dikshantjangra.github.io/BlazeResolver/docs/"><strong>Documentation</strong></a> ·
+  <a href="docs/ARCHITECTURE.md"><strong>Architecture</strong></a> ·
   <a href="https://dikshantjangra.github.io/BlazeResolver/llms.txt">llms.txt for AI agents</a> ·
   <code>npx blazeresolver --help</code>
 </p>

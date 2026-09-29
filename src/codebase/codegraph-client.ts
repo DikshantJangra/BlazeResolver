@@ -1,5 +1,5 @@
-import { Client } from '@modelcontextprotocol/client';
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import type { Client } from '@modelcontextprotocol/client';
+import type { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { fileURLToPath } from 'node:url';
 
 export interface CodegraphClientOptions {
@@ -26,7 +26,11 @@ const MAX_CONCURRENT_CALLS = 4;
 
 /** The codegraph CLI bundled with this package, so callers need no global install. */
 function codegraphCliPath(): string {
-  return fileURLToPath(new URL('./bin/cli.js', import.meta.resolve('@lzehrung/codegraph')));
+  try {
+    return fileURLToPath(new URL('./bin/cli.js', import.meta.resolve('@lzehrung/codegraph')));
+  } catch (err) {
+    throw new Error(`@lzehrung/codegraph is not installed or could not be resolved: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /**
@@ -109,7 +113,19 @@ export class CodegraphClient {
   }
 
   private async start(): Promise<Client> {
-    const transport = new StdioClientTransport({
+    let ClientClass: typeof Client;
+    let StdioTransportClass: typeof StdioClientTransport;
+
+    try {
+      const clientMod = await import('@modelcontextprotocol/client');
+      const stdioMod = await import('@modelcontextprotocol/client/stdio');
+      ClientClass = clientMod.Client;
+      StdioTransportClass = stdioMod.StdioClientTransport;
+    } catch (err) {
+      throw new Error(`@modelcontextprotocol/client is required for codebase indexing: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const transport = new StdioTransportClass({
       command: process.execPath,
       args: [codegraphCliPath(), 'mcp', 'serve', '--root', this.options.root, '--stdio', '--warmup-symbols'],
       cwd: this.options.root,
@@ -119,7 +135,7 @@ export class CodegraphClient {
       this.stderrTail = (this.stderrTail + chunk.toString('utf-8')).slice(-STDERR_TAIL_BYTES);
     });
 
-    const client = new Client({ name: 'blazeresolver-codebase-adapter', version: '1.0.0' });
+    const client = new ClientClass({ name: 'blazeresolver-codebase-adapter', version: '1.0.0' });
     try {
       await client.connect(transport);
     } catch (err) {

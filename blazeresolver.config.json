@@ -1,33 +1,19 @@
 {
   "repo": "DikshantJangra/BlazeResolver",
   "defaultBranch": "main",
-  "installCommand": "(cd references/agent-desk/web && pnpm install --frozen-lockfile)",
-  "testCommand": "pnpm test",
-  "buildCommand": "(cd references/agent-desk/web && pnpm run build)",
+  "installCommand": "npm install",
+  "testCommand": "npm test",
+  "buildCommand": "npm run build",
   "sandbox": "docker",
   "sandboxImage": "node:22-bookworm-slim",
   "layout": {
-    "frontend": "references/agent-desk/web",
-    "handler": "next"
+    "frontend": "client",
+    "handler": "express"
   },
   "installed": {
     "files": [
-      "references/agent-desk/web/app/api/blaze/route.ts",
-      "references/agent-desk/web/app/api/support/[...slug]/route.ts",
       ".github/workflows/blazeresolver.yml",
       "blazeresolver.config.json"
-    ],
-    "edits": [
-      "references/agent-desk/web/.env.example"
-    ],
-    "env": {
-      "file": "references/agent-desk/web/.env",
-      "created": true,
-      "added": "# --- BlazeResolver: Universal AI Keys (auto-picked for all agents & triage) ---\n# Paste ANY key(s). Provider is auto-detected across Gemini, Claude, OpenAI, Groq, NVIDIA, DeepSeek, xAI.\n# Set multiple comma-separated keys or numbered keys (API_KEY_1, API_KEY_2) for instant failover:\n#   API_KEYS=sk-ant-...,AIzaSy...,gsk_...\n# Free tier keys: Gemini (https://aistudio.google.com/apikey) | Groq (https://console.groq.com/keys)\n# Verify recognized keys anytime: npx blazeresolver providers\nAPI_KEYS=\n\n# --- BlazeResolver: GitHub Token -----------------------------------------------\n# Fine-grained token: Issues read and write permissions on this repo.\n# gh auth token or fine-grained PAT\nBLAZE_GITHUB_TOKEN=\n"
-    },
-    "dependency": {
-      "dir": "references/agent-desk/web",
-      "pm": "pnpm"
-    }
+    ]
   }
 }

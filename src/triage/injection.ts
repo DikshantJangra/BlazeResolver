@@ -11,18 +11,20 @@
 const PATTERNS: RegExp[] = [
   // "ignore all previous instructions", "disregard your guidelines". The qualifier is what separates this from a
   // symptom like "the app ignores my delivery instructions".
-  /\b(ignore|disregard|forget|override)\s+(all\s+|any\s+)?(of\s+)?(the\s+|your\s+|my\s+)?(previous|prior|above|earlier|preceding|original|initial|system|developer|all|any|these|those)\s+(instructions?|prompts?|guidelines|directives|rules)\b/,
-  /\b(ignore|disregard|forget|override)\s+(your|the\s+system'?s?)\s+(instructions?|prompts?|guidelines|directives|rules|programming)\b/,
+  /\b(ignore|disregard|forget|override)\s+(all\s+|any\s+)?(of\s+)?(the\s+|your\s+|my\s+)?(previous|prior|above|earlier|preceding|original|initial|system|developer|all|any|these|those)\s+(instructions?|prompts?|guidelines|directives|rules|constraints?)\b/,
+  /\b(ignore|disregard|forget|override)\s+(your|the\s+system'?s?)\s+(instructions?|prompts?|guidelines|directives|rules|programming|constraints?)\b/,
   /\b(ignore|disregard|forget)\s+(everything|anything|all)\s+(above|before|previously\s+said)\b/,
   /\b(ignore|disregard)\s+the\s+(above|foregoing)\b/,
+  // system override commands
+  /\b(system\s+override|override\s+system)\b/i,
   // a new persona ("you are now charging me twice" is a symptom, so only AI personas count)
-  /\byou\s+are\s+now\s+(an?\s+|in\s+)?(unrestricted|jailbroken|dan|evil|free\s+from|no\s+longer\s+(bound|restricted)|(different|new)\s+(ai|assistant|model))\b/,
+  /\byou\s+are\s+now\s+(an?\s+|in\s+)?(unrestricted|jailbroken|dan|evil|free\s+from|no\s+longer\s+(bound|restricted)|(different|new)\s+(ai|assistant|model|bot))\b/,
   /\byou\s+are\s+no\s+longer\s+(bound|restricted|an?\s+(ai|assistant|model))\b/,
   /\b(act|behave|respond)\s+(as|like)\s+(an?\s+)?(unrestricted|jailbroken|evil|dan\b|(different|new)\s+(ai|assistant|model))/,
   /\bpretend\s+(to\s+be|you\s+are)\s+(an?\s+)?(unrestricted|jailbroken|evil|different|another|new)\s+(ai|assistant|model)\b/,
   // new instructions, or asking for the hidden ones
-  /\bnew\s+(instructions|task|rules|system\s+prompt)\s*:/,
-  /\b(reveal|print|show|repeat|output|leak|display|tell\s+me)\b[^.\n]{0,30}\b(system\s+prompt|your\s+(instructions|prompt|rules|guidelines))\b/,
+  /\bnew\s+(instructions?|task|rules|system\s+prompt)\s*:/,
+  /\b(reveal|print|show|repeat|output|leak|display|tell\s+me)\b[^.\n]{0,30}\b(system\s+prompt|your\s+(instructions|prompt|rules|guidelines)|process\.env|environment\s+variables?|api_key|token|secret)\b/,
   /\bsystem\s+prompt\s*:/,
   // messages addressed to the model
   /\b(note|message|instructions?)\s+(to|for)\s+(the\s+)?(ai|assistant|model|llm|claude|chatgpt|gpt)\b/,
@@ -32,9 +34,16 @@ const PATTERNS: RegExp[] = [
   /<\/?\s*(system|assistant|instructions?)\s*>/,
   /<\|\s*(im_start|im_end|system|endoftext)\s*\|>/,
   /\[\s*\/?\s*inst\s*\]/,
+  /\[\s*system\s*(alert|message|prompt)?\s*:/i,
   // steering the code the fix engine writes
   /\b(when|while|once)\s+(you\s+)?(fix|patch|writ\w*|generat\w*|chang\w*)\s+(this|it|the\s+(code|bug|issue))\b[^.\n]{0,60}\balso\s+(add|insert|include|remove|delete|disable|create|grant|send|upload|install)\b/,
-  /\b(in|with)\s+your\s+(fix|patch|pull\s+request|pr|commit)\b[^.\n]{0,40}\b(add|remove|include|insert|disable|delete)\b/
+  /\b(in|with)\s+your\s+(fix|patch|pull\s+request|pr|commit)\b[^.\n]{0,40}\b(add|remove|include|insert|disable|delete)\b/,
+  // explicit injection / jailbreak attempts
+  /\b(assistant\s+prompt\s+injection|prompt\s+injection)\b/i,
+  /\b(maintenance\s+mode\s+instructions?)\b/i,
+  /\b(execute|run)\s+(this\s+)?(python|bash|sh|shell|script|command|code)\b/i,
+  /\b(and\s+)?execute\s+it\b/i,
+  /\b(curl|wget)\b[^.\n]{0,60}\b\|\s*(ba)?sh\b/i
 ];
 
 /** Zero-width and invisible characters that split words without showing: "ig\u200Bnore" reads as "ignore". */

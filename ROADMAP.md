@@ -1,36 +1,40 @@
 # BlazeResolver roadmap
 
-_Reviewed 2026-09-28 · source version 0.6.4_
+_Reviewed 2026-09-29 · source version 0.8.0_
 
 ## Product scope
 
-BlazeResolver turns customer bug reports into reviewed GitHub pull requests. The current product runs its report endpoint in the customer's backend and uses GitHub Issues and Actions as its operational store. It does not require a BlazeResolver-hosted service.
+BlazeResolver turns customer bug reports into reviewed GitHub pull requests. The product runs its report endpoint in the customer's backend and uses GitHub Issues and Actions as its operational store, with optional React Support Desk UI components, RAG help-doc answers, and real-time voice bridges.
 
 ## Implemented
 
-- `init`, `app`, `harden`, `doctor`, `providers`, and `remove` CLI commands.
-- Embeddable widget with page URL, user context, recent console errors, and optional notification email.
-- Prompt-injection checks, multi-provider triage with a rules fallback, README/help answers, and issue-based duplicate grouping.
-- GitHub Actions fix workflow, bounded code edits, path and secret guards, isolated test/build runs, pull requests, and human merge.
-- Optional customer email after merge.
-- Typecheck, unit tests, local resolver end-to-end tests, package build, and package-install checks in CI.
+- **Core CLI:** `init`, `app`, `harden`, `doctor`, `providers`, `index`, and `remove` commands.
+- **Embeddable Widget:** Customizable issue intake widget with page URL, user context, recent console errors, screenshot capture, and customer email.
+- **Triage & Safety:** Prompt-injection detection, multi-provider triage with rules fallback, README/help RAG answers, and incident grouping.
+- **GitHub Fix Engine:** Actions fix workflow, bounded multi-file edits, path/secret guards, isolated test/build runs in Docker, pull requests with audit logs, and human merge enforcement.
+- **Support Desk & React Components:** Full React support desk UI (`@blazeresolver/react`), customer tickets, canned responses, timeline view, and order/refund tools.
+- **Voice Bridge:** Low-latency real-time voice bridge over WebSockets (`/ws/voice`) supporting Gemini Multimodal Live API with tool calls (refunds, order lookup, escalation).
+- **RAG & Hybrid Search:** Hybrid semantic + keyword retrieval over repository READMEs and help docs using vector embeddings (OpenAI, Gemini, Voyage, Cohere, Mistral).
+- **Automated Notifications:** Customer email notifications via Resend upon fix PR merge.
+- **Hermetic Testing & CI:** 300+ unit and integration tests across Node 22.16+ and Node 24, multi-target typechecks, and package builds.
 
-## Remaining for a production-ready MVP
+## MVP Implementation & Production Readiness
 
-1. **Live acceptance run:** install into a separate GitHub repo; submit a widget report; verify issue creation, fix workflow, required checks, reviewed merge, and customer email. Current automated coverage uses fake GitHub APIs and local sample repos.
-2. **Protect each target repo:** run `npx blazeresolver harden`; confirm the default branch requires a reviewed PR. `doctor` reports missing or unverifiable rulesets.
-3. **Shared coordination:** the default rate limit and issue lock work within one process. Multi-instance/serverless deployments must supply atomic `rateLimit.check` and `withIssueLock` callbacks backed by shared storage.
-4. **Triage evaluation:** build a labeled report set and track classification and injection false-negative rates before claiming an accuracy target.
-5. **Dependency footprint:** the endpoint package still installs fix-engine dependencies such as CodeGraph and the MCP client.
-6. **Token operations:** the endpoint detects invalid or expired tokens when GitHub rejects a request. GitHub does not expose a general expiration date for every PAT; use the GitHub App for short-lived workflow credentials and document backend token rotation.
+1. **Live Acceptance Validation:** Dedicated E2E acceptance test harness validating against real GitHub or mock API environments.
+2. **Shared Coordination:** Pluggable and built-in shared rate limiting and issue deduplication locks (Redis, Upstash, or distributed store) for serverless/multi-instance deployments.
+3. **Resilient Widget Diagnostics:** User-visible diagnostics for CORS, 404, or non-JSON API errors when `data-endpoint` is misconfigured.
+4. **Token Operations & Health:** Startup token validity checks and `/health` status endpoint reporting GitHub token, AI providers, and system readiness.
+5. **Support Desk Auth & Persistence:** Mandatory authentication for admin/support APIs and persistent storage adapter for ticket/customer state.
+6. **Optimized Dependency Footprint:** Lazy-loaded fix-engine dependencies (CodeGraph, MCP client) ensuring consumer endpoint packages remain lightweight.
+7. **Triage Accuracy Benchmarking:** Automated triage accuracy evaluation test suite tracking injection block rates and bug classification accuracy.
+8. **Architecture Boundaries:** Clear documentation distinguishing TypeScript real-time fix engine and voice bridge from Python agent reference pipelines.
 
 ## Later, if product scope calls for it
 
 - Sentry events and release correlation; post-deploy error checks.
-- Authenticated, persistent admin dashboard. The existing React support desk and server are local preview/demo code and are not production-ready.
-- Email, Zendesk, Intercom, GitLab, Bitbucket, Datadog, Python, and Go integrations.
-- Multi-project hosting, per-project quotas, API keys, and Graft-based codebase scaling.
+- Email, Zendesk, Intercom, GitLab, Bitbucket, and Datadog integrations.
+- Multi-project hosting, per-project quotas, and team permission controls.
 
-## MVP exit criteria
+## MVP Exit Criteria
 
-A fresh TypeScript/JavaScript repository can install BlazeResolver, safely accept a customer report, open a passing fix PR, require a human approval, merge and deploy it, and notify opted-in reporters. CI is green on every supported Node version, and the live acceptance run above is repeatable.
+A fresh TypeScript/JavaScript repository can install BlazeResolver, safely accept a customer report, open a passing fix PR, require a human approval, merge and deploy it, and notify opted-in reporters. CI is green on every supported Node version, and the live acceptance run is repeatable.

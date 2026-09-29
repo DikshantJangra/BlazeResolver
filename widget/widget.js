@@ -37,6 +37,8 @@
   
   var rawEndpoint = attr('endpoint') || '';
   var endpoint = rawEndpoint ? rawEndpoint.replace(/\/+$/, '') : '';
+  var baseHost = endpoint.replace(/\/api\/blaze\/?$/, '').replace(/\/api\/?$/, '');
+  var supportBase = (baseHost || endpoint || '') + '/api/support';
   var appVersion = attr('app-version') || '1.0.0';
   var initialName = attr('user-name') || attr('user-id') || '';
   var initialEmail = attr('user-email') || '';
@@ -208,6 +210,10 @@
     '.ticket-card-meta { font-size: 11.5px; color: #94a3b8; display: flex; justify-content: space-between; }',
     '.new-ticket-action { margin-top: 10px; height: 40px; border-radius: 10px; background: #fff7ed; border: 1.5px dashed #fed7aa; color: #ea580c; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; }',
     '.new-ticket-action:hover { background: #ffedd5; }',
+    '.endpoint-warning { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: 10px; padding: 8px 12px; font-size: 11.5px; margin: 10px 14px 0; line-height: 1.4; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; z-index: 10; box-shadow: 0 2px 6px rgba(153,27,27,0.08); }',
+    '.endpoint-warning-text { flex: 1; word-break: break-word; font-weight: 500; }',
+    '.endpoint-warning-close { cursor: pointer; color: #991b1b; font-size: 14px; font-weight: bold; padding: 0 4px; line-height: 1; opacity: 0.7; }',
+    '.endpoint-warning-close:hover { opacity: 1; }',
 
     // Responsive
     '@media (max-width: 480px) {',
@@ -252,6 +258,10 @@
     '  </div>',
 
     '  <div class="panel-body">',
+    '    <div class="endpoint-warning" hidden>',
+    '      <span class="endpoint-warning-text"></span>',
+    '      <button class="endpoint-warning-close" type="button" aria-label="Dismiss">&times;</button>',
+    '    </div>',
     '    <!-- Identity Gate -->',
     '    <div class="identity-gate" hidden>',
     '      <div class="gate-icon">' + ICONS.sparkle + '</div>',
@@ -440,13 +450,70 @@
     });
   }
 
+  function setEndpointWarning(msg) {
+    var banner = $('.endpoint-warning');
+    if (!banner) return;
+    if (!msg) {
+      banner.hidden = true;
+      return;
+    }
+    var textEl = banner.querySelector('.endpoint-warning-text');
+    if (textEl) textEl.textContent = msg;
+    banner.hidden = false;
+  }
+
+  async function safeFetchJson(url, options) {
+    var res;
+    try {
+      res = await fetch(url, options);
+    } catch (netErr) {
+      var netErrMsg = 'Network/CORS error connecting to ' + url + '. Check backend status, CORS headers, and data-endpoint.';
+      console.warn('[BlazeResolver]', netErrMsg, netErr);
+      setEndpointWarning(netErrMsg);
+      throw new Error(netErrMsg);
+    }
+
+    var contentType = (res.headers && res.headers.get('content-type')) || '';
+    if (!res.ok) {
+      var errorBody = '';
+      try {
+        if (contentType.indexOf('application/json') !== -1) {
+          var errData = await res.json();
+          errorBody = errData.error || errData.message || JSON.stringify(errData);
+        } else {
+          errorBody = (await res.text()).slice(0, 80);
+        }
+      } catch (_) {}
+
+      var errMsg = 'Server error (' + res.status + ' ' + (res.statusText || '') + ')';
+      if (res.status === 404) errMsg += ': Endpoint not found. Ensure backend is running and data-endpoint is configured.';
+      else if (res.status === 401 || res.status === 403) errMsg += ': Access unauthorized. Check token or auth config.';
+      else if (errorBody) errMsg += ': ' + errorBody;
+
+      console.warn('[BlazeResolver]', errMsg, 'at', url);
+      setEndpointWarning(errMsg);
+      throw new Error(errMsg);
+    }
+
+    if (contentType.indexOf('application/json') === -1) {
+      var htmlSnippet = '';
+      try { htmlSnippet = (await res.text()).slice(0, 80); } catch (_) {}
+      var formatMsg = 'Backend returned ' + (contentType || 'non-JSON') + ' instead of JSON. Ensure your server proxies /api/support requests.';
+      console.warn('[BlazeResolver]', formatMsg, htmlSnippet);
+      setEndpointWarning(formatMsg);
+      throw new Error(formatMsg);
+    }
+
+    setEndpointWarning(null);
+    return await res.json();
+  }
+
   // API Actions
   async function fetchTickets() {
     if (!state.customerEmail) return;
     try {
-      var res = await fetch(endpoint + '/api/support/tickets?customerEmail=' + encodeURIComponent(state.customerEmail));
-      var json = await res.json();
-      if (json.success && Array.isArray(json.data)) {
+      var json = await safeFetchJson(supportBase + '/tickets?customerEmail=' + encodeURIComponent(state.customerEmail));
+      if (json && json.success && Array.isArray(json.data)) {
         state.tickets = json.data;
         if (!state.activeTicket && state.tickets.length > 0) {
           state.activeTicket = state.tickets[0];
@@ -461,9 +528,8 @@
   async function loadMessages(ticketId) {
     if (!ticketId) return;
     try {
-      var res = await fetch(endpoint + '/api/support/tickets/' + ticketId + '/messages');
-      var json = await res.json();
-      if (json.success && Array.isArray(json.data)) {
+      var json = await safeFetchJson(supportBase + '/tickets/' + ticketId + '/messages');
+      if (json && json.success && Array.isArray(json.data)) {
         state.messages = json.data;
         renderMessages();
       }
@@ -491,7 +557,7 @@
     try {
       if (!state.activeTicket) {
         // Create new ticket
-        var createRes = await fetch(endpoint + '/api/support/tickets', {
+        var createJson = await safeFetchJson(supportBase + '/tickets', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -499,30 +565,32 @@
             customerName: state.customerName,
             customerEmail: state.customerEmail,
             orderId: state.orderId || undefined,
+            rawText: text,
             message: text,
+            content: text,
             channel: 'text',
             priority: 'normal'
           })
         });
-        var createJson = await createRes.json();
-        if (createJson.success && createJson.data) {
-          state.activeTicket = createJson.data;
+        if (createJson && createJson.success && createJson.data) {
+          state.activeTicket = createJson.data.ticket || createJson.data;
           await fetchTickets();
           await loadMessages(state.activeTicket.id);
         }
       } else {
         // Post message to existing ticket
-        var msgRes = await fetch(endpoint + '/api/support/tickets/' + state.activeTicket.id + '/messages', {
+        var msgJson = await safeFetchJson(supportBase + '/tickets/' + state.activeTicket.id + '/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             senderType: 'customer',
             senderName: state.customerName,
+            body: text,
+            content: text,
             text: text
           })
         });
-        var msgJson = await msgRes.json();
-        if (msgJson.success) {
+        if (msgJson && msgJson.success) {
           await loadMessages(state.activeTicket.id);
         }
       }
@@ -531,7 +599,7 @@
         id: 'err-' + Date.now(),
         senderType: 'agent',
         senderName: 'Blazzy Support',
-        text: '⚠️ Could not reach server. Please check your connection.',
+        text: '⚠️ ' + (err instanceof Error ? err.message : String(err)),
         createdAt: new Date().toISOString()
       });
     } finally {
@@ -544,7 +612,7 @@
   async function submitRating() {
     if (!state.activeTicket) return;
     try {
-      await fetch(endpoint + '/api/support/tickets/' + state.activeTicket.id + '/rating', {
+      await safeFetchJson(supportBase + '/tickets/' + state.activeTicket.id + '/rating', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -612,6 +680,12 @@
   // Ticket clicks & CSAT delegation
   shadow.addEventListener('click', function (e) {
     var target = e.target;
+
+    // Dismiss endpoint warning banner
+    if (target.closest('.endpoint-warning-close')) {
+      setEndpointWarning(null);
+      return;
+    }
     
     // Ticket card click
     var card = target.closest('.ticket-card');

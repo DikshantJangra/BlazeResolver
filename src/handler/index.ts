@@ -241,3 +241,11 @@ export function nodeHandler(handler: (req: Request) => Promise<Response>) {
     res.end(await out.text());
   };
 }
+
+export {
+  createRedisCoordination,
+  createUpstashRestCoordination,
+  type RedisLikeClient,
+  type SharedCoordination,
+  type SharedCoordinationOptions
+} from './coordination.js';

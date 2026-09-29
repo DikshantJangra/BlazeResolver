@@ -30,6 +30,7 @@ Usage: npx blazeresolver@latest <command> [options]
   npx blazeresolver providers show which AI providers your keys were recognized as, in failover order
   npx blazeresolver index     build the vector database of your README and docs, for Blazzy's answers (RAG)
   npx blazeresolver doctor    check this install, GitHub access, Actions secrets, sandbox and branch protection
+  npx blazeresolver validate  run complete end-to-end acceptance validation suite across triage, fix, and lock
   npx blazeresolver try       run the real fix engine on your machine: real AI, real tests/build, a local branch
   blazeresolver fix           run by the workflow: fix the issue that triggered it
   blazeresolver notify        run by the workflow: tell customers a merged fix shipped
@@ -288,6 +289,18 @@ try {
     console.log(await runFixCommand({ env: process.env, config: config() }));
   } else if (command === 'notify') {
     console.log(await runNotifyCommand({ env: process.env, repo: config().repo }));
+  } else if (command === 'validate') {
+    (await import('dotenv')).config({ quiet: true });
+    const { values } = parseArgs({
+      args: rest,
+      options: { repo: { type: 'string' }, live: { type: 'boolean' } }
+    });
+    const { runEndToEndValidation } = await import('./validate-e2e.js');
+    const result = await runEndToEndValidation({
+      repo: values.repo,
+      live: values.live
+    });
+    if (!result.allPassed) process.exitCode = 1;
   } else {
     console.error(`Unknown command: ${command}\n`);
     console.log(HELP);
