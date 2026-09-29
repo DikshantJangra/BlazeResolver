@@ -95,7 +95,23 @@ export class ResponseEngine {
       }
     }
 
-    // 4. General Support / Ticket Created Response
+    // 4. No refund/payment capability for this business — say so honestly instead of a generic ticket note
+    if (executedAction?.approvalStatus === 'failed' && /no refund\/payment adapter|no refund gateway/i.test(executedAction.reason || '')) {
+      const text = isVoice
+        ? "I'm sorry, but this business doesn't process refunds or credits through us. I've logged your request so a team member can follow up on other ways to help."
+        : "We're sorry for the trouble, but this business doesn't have refunds or credits set up through our system. We've logged a support ticket so a team member can follow up with other ways to make this right.";
+      return {
+        text,
+        channel,
+        tone: 'empathetic',
+        containsRefundConfirmation: false,
+        containsApology: true,
+        qualityPassed: true,
+        qualityReviewNotes: 'Refund unsupported for this business — communicated honestly instead of a generic ticket note.'
+      };
+    }
+
+    // 5. General Support / Ticket Created Response
     const defaultText = isVoice
       ? "Thank you for reaching out. We have logged your feedback with our team, and our support staff will assist you shortly."
       : "Thank you for reaching out to us. We have created a support ticket for your query. Our dedicated customer care specialist will follow up with you shortly.";

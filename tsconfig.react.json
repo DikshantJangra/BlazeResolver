@@ -15,6 +15,6 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["client/react.ts", "client/components/support/**/*"],
+  "include": ["client/react.ts", "client/components/support/**/*", "client/components/timeline/**/*"],
   "exclude": ["node_modules", "dist"]
 }

@@ -150,7 +150,8 @@ export interface AvailabilityControl {
 
 export interface ResolverAdapters {
   orderSource: OrderSource;
-  refundGateway: RefundGateway;
+  /** Optional. Omit when this business has no refund/credit/payment system. */
+  refundGateway?: RefundGateway;
   ticketSink: TicketSink;
   signalSource?: SignalSource;
   availabilityControl?: AvailabilityControl;

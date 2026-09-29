@@ -1,6 +1,6 @@
 {
   "name": "blazeresolver",
-  "version": "0.7.5",
+  "version": "0.7.7",
   "description": "Open-source AI harness that turns customer bug reports into reviewed GitHub pull requests",
   "main": "dist/server/src/index.js",
   "type": "module",
@@ -93,7 +93,7 @@
     "!dist/server/src/tests",
     "!dist/**/*.map",
     "widget",
-    "assets/blazyy.svg"
+    "assets"
   ],
   "engines": {
     "node": ">=22.16"

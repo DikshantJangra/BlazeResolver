@@ -7,13 +7,16 @@ import { GeminiFunctionDeclaration } from './types.js';
 /**
  * Returns function declarations for Gemini Multimodal Live API, worded for the active domain profile.
  */
-export function getVoiceToolDeclarations(profile: DomainProfile = GENERIC_PROFILE): GeminiFunctionDeclaration[] {
+export function getVoiceToolDeclarations(
+  profile: DomainProfile = GENERIC_PROFILE,
+  hasRefundGateway: boolean = true
+): GeminiFunctionDeclaration[] {
   const { labels, currency, moneyPolicy } = profile;
   const itemLabel = labels.item.toLowerCase();
   const resourceLabel = labels.resource.toLowerCase();
   const categoryExamples = profile.categories.slice(0, 4).map((c) => c.label.toLowerCase()).join(', ');
 
-  return [
+  const declarations: GeminiFunctionDeclaration[] = [
     {
       name: 'lookup_order',
       description: `Look up real-time order details, line items, prices, delivery status, ${resourceLabel}, and live operational signals. Always invoke this when the customer provides or inquires about an order ID.`,
@@ -128,6 +131,8 @@ export function getVoiceToolDeclarations(profile: DomainProfile = GENERIC_PROFIL
       }
     }
   ];
+
+  return hasRefundGateway ? declarations : declarations.filter((d) => d.name !== 'process_refund');
 }
 
 export interface VoiceToolExecutionContext {
@@ -238,6 +243,13 @@ export async function executeVoiceTool(
           orderId,
           reason,
           message: `Refund of ${money(amount)} exceeds the automated safety threshold (${money(threshold)}). It has been placed in the Supervisor Priority Queue for immediate 1-click human approval.`
+        };
+      }
+
+      if (!adapters.refundGateway) {
+        return {
+          status: 'unsupported',
+          message: 'This business has no refund or payment system connected, so I cannot process refunds or credits. I can file a complaint for a team member to follow up.'
         };
       }
 

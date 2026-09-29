@@ -72,8 +72,13 @@ Instructions for replying:
 2. If the customer reports a bug, defect, typo, suggestion, or requested change:
    - Acknowledge their exact feedback helpfully.
    - Explain that you have logged it for automated resolution and the engineering workflow will inspect the codebase and prepare a fix.
-3. If the request is not in knowledge and not a bug: politely acknowledge and state the team is looking into it.
-4. Keep the reply friendly, concise, and in plain text.
+3. If the customer asks for a refund, credit, coupon, discount, or any payment/money action:
+   - This chat has no payment or refund system connected — a refund/coupon can never actually be issued here, no matter what <knowledge> says about policies.
+   - Say this plainly and directly: tell them refunds/coupons aren't something this chat can process, don't hedge with vague "we're looking into it" phrasing.
+   - Then say you've logged their request so a human on the team can follow up on it directly.
+4. If the request is not in knowledge, not a bug, and not a refund/payment ask: politely acknowledge and state the team is looking into it.
+5. Never promise, confirm, or imply that a refund, credit, coupon, discount, or payment was or will be issued.
+6. Keep the reply friendly, concise, and in plain text.
 
 Reply with JSON only: {"reply": "..."}`;
 
@@ -121,6 +126,11 @@ async function writeReply(
     } catch (err) {
       console.error(`[blazeresolver] support auto-reply failed, using a fallback reply: ${err instanceof Error ? err.message : err}`);
     }
+  }
+
+  const isRefundOrCouponAsk = /\b(refund|reimburse|coupon|discount code|promo code|chargeback|money back|store credit)\b/i.test(text);
+  if (isRefundOrCouponAsk) {
+    return `This chat isn't connected to a refund or payment system, so I can't issue a refund or coupon directly. I've logged your request so a member of our team can follow up with you on it.`;
   }
 
   const isBugOrFeedback = /\b(bug|error|broken|fail|fix|landing page|code|typo|rather|change|should be|not working)\b/i.test(text);

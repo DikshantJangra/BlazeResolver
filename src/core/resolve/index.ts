@@ -301,6 +301,7 @@ export class ResolutionEngine {
   ): Promise<Record<string, unknown>> {
     switch (action.actionType) {
       case 'refund': {
+        if (!adapters.refundGateway) throw new Error('No refund gateway configured for this business');
         if (!action.orderId) throw new Error('Missing orderId for refund');
         if (!action.amount) throw new Error('Missing amount for refund');
         const refundReceipt = await adapters.refundGateway.issueRefund(action.orderId, action.amount, action.idempotencyKey);
@@ -308,6 +309,7 @@ export class ResolutionEngine {
       }
 
       case 'credit': {
+        if (!adapters.refundGateway) throw new Error('No refund gateway configured for this business');
         if (!action.customerId) throw new Error('Missing customerId for credit');
         if (!action.amount) throw new Error('Missing amount for credit');
         const creditReceipt = await adapters.refundGateway.issueCredit(action.customerId, action.amount, action.idempotencyKey);

@@ -93,7 +93,7 @@ describe("a product's desk answers only from that product", () => {
     const res = await handler(new Request('http://localhost/api/support/tickets', { method: 'POST', body: JSON.stringify({ rawText: 'My order never came and I want a refund' }) }));
     const reply = JSON.stringify((await res.json()).data.aiReply);
     assert.doesNotMatch(reply, /in transit|processed a credit|BlazeResolver|dev pipeline/i);
-    assert.match(reply, /Our team is checking this/);
+    assert.match(reply, /can't issue a refund|logged your request/i);
   });
 
   test('keeps the saved replies it was given, also across a reset', async () => {

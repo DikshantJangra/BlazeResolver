@@ -1021,21 +1021,27 @@ app.post('/api/support/tickets/:id/action', async (req, res) => {
 
     let actionNote = `⚡ Admin executed resolution action: ${action}`;
 
-    if (action === 'refund' || action === 'credit') {
-      const refundGateway = adapters.refundGateway as any;
-      if (refundGateway && refundGateway.issueRefund) {
-        await refundGateway.issueRefund({
-          orderId: ticket.orderId || 'ORD-UNKNOWN',
-          amountPaise: (amount || ticket.aiReport?.claimedAmount || 150) * 100,
-          reason,
-          destination: action === 'credit' ? 'wallet' : 'source_payment'
+    if (action === 'refund' || action === 'credit' || action === 'coupon') {
+      if (!adapters.refundGateway) {
+        return res.status(422).json({
+          success: false,
+          error: `This business has no refund/payment adapter configured — ${action}s are not supported here. Connect a RefundGateway adapter to enable this action.`
         });
       }
-      actionNote = `💰 Processed ${action === 'credit' ? 'Wallet Credit' : 'Payment Refund'} of ₹${amount || ticket.aiReport?.claimedAmount || 150} for order #${ticket.orderNumber || 'N/A'}. Reason: ${reason}`;
+      if (action === 'coupon') {
+        actionNote = `🎟️ Issued goodwill discount coupon CODE: BLAZE${Math.floor(Math.random() * 900 + 100)} to customer.`;
+      } else {
+        const gatewayAmount = amount || ticket.aiReport?.claimedAmount || 150;
+        const idempotencyKey = `admin_${action}_${ticketId}_${gatewayAmount}`;
+        if (action === 'credit') {
+          await adapters.refundGateway.issueCredit(ticket.customerId || 'CUSTOMER-UNKNOWN', gatewayAmount, idempotencyKey);
+        } else {
+          await adapters.refundGateway.issueRefund(ticket.orderId || 'ORD-UNKNOWN', gatewayAmount, idempotencyKey);
+        }
+        actionNote = `💰 Processed ${action === 'credit' ? 'Wallet Credit' : 'Payment Refund'} of ₹${gatewayAmount} for order #${ticket.orderNumber || 'N/A'}. Reason: ${reason}`;
+      }
     } else if (action === 'replacement') {
       actionNote = `📦 Authorized complimentary replacement dispatch for order #${ticket.orderNumber || 'N/A'}. Reason: ${reason}`;
-    } else if (action === 'coupon') {
-      actionNote = `🎟️ Issued goodwill discount coupon CODE: BLAZE${Math.floor(Math.random() * 900 + 100)} to customer.`;
     }
 
     supportStore.addMessage(ticketId, {

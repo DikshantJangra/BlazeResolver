@@ -69,6 +69,10 @@ export class ToolExecutionGuard {
     }
 
     // 2. Financial bounds check
+    if ((action.actionType === 'refund' || action.actionType === 'credit') && !adapters.refundGateway) {
+      return { valid: false, reason: 'This business has no refund/payment adapter configured — refunds and credits are not supported here' };
+    }
+
     if (action.actionType === 'refund') {
       if (!action.orderId) {
         return { valid: false, reason: 'Refund action requires a valid orderId' };

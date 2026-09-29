@@ -101,13 +101,14 @@ export class GeminiLiveSession {
     const model = this.config.model || 'models/gemini-2.0-flash-exp';
 
     const profile = this.context.pipeline.getProfile();
+    const hasRefundGateway = !!this.context.pipeline.getAdapters().refundGateway;
     const systemPrompt =
       this.config.systemInstruction ||
       `You are Blazzy, the real-time AI voice resolution agent for BlazeResolver, supporting customers of a ${profile.labels.business}.
 You speak empathetically, concisely, and with a natural conversational tone.
 When customers complain about an order or state an order ID, ALWAYS dispatch tools mid-conversation:
 - lookup_order: to check items, pricing, delivery status, and live operational signals.
-- process_refund: to issue refunds/credits for valid issues like ${profile.categories.slice(0, 4).map((c) => c.label.toLowerCase()).join(', ')}.
+${hasRefundGateway ? `- process_refund: to issue refunds/credits for valid issues like ${profile.categories.slice(0, 4).map((c) => c.label.toLowerCase()).join(', ')}.` : "- This business has no refund or payment system connected: never promise, imply, or offer a refund, credit, or coupon. If the customer asks for one, apologize and use file_complaint or escalate_to_human instead."}
 - file_complaint: to file complaints into the correlation engine and detect systemic operational issues.
 - escalate_to_human: if the customer demands a human supervisor or there is a critical dispute.
 - check_incident_status: to check for active incidents at a ${profile.labels.resource.toLowerCase()}.
@@ -132,7 +133,7 @@ Always clearly mention amounts in ${profile.currency.code} (${profile.currency.s
         },
         tools: [
           {
-            functionDeclarations: getVoiceToolDeclarations(profile)
+            functionDeclarations: getVoiceToolDeclarations(profile, hasRefundGateway)
           }
         ]
       }
