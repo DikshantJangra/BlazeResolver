@@ -28,7 +28,8 @@ export interface SupportHandlerOptions {
   product?: string;
   /**
    * The README on disk, read before GitHub's. By default the one at the root of this app's checkout (when `repo` is
-   * set, only if its GitHub remote is `repo`). A path reads that file; `false` reads none.
+   * set, only if its GitHub remote, or the host's record of the deployed repo, is `repo`). A path reads that file;
+   * `false` reads none.
    */
   readmePath?: string | false;
   /**

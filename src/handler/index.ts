@@ -27,7 +27,7 @@ export interface HandlerOptions {
   product?: string;
   /**
    * The README on disk, read before GitHub's. By default the one at the root of this app's checkout, when its GitHub
-   * remote is `repo`. A path reads that file; `false` reads none (GitHub only).
+   * remote (or the host's record of the deployed repo) is `repo`. A path reads that file; `false` reads none (GitHub only).
    */
   readmePath?: string | false;
   /**

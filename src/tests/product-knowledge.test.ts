@@ -67,6 +67,30 @@ describe("the product's README, read from its own checkout", () => {
     assert.equal(gh.calls(), 1);
   });
 
+  it("never answers a repo's questions from a deployed copy (no .git) that nothing says is that repo", async () => {
+    process.chdir(product('# Some other product'));
+    const gh = github('# Store from GitHub');
+    assert.equal(await loadDocs({ readme: { repo: 'acme/store', fetch: gh.f } }), '# Store from GitHub');
+    assert.equal(gh.calls(), 1);
+  });
+
+  it('reads a deployed copy (no .git) when the host says it was built from the repo', async () => {
+    const vars = { VERCEL_GIT_PROVIDER: 'github', VERCEL_GIT_REPO_OWNER: 'acme', VERCEL_GIT_REPO_SLUG: 'deployed' };
+    const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+    Object.assign(process.env, vars);
+    try {
+      process.chdir(product('# Deployed\n\nAll plans include support.'));
+      const gh = github();
+      assert.match(await loadDocs({ readme: { repo: 'acme/deployed', fetch: gh.f } }), /All plans include support/);
+      assert.equal(gh.calls(), 0);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
   it('picks up edits to the README, and can be pointed at a file or turned off', async () => {
     const root = product('# v1', 'acme/edits');
     process.chdir(root);

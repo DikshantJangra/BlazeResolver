@@ -15,7 +15,8 @@ export interface AnswerOptions {
   /**
    * The README on disk, read before GitHub's: the product's own checkout, where the handler runs. By default the
    * README at the root of the enclosing git repo (or the working directory, when deployed without .git), used only
-   * when that checkout's GitHub remote is `readme.repo`. A path reads that file; `false` reads none.
+   * when the checkout is known to be `readme.repo`: by its GitHub remote, or, deployed without .git, by the host's
+   * record of the repo (Vercel, Railway, Render). A path reads that file; `false` reads none.
    */
   readmePath?: string | false;
   /** Adds semantic search to keyword search. Without one, sections are found by keywords alone. */
@@ -157,24 +158,40 @@ const readmePaths = new Map<string, string | null>();
 /** READMEs read from disk, re-read when the file changes. */
 const localReadmes = new Map<string, { mtimeMs: number; text: string }>();
 
+/** The owner/name the host says this deploy was built from, for deploys without .git. Empty off those hosts. */
+function hostRepos(): string[] {
+  const env = ((globalThis as any).process?.env ?? {}) as Record<string, string | undefined>;
+  const repos: string[] = [];
+  if (env.VERCEL_GIT_PROVIDER === 'github' && env.VERCEL_GIT_REPO_OWNER && env.VERCEL_GIT_REPO_SLUG) {
+    repos.push(`${env.VERCEL_GIT_REPO_OWNER}/${env.VERCEL_GIT_REPO_SLUG}`);
+  }
+  if (env.RAILWAY_GIT_REPO_OWNER && env.RAILWAY_GIT_REPO_NAME) repos.push(`${env.RAILWAY_GIT_REPO_OWNER}/${env.RAILWAY_GIT_REPO_NAME}`);
+  if (env.RENDER_GIT_REPO_SLUG) repos.push(env.RENDER_GIT_REPO_SLUG);
+  return repos;
+}
+
 function findReadme(fs: Fs, path: Path, repo: string | undefined): string | null {
   const cwd = (globalThis as any).process?.cwd?.() as string | undefined;
   if (!cwd) return null;
   const root = gitRoot(fs, path, cwd);
-  // One checkout can serve other repos' questions (a hosted server); its README only answers for its own repo.
-  if (root && repo) {
-    const remotes = githubRemotes(fs, path, root);
-    if (remotes.length && !remotes.some((r) => r.toLowerCase() === repo.toLowerCase())) return null;
-  }
-  for (const dir of [...new Set([root ?? cwd, cwd])]) {
-    for (const name of README_NAMES) {
-      const file = path.join(dir, name);
-      try {
-        if (fs.statSync(file).isFile()) return file;
-      } catch {
-        // not there
-      }
+  const isFile = (file: string) => {
+    try {
+      return fs.statSync(file).isFile();
+    } catch {
+      return false;
     }
+  };
+  const file = [...new Set([root ?? cwd, cwd])].flatMap((dir) => README_NAMES.map((name) => path.join(dir, name))).find(isFile) ?? null;
+  if (!file || !repo) return file;
+  // One checkout can serve other repos' questions (a hosted server), so its README only answers for the repo it is
+  // known to be. Without a .git remote or a host naming the repo, that's unknown: answer from GitHub instead.
+  const own = [...(root ? githubRemotes(fs, path, root) : []), ...hostRepos()];
+  if (own.some((r) => r.toLowerCase() === repo.toLowerCase())) return file;
+  if (!own.length) {
+    console.warn(
+      `[blazeresolver] not answering ${repo}'s questions from ${file}: this deploy has no .git remote (or host variable) ` +
+        `saying it is ${repo}, so ${repo}'s README is read from GitHub instead. Pass readmePath to use a file on disk.`
+    );
   }
   return null;
 }
