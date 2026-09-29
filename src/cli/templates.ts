@@ -377,9 +377,14 @@ Modes
   python agents/blaze_triage_agent.py --mode scan      [--since 24h]
 
 Environment:
-  GEMINI_API_KEY     – required
+  GEMINI_API_KEY     – a Gemini key; also read from GOOGLE_API_KEY, GEMINI_API_KEY_1..20,
+                       or any AIza... key in API_KEYS / API_KEY_1..20.
+                       Or OLLAMA_BASE_URL / OLLAMA_MODEL for a local Ollama server.
   GITHUB_TOKEN       – required (issues:write, pull-requests:write)
   GITHUB_REPOSITORY  – owner/repo (auto-set in Actions)
+
+The Antigravity SDK can't send other providers' keys, so an OpenAI, Anthropic or
+Groq key alone can't run this agent.
 """
 
 from __future__ import annotations
@@ -392,7 +397,7 @@ import textwrap
 import urllib.request
 from typing import Any
 
-from google.antigravity import Agent, LocalAgentConfig, types
+from google.antigravity import Agent, LocalAgentConfig, LocalOpenAIAgentConfig, types
 from google.antigravity.hooks import hooks
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s – %(message)s")
@@ -557,117 +562,31 @@ SCAN_SYSTEM = textwrap.dedent("""
 """)
 
 
-def _find_provider_and_key() -> tuple[str, str, str | None]:
-    named_order = [
-        ("gemini", os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_GENERATIVE_AI_API_KEY")),
-        ("openai", os.environ.get("OPENAI_API_KEY")),
-        ("groq", os.environ.get("GROQ_API_KEY")),
-        ("anthropic", os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_API_KEY")),
-        ("deepseek", os.environ.get("DEEPSEEK_API_KEY")),
-        ("qwen", os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("QWEN_API_KEY") or os.environ.get("ALIBABA_API_KEY")),
-        ("xai", os.environ.get("XAI_API_KEY")),
-        ("openrouter", os.environ.get("OPENROUTER_API_KEY")),
-    ]
-    for prov, k in named_order:
-        if k and k.strip():
-            if prov == "gemini":
-                return ("gemini", k.strip(), None)
-            elif prov == "openai":
-                return ("openai", k.strip(), os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"))
-            elif prov == "groq":
-                return ("groq", k.strip(), "https://api.groq.com/openai/v1")
-            elif prov == "anthropic":
-                return ("anthropic", k.strip(), "https://api.anthropic.com/v1")
-            elif prov == "deepseek":
-                return ("deepseek", k.strip(), os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
-            elif prov == "qwen":
-                return ("qwen", k.strip(), os.environ.get("QWEN_BASE_URL") or os.environ.get("DASHSCOPE_BASE_URL") or "https://dashscope-intl.aliyuncs.com/compatible-mode/v1")
-            elif prov == "xai":
-                return ("xai", k.strip(), "https://api.x.ai/v1")
-            elif prov == "openrouter":
-                return ("openrouter", k.strip(), "https://openrouter.ai/api/v1")
-
-    raw_keys: list[str] = []
-    if os.environ.get("API_KEYS"):
-        for chunk in os.environ["API_KEYS"].split(","):
-            if chunk.strip():
-                raw_keys.append(chunk.strip())
-
-    if os.environ.get("API_KEY"):
-        raw_keys.append(os.environ["API_KEY"].strip())
-
+def _gemini_key() -> str | None:
+    """A Gemini API key from the environment, wherever the BlazeResolver docs let you put one."""
+    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"):
+        if os.environ.get(name, "").strip():
+            return os.environ[name].strip()
     for i in range(1, 21):
-        for prefix in ["API_KEY_", "GEMINI_API_KEY_", "OPENAI_API_KEY_", "GROQ_API_KEY_", "ANTHROPIC_API_KEY_"]:
-            val = os.environ.get(f"{prefix}{i}")
-            if val and val.strip():
-                raw_keys.append(val.strip())
-
-    for key in raw_keys:
-        if key.startswith("AIza"):
-            return ("gemini", key, None)
-        elif key.startswith("sk-ant-"):
-            return ("anthropic", key, "https://api.anthropic.com/v1")
-        elif key.startswith("gsk_"):
-            return ("groq", key, "https://api.groq.com/openai/v1")
-        elif key.startswith("nvapi-"):
-            return ("nvidia", key, "https://integrate.api.nvidia.com/v1")
-        elif key.startswith("xai-"):
-            return ("xai", key, "https://api.x.ai/v1")
-        elif key.startswith("pplx-"):
-            return ("perplexity", key, "https://api.perplexity.ai")
-        elif key.startswith("sk-"):
-            return ("openai", key, "https://api.openai.com/v1")
-
-    if raw_keys:
-        return ("openai", raw_keys[0], "https://api.openai.com/v1")
-
-    if os.environ.get("OLLAMA_BASE_URL"):
-        return ("ollama", "ollama", os.environ["OLLAMA_BASE_URL"])
-
-    return ("none", "", None)
+        if os.environ.get(f"GEMINI_API_KEY_{i}", "").strip():
+            return os.environ[f"GEMINI_API_KEY_{i}"].strip()
+    # Universal key variables hold any provider's keys; Gemini's start with AIza.
+    universal = os.environ.get("API_KEYS", "").split(",") + [os.environ.get("API_KEY", "")]
+    universal += [os.environ.get(f"API_KEY_{i}", "") for i in range(1, 21)]
+    return next((k.strip() for k in universal if k.strip().startswith("AIza")), None)
 
 
-def _make_config(system: str, extra_tools: list | None = None) -> Any:
-    tools = _COMMON_TOOLS + (extra_tools or [])
-    provider, key, base_url = _find_provider_and_key()
-    if provider == "gemini":
-        return LocalAgentConfig(
-            api_key=key,
-            system_instructions=system,
-            tools=tools,
-            capabilities=types.CapabilitiesConfig(
-                agent_behavior=types.AgentBehavior.AUTONOMOUS,
-            ),
-            budget_config=types.BudgetConfig(
-                max_model_calls=50,
-                max_tool_calls=120,
-            ),
-            hooks=[gate_tool, on_tool_error],
-        )
+def _make_config(system: str, extra_tools: list | None = None) -> LocalAgentConfig | LocalOpenAIAgentConfig:
+    """The agent config for the model backend found in the environment.
 
-    if provider != "none":
-        try:
-            from google.antigravity import LocalOpenAIAgentConfig  # type: ignore
-            return LocalOpenAIAgentConfig(
-                api_key=key,
-                base_url=base_url or "https://api.openai.com/v1",
-                system_instructions=system,
-                tools=tools,
-                capabilities=types.CapabilitiesConfig(
-                    agent_behavior=types.AgentBehavior.AUTONOMOUS,
-                ),
-                budget_config=types.BudgetConfig(
-                    max_model_calls=50,
-                    max_tool_calls=120,
-                ),
-                hooks=[gate_tool, on_tool_error],
-            )
-        except ImportError:
-            pass
-
-    return LocalAgentConfig(
+    The Antigravity SDK runs on Gemini (with an API key) or on a keyless local
+    OpenAI-compatible server such as Ollama. It has no way to send other providers'
+    keys, so without either this fails with a clear error instead of calling a model
+    without credentials.
+    """
+    kwargs: dict[str, Any] = dict(
         system_instructions=system,
-        tools=tools,
+        tools=_COMMON_TOOLS + (extra_tools or []),
         capabilities=types.CapabilitiesConfig(
             agent_behavior=types.AgentBehavior.AUTONOMOUS,
         ),
@@ -676,6 +595,20 @@ def _make_config(system: str, extra_tools: list | None = None) -> Any:
             max_tool_calls=120,
         ),
         hooks=[gate_tool, on_tool_error],
+    )
+    key = _gemini_key()
+    if key:
+        return LocalAgentConfig(api_key=key, **kwargs)
+    if os.environ.get("OLLAMA_BASE_URL") or os.environ.get("OLLAMA_MODEL"):
+        return LocalOpenAIAgentConfig(
+            base_url=os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434/v1",
+            model=os.environ.get("OLLAMA_MODEL") or "llama3.1",
+            **kwargs,
+        )
+    raise EnvironmentError(
+        "The Antigravity agents need a Gemini API key (GEMINI_API_KEY, or an AIza... key in API_KEYS) "
+        "or a local Ollama server (OLLAMA_BASE_URL). Other providers' keys can't run the Antigravity SDK. "
+        "Free Gemini key: https://aistudio.google.com/apikey"
     )
 
 
@@ -761,11 +694,16 @@ Run via:
     python agents/blaze_resolver_agent.py --issue <number>
 
 Environment:
-    GEMINI_API_KEY     – required (Google AI Studio)
+    GEMINI_API_KEY     – a Gemini key (Google AI Studio); also read from GOOGLE_API_KEY,
+                         GEMINI_API_KEY_1..20, or any AIza... key in API_KEYS / API_KEY_1..20.
+                         Or OLLAMA_BASE_URL / OLLAMA_MODEL for a local Ollama server.
     GITHUB_TOKEN       – required (write perms: issues, pull-requests, contents)
     GITHUB_REPOSITORY  – owner/repo  (set by GitHub Actions automatically)
     AGY_SIDECAR_PORT   – optional port to also expose a local HTTP sidecar
                          so the Node AntigravityProvider can call in.
+
+The Antigravity SDK can't send other providers' keys, so an OpenAI, Anthropic or
+Groq key alone can't run this agent; the Node fix engine (npx blazeresolver fix) can.
 
 Architecture (multi-tier subagent hierarchy):
   root-orchestrator
@@ -786,7 +724,7 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-from google.antigravity import Agent, LocalAgentConfig, types
+from google.antigravity import Agent, LocalAgentConfig, LocalOpenAIAgentConfig, types
 from google.antigravity.hooks import hooks
 
 logging.basicConfig(
@@ -794,6 +732,48 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
 )
 log = logging.getLogger("blaze_agent")
+
+
+# ---------------------------------------------------------------------------
+# Model backend
+# ---------------------------------------------------------------------------
+
+def _gemini_key() -> str | None:
+    """A Gemini API key from the environment, wherever the BlazeResolver docs let you put one."""
+    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"):
+        if os.environ.get(name, "").strip():
+            return os.environ[name].strip()
+    for i in range(1, 21):
+        if os.environ.get(f"GEMINI_API_KEY_{i}", "").strip():
+            return os.environ[f"GEMINI_API_KEY_{i}"].strip()
+    # Universal key variables hold any provider's keys; Gemini's start with AIza.
+    universal = os.environ.get("API_KEYS", "").split(",") + [os.environ.get("API_KEY", "")]
+    universal += [os.environ.get(f"API_KEY_{i}", "") for i in range(1, 21)]
+    return next((k.strip() for k in universal if k.strip().startswith("AIza")), None)
+
+
+def _make_config(**kwargs: Any) -> LocalAgentConfig | LocalOpenAIAgentConfig:
+    """The agent config for the model backend found in the environment.
+
+    The Antigravity SDK runs on Gemini (with an API key) or on a keyless local
+    OpenAI-compatible server such as Ollama. It has no way to send other providers'
+    keys, so without either this fails with a clear error instead of calling a model
+    without credentials.
+    """
+    key = _gemini_key()
+    if key:
+        return LocalAgentConfig(api_key=key, **kwargs)
+    if os.environ.get("OLLAMA_BASE_URL") or os.environ.get("OLLAMA_MODEL"):
+        return LocalOpenAIAgentConfig(
+            base_url=os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434/v1",
+            model=os.environ.get("OLLAMA_MODEL") or "llama3.1",
+            **kwargs,
+        )
+    raise EnvironmentError(
+        "The Antigravity agents need a Gemini API key (GEMINI_API_KEY, or an AIza... key in API_KEYS) "
+        "or a local Ollama server (OLLAMA_BASE_URL). Other providers' keys can't run the Antigravity SDK; "
+        "the Node fix engine (npx blazeresolver fix) uses them. Free Gemini key: https://aistudio.google.com/apikey"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1050,7 +1030,7 @@ async def run_fix_agent(issue_number: int, repo_root: str = ".") -> None:
         Begin the fix pipeline now.
     """).strip()
 
-    config = LocalAgentConfig(
+    config = _make_config(
         system_instructions=SYSTEM_INSTRUCTIONS,
         tools=[run_tests, run_build, apply_patch, git_diff, post_github_comment],
         subagents=[INVESTIGATOR, FIX_ENGINEER, PR_REPORTER],
@@ -1090,7 +1070,7 @@ async def run_fix_agent(issue_number: int, repo_root: str = ".") -> None:
 SIDECAR_FALLBACK_PORTS = [7391, 7390]
 
 
-async def run_sidecar(port: int, config: LocalAgentConfig) -> int | None:
+async def run_sidecar(port: int, config: LocalAgentConfig | LocalOpenAIAgentConfig) -> int | None:
     """Tiny HTTP server that lets the TS side call in for one-shot agent turns.
 
     Returns the port it listens on, or None when every candidate port is busy. The
@@ -1201,7 +1181,7 @@ if __name__ == "__main__":
 
     async def main() -> None:
         if args.sidecar:
-            sidecar_cfg = LocalAgentConfig(
+            sidecar_cfg = _make_config(
                 system_instructions="You are a code analysis assistant. Return only JSON.",
                 budget_config=types.BudgetConfig(max_model_calls=30, max_tool_calls=60),
             )

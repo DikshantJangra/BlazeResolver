@@ -6,11 +6,16 @@ Run via:
     python agents/blaze_resolver_agent.py --issue <number>
 
 Environment:
-    GEMINI_API_KEY     – required (Google AI Studio)
+    GEMINI_API_KEY     – a Gemini key (Google AI Studio); also read from GOOGLE_API_KEY,
+                         GEMINI_API_KEY_1..20, or any AIza... key in API_KEYS / API_KEY_1..20.
+                         Or OLLAMA_BASE_URL / OLLAMA_MODEL for a local Ollama server.
     GITHUB_TOKEN       – required (write perms: issues, pull-requests, contents)
     GITHUB_REPOSITORY  – owner/repo  (set by GitHub Actions automatically)
     AGY_SIDECAR_PORT   – optional port to also expose a local HTTP sidecar
                          so the Node AntigravityProvider can call in.
+
+The Antigravity SDK can't send other providers' keys, so an OpenAI, Anthropic or
+Groq key alone can't run this agent; the Node fix engine (npx blazeresolver fix) can.
 
 Architecture (multi-tier subagent hierarchy):
   root-orchestrator
@@ -31,7 +36,7 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-from google.antigravity import Agent, LocalAgentConfig, types
+from google.antigravity import Agent, LocalAgentConfig, LocalOpenAIAgentConfig, types
 from google.antigravity.hooks import hooks
 
 logging.basicConfig(
@@ -39,6 +44,48 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
 )
 log = logging.getLogger("blaze_agent")
+
+
+# ---------------------------------------------------------------------------
+# Model backend
+# ---------------------------------------------------------------------------
+
+def _gemini_key() -> str | None:
+    """A Gemini API key from the environment, wherever the BlazeResolver docs let you put one."""
+    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"):
+        if os.environ.get(name, "").strip():
+            return os.environ[name].strip()
+    for i in range(1, 21):
+        if os.environ.get(f"GEMINI_API_KEY_{i}", "").strip():
+            return os.environ[f"GEMINI_API_KEY_{i}"].strip()
+    # Universal key variables hold any provider's keys; Gemini's start with AIza.
+    universal = os.environ.get("API_KEYS", "").split(",") + [os.environ.get("API_KEY", "")]
+    universal += [os.environ.get(f"API_KEY_{i}", "") for i in range(1, 21)]
+    return next((k.strip() for k in universal if k.strip().startswith("AIza")), None)
+
+
+def _make_config(**kwargs: Any) -> LocalAgentConfig | LocalOpenAIAgentConfig:
+    """The agent config for the model backend found in the environment.
+
+    The Antigravity SDK runs on Gemini (with an API key) or on a keyless local
+    OpenAI-compatible server such as Ollama. It has no way to send other providers'
+    keys, so without either this fails with a clear error instead of calling a model
+    without credentials.
+    """
+    key = _gemini_key()
+    if key:
+        return LocalAgentConfig(api_key=key, **kwargs)
+    if os.environ.get("OLLAMA_BASE_URL") or os.environ.get("OLLAMA_MODEL"):
+        return LocalOpenAIAgentConfig(
+            base_url=os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434/v1",
+            model=os.environ.get("OLLAMA_MODEL") or "llama3.1",
+            **kwargs,
+        )
+    raise EnvironmentError(
+        "The Antigravity agents need a Gemini API key (GEMINI_API_KEY, or an AIza... key in API_KEYS) "
+        "or a local Ollama server (OLLAMA_BASE_URL). Other providers' keys can't run the Antigravity SDK; "
+        "the Node fix engine (npx blazeresolver fix) uses them. Free Gemini key: https://aistudio.google.com/apikey"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +342,7 @@ async def run_fix_agent(issue_number: int, repo_root: str = ".") -> None:
         Begin the fix pipeline now.
     """).strip()
 
-    config = LocalAgentConfig(
+    config = _make_config(
         system_instructions=SYSTEM_INSTRUCTIONS,
         tools=[run_tests, run_build, apply_patch, git_diff, post_github_comment],
         subagents=[INVESTIGATOR, FIX_ENGINEER, PR_REPORTER],
@@ -335,7 +382,7 @@ async def run_fix_agent(issue_number: int, repo_root: str = ".") -> None:
 SIDECAR_FALLBACK_PORTS = [7391, 7390]
 
 
-async def run_sidecar(port: int, config: LocalAgentConfig) -> int | None:
+async def run_sidecar(port: int, config: LocalAgentConfig | LocalOpenAIAgentConfig) -> int | None:
     """Tiny HTTP server that lets the TS side call in for one-shot agent turns.
 
     Returns the port it listens on, or None when every candidate port is busy. The
@@ -446,7 +493,7 @@ if __name__ == "__main__":
 
     async def main() -> None:
         if args.sidecar:
-            sidecar_cfg = LocalAgentConfig(
+            sidecar_cfg = _make_config(
                 system_instructions="You are a code analysis assistant. Return only JSON.",
                 budget_config=types.BudgetConfig(max_model_calls=30, max_tool_calls=60),
             )
