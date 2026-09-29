@@ -53,6 +53,8 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const selectedTicketRef = useRef<SupportTicket | null>(null);
+  /** Whether the live socket is connected; while it isn't, the open thread is refreshed by polling. */
+  const liveRef = useRef(false);
   selectedTicketRef.current = selectedTicket;
 
   const authHeaders: Record<string, string> = adminToken ? { Authorization: `Bearer ${adminToken}` } : {};
@@ -133,6 +135,9 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
       if (!isMounted) return;
       try {
         ws = new WebSocket(targetWs);
+        ws.onopen = () => {
+          liveRef.current = true;
+        };
         ws.onmessage = (event) => {
           try {
             const payload = JSON.parse(event.data);
@@ -162,6 +167,7 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
           }
         };
         ws.onclose = () => {
+          liveRef.current = false;
           if (isMounted) retryTimer = setTimeout(connect, 3000);
         };
       } catch {
@@ -179,6 +185,20 @@ export const AdminSupportDesk: React.FC<AdminSupportDeskProps> = ({
       }
     };
   }, [wsUrl, baseUrl, viewMode]);
+
+  // Without the live socket (a backend that has none, like the Next.js route), refresh the open thread instead, so
+  // notes posted after the reply (the fix pipeline's progress) still show up.
+  useEffect(() => {
+    if (viewMode !== 'admin' || !selectedTicket) return;
+    const ticketId = selectedTicket.id;
+    const interval = setInterval(async () => {
+      if (liveRef.current) return;
+      const res = await fetch(`${baseUrl}/api/support/tickets/${ticketId}/messages`, { headers: { ...authHeaders } }).catch(() => undefined);
+      const json = res?.ok && (res.headers.get('content-type') || '').includes('application/json') ? await res.json().catch(() => undefined) : undefined;
+      if (json?.success && Array.isArray(json.data) && selectedTicketRef.current?.id === ticketId) setMessages(json.data);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [baseUrl, viewMode, selectedTicket?.id]);
 
   useEffect(() => {
     if (viewMode !== 'admin') return;

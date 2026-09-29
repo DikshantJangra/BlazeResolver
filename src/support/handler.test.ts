@@ -165,3 +165,24 @@ describe('the local fix pipeline from the support chat', () => {
     assert.doesNotMatch(notes(store, id).join('\n'), /fix pipeline on this machine/);
   });
 });
+
+describe('the local fix pipeline and wrong wording', () => {
+  test('runs for a report of wrong text even when triage files it as feedback, and not for feedback without it', async () => {
+    const store = new SupportStore();
+    let runs = 0;
+    // The model calls the typo "other" (feedback), as it sometimes does.
+    const complete = async () => JSON.stringify({ type: 'report', kind: 'other', severity: 'low', summary: 'The header logo has a typo.', steps: [] });
+    const handler = createSupportHandler({ store, embed: false, complete, localFix: async () => { runs++; return { status: 'READY_FOR_REVIEW', branch: 'blazeresolver/fix-1' }; } });
+    const post = (rawText: string) => handler(new Request('http://localhost/api/support/tickets', { method: 'POST', body: JSON.stringify({ rawText }) }));
+
+    for (const text of ['The logo in the header is spelled wrong. It says AcmeCheckuot instead of AcmeCheckout.', 'the spelling of Acme in the header is wrong, fix this bug']) {
+      await post(text);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    assert.equal(runs, 2);
+
+    await post('I love the new colors on the dashboard, great work!');
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(runs, 2);
+  });
+});

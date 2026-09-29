@@ -91,6 +91,9 @@ Instructions for replying:
 Reply with JSON only: {"reply": "..."}`;
 
 const MAX_REPLY = 1500;
+/** A report that names wrong text in the product: a typo or misspelling, or "it says X instead of Y". */
+const WRONG_TEXT =
+  /\b(typos?|misspel\w*|spel(t|led)\s+(wrong|incorrectly)|wrong(ly)?\s+spel\w*|incorrect(ly)?\s+spel\w*|spelling\b.{0,60}\b(wrong|incorrect|mistakes?|errors?|off)|(says|shows|reads|displays)\b.{1,80}\binstead\s+of)\b/i;
 /** Strips a tag's closing form so text can't end the block it sits in. */
 const fence = (text: string, tag: string) => text.replace(new RegExp(`</\\s*${tag}\\s*>`, 'gi'), '');
 /** Saved replies as a doc section each, so they're searched like the help docs. */
@@ -214,7 +217,10 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
   const startLocalFix = async (ticketId: string, text: string) => {
     if (!localFixRunner) return;
     const verdict = await triage(ReportSchema.parse({ message: text }), complete).catch(() => undefined);
-    if (!verdict?.enterFixLoop || store.getTicket(ticketId)?.isEscalated) return;
+    // Triage files wrong wording as feedback, not a bug, so it stays out of the online fix loop; locally a report that
+    // names the wrong text is as fixable as any bug. Decided from the words, since the model's kind for it varies.
+    const fixable = verdict?.enterFixLoop || (verdict?.type === 'report' && verdict.kind !== 'abuse' && !verdict.injection && WRONG_TEXT.test(text));
+    if (!verdict || !fixable || store.getTicket(ticketId)?.isEscalated) return;
     store.updateTicket(ticketId, { isEscalated: true, pulseStatus: 'investigating' });
     systemNote(ticketId, `⚡ Confirmed as a bug: ${verdict.summary.replace(/[.\s]+$/, '')}. Starting the automated fix pipeline on this machine.`);
     void enqueueLocalFix(localFixRunner, { title: verdict.summary, description: text }, (event) => systemNote(ticketId, `🔧 ${event}`)).then(

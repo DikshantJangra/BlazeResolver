@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { withBusyRetry, workingTreePatch } from '../cli/try.js';
+import { withBusyRetry, withMalformedRetry, workingTreePatch } from '../cli/try.js';
 
 describe('blazeresolver try', () => {
   it('carries the whole working tree into the workspace, new files too, but nothing git-ignored', () => {
@@ -51,5 +51,27 @@ describe('blazeresolver try model calls', () => {
 
     const alwaysBusy = withBusyRetry(async () => { throw new Error('gemini 429'); }, undefined, [1, 1]);
     await assert.rejects(alwaysBusy('s', 'u'), /429/);
+  });
+});
+
+describe('blazeresolver try model replies', () => {
+  it('asks again when the reply is not valid JSON, but not for other failures', async () => {
+    let calls = 0;
+    const flaky = {
+      investigate: async () => {
+        if (++calls < 3) JSON.parse("{\n    rootCause: 'x'\n}");
+        return { rootCause: 'typo', confidence: 'high', suspectedFiles: ['a.ts'] } as any;
+      },
+      proposeFix: async () => { throw new Error('gemini 401'); }
+    };
+    const events: string[] = [];
+    const ai = withMalformedRetry(flaky, (e) => events.push(e));
+    assert.equal((await ai.investigate({} as any)).rootCause, 'typo');
+    assert.equal(calls, 3);
+    assert.equal(events.length, 2);
+    await assert.rejects(ai.proposeFix({} as any), /401/);
+
+    const alwaysBroken = withMalformedRetry({ investigate: async () => JSON.parse('{ bad'), proposeFix: async () => ({}) as any }, undefined, 1);
+    await assert.rejects(alwaysBroken.investigate({} as any), SyntaxError);
   });
 });

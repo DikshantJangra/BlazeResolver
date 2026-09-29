@@ -74,7 +74,7 @@ export const cliLocalFix =
 /**
  * The file a customer's words point to, found by plain text search: the code-structure search the engine starts from
  * finds functions and symbols, not a misspelled label or message in markup. Takes the report's rarest word (camelCase
- * split too, since "BlazeReslover" may be written as Blaze + Reslover) found in 1 to 3 source files; tests and docs
+ * split too, since "AcmeCheckuot" may be written as Acme + Checkuot) found in 1 to 3 source files; tests and docs
  * don't count. Undefined when no word is that distinctive.
  */
 export function suspectFile(cp: Pick<ChildProcess, 'execFileSync'>, cwd: string, text: string): string | undefined {
@@ -85,7 +85,7 @@ export function suspectFile(cp: Pick<ChildProcess, 'execFileSync'>, cwd: string,
       return ''; // git grep exits 1 when nothing matches
     }
   };
-  // Only words that name something: compounds (BlazeReslover, checkoutButton) and their parts, or quoted text. Plain
+  // Only words that name something: compounds (AcmeCheckuot, checkoutButton) and their parts, or quoted text. Plain
   // English words ("spelled", "header") match some file by chance, and a wrong lead is worse than none.
   const quoted = [...text.matchAll(/["'“‘`]([^"'”’`]{3,60})["'”’`]/g)].map((m) => m[1]);
   const words = new Set<string>();

@@ -82,6 +82,29 @@ export function withBusyRetry(
   };
 }
 
+/**
+ * Asks the model again (up to `retries` more times) when its analysis or fix isn't the JSON the engine reads: a model
+ * sometimes slips (single quotes, a comment, a trailing comma), and one slip shouldn't end a run that already cloned,
+ * installed and tested. Any other failure passes straight through.
+ */
+export function withMalformedRetry(ai: AIProvider, onProgress?: (event: string) => void, retries = 2): AIProvider {
+  const again = async <T>(what: string, call: () => Promise<T>): Promise<T> => {
+    for (let i = 0; ; i++) {
+      try {
+        return await call();
+      } catch (err) {
+        const malformed = err instanceof SyntaxError || (err instanceof Error && err.name === 'ZodError');
+        if (!malformed || i >= retries) throw err;
+        onProgress?.(`the model's ${what} wasn't valid JSON (${err.message.split('\n')[0].slice(0, 80)}); asking again...`);
+      }
+    }
+  };
+  return {
+    investigate: (request) => again('analysis', () => ai.investigate(request)),
+    proposeFix: (request) => again('fix', () => ai.proposeFix(request))
+  };
+}
+
 export async function runTryCommand(opts: TryCommandOptions): Promise<TryCommandResult> {
   const { root, config, env, incident } = opts;
   const baseRef = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -93,7 +116,7 @@ export async function runTryCommand(opts: TryCommandOptions): Promise<TryCommand
       if (!complete) {
         throw new Error('No AI key found. Put any provider key in .env as API_KEYS=... (see .env.example), or export it.');
       }
-      return new ClaudeProvider(withBusyRetry((system, user) => complete(system, user), opts.onProgress));
+      return withMalformedRetry(new ClaudeProvider(withBusyRetry((system, user) => complete(system, user), opts.onProgress)), opts.onProgress);
     })();
 
   const workspaces = new GitWorkspace({
