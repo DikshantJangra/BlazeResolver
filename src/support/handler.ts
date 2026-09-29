@@ -94,6 +94,12 @@ const MAX_REPLY = 1500;
 /** A report that names wrong text in the product: a typo or misspelling, or "it says X instead of Y". */
 const WRONG_TEXT =
   /\b(typos?|misspel\w*|spel(t|led)\s+(wrong|incorrectly)|wrong(ly)?\s+spel\w*|incorrect(ly)?\s+spel\w*|spelling\b.{0,60}\b(wrong|incorrect|mistakes?|errors?|off)|(says|shows|reads|displays)\b.{1,80}\binstead\s+of)\b/i;
+/**
+ * A report that sets what should happen against what does: "should be in the bottom right, but it is on the left",
+ * "X instead of Y", "expected A but got B". The shape of a defect report, whatever words the customer picks.
+ */
+const EXPECTED_VS_ACTUAL =
+  /\b(should(n'?t|\s+not)?|(is|was|are|were)\s+supposed\s+to|expected(\s+it)?\s+to|meant\s+to)\b.{1,120}\b(but|however|yet)\b|\binstead\s+of\b|\bexpected\b.{1,80}\bbut\s+(got|it|saw|see|i\s+get)\b/i;
 /** Strips a tag's closing form so text can't end the block it sits in. */
 const fence = (text: string, tag: string) => text.replace(new RegExp(`</\\s*${tag}\\s*>`, 'gi'), '');
 /** Saved replies as a doc section each, so they're searched like the help docs. */
@@ -219,7 +225,13 @@ export function createSupportHandler(options: SupportHandlerOptions = {}): (req:
     const verdict = await triage(ReportSchema.parse({ message: text }), complete).catch(() => undefined);
     // Triage files wrong wording as feedback, not a bug, so it stays out of the online fix loop; locally a report that
     // names the wrong text is as fixable as any bug. Decided from the words, since the model's kind for it varies.
-    const fixable = verdict?.enterFixLoop || (verdict?.type === 'report' && verdict.kind !== 'abuse' && !verdict.injection && WRONG_TEXT.test(text));
+    // Likewise a report the model files as "other" that states expected against actual behavior: its kind for a layout
+    // or behavior complaint varies between runs. Feature requests and billing keep their own kinds, so they stay out.
+    const described = verdict?.type === 'report' && !verdict.injection;
+    const fixable =
+      verdict?.enterFixLoop ||
+      (described && verdict.kind !== 'abuse' && WRONG_TEXT.test(text)) ||
+      (described && verdict.kind === 'other' && EXPECTED_VS_ACTUAL.test(text));
     if (!verdict || !fixable || store.getTicket(ticketId)?.isEscalated) return;
     store.updateTicket(ticketId, { isEscalated: true, pulseStatus: 'investigating' });
     systemNote(ticketId, `⚡ Confirmed as a bug: ${verdict.summary.replace(/[.\s]+$/, '')}. Starting the automated fix pipeline on this machine.`);

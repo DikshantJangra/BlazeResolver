@@ -186,3 +186,23 @@ describe('the local fix pipeline and wrong wording', () => {
     assert.equal(runs, 2);
   });
 });
+
+describe('the local fix pipeline and expected-vs-actual reports', () => {
+  test('runs for "should be X, but it is Y" filed as other, not for a feature request', async () => {
+    const store = new SupportStore();
+    let runs = 0;
+    let kind = 'other';
+    const complete = async () => JSON.stringify({ type: 'report', kind, severity: 'low', summary: 'The close button is misplaced.', steps: [] });
+    const handler = createSupportHandler({ store, embed: false, complete, localFix: async () => { runs++; return { status: 'READY_FOR_REVIEW', branch: 'blazeresolver/fix-2' }; } });
+    const post = (rawText: string) => handler(new Request('http://localhost/api/support/tickets', { method: 'POST', body: JSON.stringify({ rawText }) }));
+
+    await post('the closing button for this widget should be in the bottom right corner, but it is in the left corner');
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(runs, 1);
+
+    kind = 'feature_request';
+    await post('the dashboard should have a dark mode, but it does not');
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(runs, 1);
+  });
+});
