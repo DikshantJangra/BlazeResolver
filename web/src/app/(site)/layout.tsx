@@ -36,7 +36,10 @@ export default function RootLayout({
         <link rel="icon" href={asset("/favicon.svg")} type="image/svg+xml" />
         <link rel="apple-touch-icon" href={asset("/blazyy.png")} />
       </head>
-      <body className="bg-page text-body antialiased selection:bg-[#FF6B00] selection:text-white">
+      <body
+        className="bg-page text-body antialiased selection:bg-[#FF6B00] selection:text-white"
+        suppressHydrationWarning
+      >
         {children}
         <FloatingSupportWidget />
       </body>
