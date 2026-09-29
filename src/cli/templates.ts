@@ -880,6 +880,7 @@ def post_github_comment(issue_number: int, body: str) -> str:
     if not token or not repo:
         return "ERROR: GITHUB_TOKEN or GITHUB_REPOSITORY not set"
 
+    import urllib.error
     import urllib.request
 
     url = f"https://api.github.com/repos/{repo}/issues/{issue_number}/comments"
@@ -898,6 +899,9 @@ def post_github_comment(issue_number: int, body: str) -> str:
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return f"Comment posted: {json.loads(resp.read())['html_url']}"
+    except urllib.error.HTTPError as exc:
+        # GitHub's body says why (missing permission, expired token), which the status line alone doesn't.
+        return f"ERROR posting comment: HTTP {exc.code}: {exc.read().decode(errors='replace')[:500]}"
     except Exception as exc:
         return f"ERROR posting comment: {exc}"
 
