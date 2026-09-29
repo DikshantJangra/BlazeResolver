@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, posix, resolve, sep } from 'node:path';
 import { parse } from 'dotenv';
 import { REPO_PATTERN } from '../github/index.js';
 import { describeProviders } from '../triage/providers.js';
@@ -24,6 +24,59 @@ export interface DoctorOptions {
 }
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+
+const PACKAGE_MANAGER = /^(npm|npx|pnpm|pnpx|yarn|bun|bunx)$/;
+
+/**
+ * The directories (relative to the repo root, '.' for the root) where a shell command runs a package manager:
+ * `npm ci` runs in '.', `(cd web && npm ci)` in 'web'. Follows `cd` and subshells, as init writes commands.
+ * Undefined when a `cd` can't be followed (an absolute path, a variable), so nothing is guessed.
+ */
+function packageManagerDirs(command: string): string[] | undefined {
+  const dirs = new Set<string>();
+  const stack = ['.'];
+  for (const token of command.split(/(&&|\|\||;|\(|\))/)) {
+    const part = token.trim();
+    if (!part || part === '&&' || part === '||' || part === ';') continue;
+    if (part === '(') stack.push(stack[stack.length - 1]);
+    else if (part === ')') {
+      if (stack.length > 1) stack.pop();
+    } else {
+      const words = part.split(/\s+/);
+      while (words.length > 1 && /^[A-Za-z_]\w*=/.test(words[0])) words.shift();
+      if (words[0] === 'cd') {
+        const target = words[1];
+        if (!target || /^[/~-]|\$/.test(target)) return undefined;
+        const dir = posix.normalize(posix.join(stack[stack.length - 1], target));
+        if (dir === '..' || dir.startsWith('../')) return undefined;
+        stack[stack.length - 1] = dir;
+      } else if (PACKAGE_MANAGER.test(words[0])) dirs.add(stack[stack.length - 1]);
+    }
+  }
+  return [...dirs];
+}
+
+/**
+ * Packages the test and build commands use that installCommand never installs, so in the offline sandbox they
+ * run without their dependencies. A workspace root's install covers its workspaces. Empty when it can't tell.
+ */
+function uninstalledPackages(root: string, installCommand: string, commands: string[]): string[] {
+  const installed = packageManagerDirs(installCommand);
+  const used = commands.map(packageManagerDirs);
+  if (!installed || !used.every((dirs): dirs is string[] => !!dirs)) return [];
+  const workspaceRoot = (dir: string) => {
+    if (existsSync(join(root, dir, 'pnpm-workspace.yaml'))) return true;
+    try {
+      return !!JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8')).workspaces;
+    } catch {
+      return false;
+    }
+  };
+  const covered = (dir: string) =>
+    installed.some((i) => i === dir || ((i === '.' || dir.startsWith(`${i}/`)) && workspaceRoot(i)));
+  const needed = [...new Set(used.flat())].filter((dir) => existsSync(join(root, dir, 'package.json')));
+  return needed.filter((dir) => !covered(dir));
+}
 
 /** Checks the local install and GitHub settings without printing secrets or changing the repository. */
 export async function runDoctor(opts: DoctorOptions): Promise<DoctorCheck[]> {
@@ -91,6 +144,18 @@ export async function runDoctor(opts: DoctorOptions): Promise<DoctorCheck[]> {
     });
     const available = docker();
     add(available ? 'ok' : 'fail', 'offline sandbox', available ? 'Docker is available' : 'Docker is required by this config; install/start Docker or rerun init --no-sandbox');
+    if (typeof installCommand === 'string') {
+      const missing = uninstalledPackages(root, installCommand, [config.testCommand, config.buildCommand]);
+      if (missing.length) {
+        const where = missing.map((dir) => (dir === '.' ? 'the repo root' : dir)).join(', ');
+        add(
+          'warn',
+          'install command',
+          `testCommand or buildCommand runs a package manager in ${where}, which installCommand never installs; ` +
+            'offline in the sandbox they fail without their dependencies, so no fix can pass. Add an install there to installCommand.'
+        );
+      }
+    }
   } else {
     add('warn', 'offline sandbox', 'tests will have network access; use init with Docker for offline verification');
   }
